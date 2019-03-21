@@ -413,7 +413,7 @@ static NTSTATUS TunDispatchWrite(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 	const UCHAR *b = buffer, *b_end = buffer + size;
 	ULONG nbl_count = 0;
 	NET_BUFFER_LIST *nbl_head = NULL, *nbl_tail = NULL;
-	LONG64 stat_p_err = 0;
+	LONG64 stat_size = 0, stat_p_ok = 0, stat_p_err = 0;
 	while (b < b_end) {
 		TUN_PACKET *p = (TUN_PACKET *)b;
 		if (p->Size > TUN_EXCH_MAX_IP_PACKET_SIZE)
@@ -459,29 +459,76 @@ static NTSTATUS TunDispatchWrite(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		b += p_size;
 	}
 
-	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifInErrors, stat_p_err);
-
+	BOOLEAN update_statistics = TRUE;
 	if ((status = STATUS_NDIS_PAUSED,          InterlockedGet((LONG *)&ctx->State) != TUN_STATE_RUNNING) ||
 	    (status = STATUS_NDIS_LOW_POWER_STATE, ctx->PowerState >= NdisDeviceStateD1)) {
-		for (NET_BUFFER_LIST *nbl = nbl_head, *nbl_next; nbl; nbl = nbl_next) {
-			nbl_next = NET_BUFFER_LIST_NEXT_NBL(nbl);
-			NET_BUFFER_LIST_NEXT_NBL(nbl) = NULL;
-			NdisFreeMdl(NET_BUFFER_FIRST_MDL(NET_BUFFER_LIST_FIRST_NB(nbl)));
-			NdisFreeNetBufferList(nbl);
-		}
-		goto cleanup_complete_req;
+		update_statistics = FALSE;
+		goto cleanup_nbl_head;
 	}
 
-	if (!nbl_head)
-		goto finish;
-
-	InterlockedAdd64(&ctx->ActiveNBLCount, 1i64 + nbl_count);
-	NdisMIndicateReceiveNetBufferLists(ctx->MiniportAdapterHandle, nbl_head, NDIS_DEFAULT_PORT_NUMBER, nbl_count, 0);
-	TunCompletePausing(ctx, 1);
-
-finish:
 	information = b - buffer;
 	status      = STATUS_SUCCESS;
+
+	if (!nbl_head)
+		goto cleanup_statistics;
+
+	/* Commentary from Jason:
+	 *
+	 * Problem statement:
+	 *     We call IoCompleteRequest(Irp) immediately after NdisMIndicateReceiveNetBufferLists, which frees Irp->MdlAddress.
+	 *     Since we've just given the same memory to NdisMIndicateReceiveNetBufferLists (in a different MDL), we wind up
+	 *     freeing the memory before NDIS finishes processing them.
+	 *
+	 * Fix possibility 1:
+	 *     Move IoCompleteRequest(Irp) to TunReturnNetBufferLists. This reqiures reference counting how many NBLs are currently
+	 *     in flight that are using an IRP. When that drops to zero, we can call IoCompleteRequest(Irp).
+	 * Problem:
+	 *     This means we have to block future wireguard-go Writes until *all* NBLs have completed processing in the networking
+	 *     stack. Is that safe to do? Will that introduce latency? Can userspace processes sabotage it by refusing to read from
+	 *     a TCP socket buffer? We don't know enough about how NdisMIndicateReceiveNetBufferLists works to assess its
+	 *     characteristics here.
+	 *
+	 * Fix possibility 2:
+	 *     Use NDIS_RECEIVE_FLAGS_RESOURCES, so that NdisMIndicateReceiveNetBufferLists makes a copy, and then we'll simply
+	 *     free everything immediately after. This is slow, and it could potentially lead to wireguard-go making the kernel
+	 *     allocate lots of memory in the case that NdisAllocateNetBufferAndNetBufferList doesn't ratelimit its creation in the
+	 *     same way Linux's skb_alloc does. However, it does make the lifetime of Irps shorter, which is easier to analyze, and
+	 *     it might lead to better latency, since we don't need to wait until userspace sends its next packets, so long as
+	 *     Ndis' ingestion queue doesn't become too large.
+	 *
+	 * Choice:
+	 *     Both (1) and (2) have pros and cons. Making (1) work is clearly the better long term goal. But we lack the knowledge
+	 *     to make it work correctly. (2) seems like an acceptable stopgap solution until we're smart enough to reason about
+	 *     (1). So, let's implement (2) now, and we'll let more knowledgeable people advise us on (1) later.
+	 */
+
+	InterlockedAdd64(&ctx->ActiveNBLCount, nbl_count);
+	NdisMIndicateReceiveNetBufferLists(ctx->MiniportAdapterHandle, nbl_head, NDIS_DEFAULT_PORT_NUMBER, nbl_count, NDIS_RECEIVE_FLAGS_RESOURCES);
+	TunCompletePausing(ctx, nbl_count);
+
+cleanup_nbl_head:
+	for (NET_BUFFER_LIST *nbl = nbl_head, *nbl_next; nbl; nbl = nbl_next) {
+		nbl_next = NET_BUFFER_LIST_NEXT_NBL(nbl);
+		NET_BUFFER_LIST_NEXT_NBL(nbl) = NULL;
+
+		MDL *mdl = NET_BUFFER_FIRST_MDL(NET_BUFFER_LIST_FIRST_NB(nbl));
+		if (update_statistics) {
+			if (NET_BUFFER_LIST_STATUS(nbl) == NDIS_STATUS_SUCCESS) {
+				ULONG p_size = MmGetMdlByteCount(mdl);
+				stat_size += p_size;
+				stat_p_ok++;
+			} else
+				stat_p_err++;
+		}
+		NdisFreeMdl(mdl);
+		NdisFreeNetBufferList(nbl);
+	}
+
+cleanup_statistics:
+	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifHCInOctets,      stat_size);
+	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifHCInUcastOctets, stat_size);
+	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifHCInUcastPkts,   stat_p_ok);
+	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifInErrors,        stat_p_err);
 
 cleanup_complete_req:
 	TunCompleteRequest(Irp, information, status);
@@ -546,32 +593,6 @@ static MINIPORT_RETURN_NET_BUFFER_LISTS TunReturnNetBufferLists;
 _Use_decl_annotations_
 static void TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUFFER_LIST NetBufferLists, ULONG ReturnFlags)
 {
-	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
-	LONG64 stat_size = 0, stat_p_ok = 0, stat_p_err = 0;
-	ULONG nbl_count = 0;
-
-	for (NET_BUFFER_LIST *nbl = NetBufferLists, *nbl_next; nbl; nbl = nbl_next, nbl_count++) {
-		nbl_next = NET_BUFFER_LIST_NEXT_NBL(nbl);
-		NET_BUFFER_LIST_NEXT_NBL(nbl) = NULL;
-
-		MDL *mdl = NET_BUFFER_FIRST_MDL(NET_BUFFER_LIST_FIRST_NB(nbl));
-		if (NET_BUFFER_LIST_STATUS(nbl) == NDIS_STATUS_SUCCESS) {
-			ULONG size = MmGetMdlByteCount(mdl);
-			stat_size += size;
-			stat_p_ok++;
-		} else
-			stat_p_err++;
-
-		NdisFreeMdl(mdl);
-		NdisFreeNetBufferList(nbl);
-	}
-
-	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifHCInOctets,      stat_size);
-	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifHCInUcastOctets, stat_size);
-	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifHCInUcastPkts,   stat_p_ok);
-	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifInErrors,        stat_p_err);
-
-	TunCompletePausing(ctx, nbl_count);
 }
 
 static MINIPORT_CANCEL_SEND TunCancelSend;
