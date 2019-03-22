@@ -112,13 +112,13 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_REV=$(WintunVersionRev);WINTUN_VERSION_BUILD=$(WintunVersionBuild);WINTUN_VERSION_STR="$(WintunVersionStr)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_REV=$(WintunVersionRev);WINTUN_VERSION_BUILD=$(WintunVersionBuild);WINTUN_VERSION_STR="$(WintunVersionStr)";DBG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <EnablePREfast>true</EnablePREfast>
       <Optimization>Disabled</Optimization>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_REV=$(WintunVersionRev);WINTUN_VERSION_BUILD=$(WintunVersionBuild);WINTUN_VERSION_STR="$(WintunVersionStr)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_REV=$(WintunVersionRev);WINTUN_VERSION_BUILD=$(WintunVersionBuild);WINTUN_VERSION_STR="$(WintunVersionStr)";DBG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
       <AdditionalDependencies>ndis.lib;wdmsec.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -150,13 +150,13 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_REV=$(WintunVersionRev);WINTUN_VERSION_BUILD=$(WintunVersionBuild);WINTUN_VERSION_STR="$(WintunVersionStr)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_REV=$(WintunVersionRev);WINTUN_VERSION_BUILD=$(WintunVersionBuild);WINTUN_VERSION_STR="$(WintunVersionStr)";DBG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <EnablePREfast>true</EnablePREfast>
       <Optimization>Disabled</Optimization>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_REV=$(WintunVersionRev);WINTUN_VERSION_BUILD=$(WintunVersionBuild);WINTUN_VERSION_STR="$(WintunVersionStr)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_REV=$(WintunVersionRev);WINTUN_VERSION_BUILD=$(WintunVersionBuild);WINTUN_VERSION_STR="$(WintunVersionStr)";DBG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
       <AdditionalDependencies>ndis.lib;wdmsec.lib;%(AdditionalDependencies)</AdditionalDependencies>
