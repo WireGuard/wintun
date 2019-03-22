@@ -1071,7 +1071,7 @@ _Use_decl_annotations_
 static void TunSendNetBufferLists(NDIS_HANDLE MiniportAdapterContext, NET_BUFFER_LIST *NetBufferLists, NDIS_PORT_NUMBER PortNumber, ULONG SendFlags)
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
-	ULONG nbl_count;
+	ULONG nbl_count = 0;
 
 	InterlockedIncrement64(&ctx->ActiveNBLCount);
 
@@ -1090,7 +1090,7 @@ static void TunSendNetBufferLists(NDIS_HANDLE MiniportAdapterContext, NET_BUFFER
 		ctx->PacketQueue.Head  = NetBufferLists;
 		ctx->PacketQueue.Buffer = NET_BUFFER_LIST_FIRST_NB(NetBufferLists);
 	}
-	for (nbl_count = 0; NetBufferLists; NetBufferLists = NET_BUFFER_LIST_NEXT_NBL(NetBufferLists), nbl_count++)
+	for (; NetBufferLists; NetBufferLists = NET_BUFFER_LIST_NEXT_NBL(NetBufferLists), nbl_count++)
 		ctx->PacketQueue.Tail = NetBufferLists;
 	ctx->PacketQueue.Count += nbl_count;
 	NdisReleaseSpinLock(&ctx->PacketQueue.Lock);
@@ -1110,13 +1110,12 @@ static void TunSendNetBufferLists(NDIS_HANDLE MiniportAdapterContext, NET_BUFFER
 		NetBufferLists = nbl;
 	}
 	NdisReleaseSpinLock(&ctx->PacketQueue.Lock);
-	InterlockedSubtract64(&ctx->ActiveNBLCount, nbl_count);
 
 cleanup_NdisMSendNetBufferListsComplete:
 	if (NetBufferLists)
 		NdisMSendNetBufferListsComplete(ctx->MiniportAdapterHandle, NetBufferLists, SendFlags & NDIS_SEND_FLAGS_DISPATCH_LEVEL ? NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL : 0);
 
-	TunCompletePausing(ctx, 1);
+	TunCompletePausing(ctx, 1i64 + nbl_count);
 }
 
 DRIVER_INITIALIZE DriverEntry;
