@@ -69,7 +69,7 @@ typedef struct _TUN_CTX {
 	NDIS_HANDLE		MiniportAdapterHandle;
 	NDIS_STATISTICS_INFO	Statistics;
 
-	volatile LONG64		ActiveNBLCount;
+	volatile LONG64		ActiveTransactionCount;
 
 	struct {
 		NDIS_HANDLE	Handle;
@@ -166,7 +166,7 @@ static void TunCompleteRequest(_Inout_ IRP *Irp, _In_ ULONG_PTR Information, _In
 _IRQL_requires_max_(DISPATCH_LEVEL)
 static void TunCompletePausing(_Inout_ TUN_CTX *ctx, _In_ LONG64 decrement)
 {
-	if (!InterlockedSubtract64(&ctx->ActiveNBLCount, decrement) &&
+	if (!InterlockedSubtract64(&ctx->ActiveTransactionCount, decrement) &&
 	    InterlockedCompareExchange((LONG *)&ctx->State, TUN_STATE_PAUSED, TUN_STATE_PAUSING) == TUN_STATE_PAUSING)
 		NdisMPauseComplete(ctx->MiniportAdapterHandle);
 }
@@ -459,7 +459,7 @@ static NTSTATUS TunDispatchWrite(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		b += p_size;
 	}
 
-	InterlockedAdd64(&ctx->ActiveNBLCount, nbl_count);
+	InterlockedAdd64(&ctx->ActiveTransactionCount, nbl_count);
 
 	BOOLEAN update_statistics = TRUE;
 	if ((status = STATUS_NDIS_PAUSED,          InterlockedGet((LONG *)&ctx->State) != TUN_STATE_RUNNING) ||
@@ -569,7 +569,7 @@ static NDIS_STATUS TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_P
 
 	TunIndicateStatus(ctx);
 
-	if (InterlockedSubtract64(&ctx->ActiveNBLCount, nbl_count))
+	if (InterlockedSubtract64(&ctx->ActiveTransactionCount, nbl_count))
 		return NDIS_STATUS_PENDING;
 
 	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_PAUSED);
@@ -1074,7 +1074,7 @@ static void TunSendNetBufferLists(NDIS_HANDLE MiniportAdapterContext, NET_BUFFER
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 	ULONG nbl_count = 0;
 
-	InterlockedIncrement64(&ctx->ActiveNBLCount);
+	InterlockedIncrement64(&ctx->ActiveTransactionCount);
 
 	NDIS_STATUS status;
 	if ((status = NDIS_STATUS_PAUSED,          InterlockedGet((LONG *)&ctx->State) != TUN_STATE_RUNNING) ||
@@ -1095,7 +1095,7 @@ static void TunSendNetBufferLists(NDIS_HANDLE MiniportAdapterContext, NET_BUFFER
 		ctx->PacketQueue.Tail = NetBufferLists;
 	ctx->PacketQueue.Count += nbl_count;
 	NdisReleaseSpinLock(&ctx->PacketQueue.Lock);
-	InterlockedAdd64(&ctx->ActiveNBLCount, nbl_count);
+	InterlockedAdd64(&ctx->ActiveTransactionCount, nbl_count);
 
 	IRP *Irp = InterlockedExchangePointer((PVOID volatile *)&ctx->Device.ActiveIrp, NULL);
 	if (Irp)
