@@ -459,6 +459,8 @@ static NTSTATUS TunDispatchWrite(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		b += p_size;
 	}
 
+	InterlockedAdd64(&ctx->ActiveNBLCount, nbl_count);
+
 	BOOLEAN update_statistics = TRUE;
 	if ((status = STATUS_NDIS_PAUSED,          InterlockedGet((LONG *)&ctx->State) != TUN_STATE_RUNNING) ||
 	    (status = STATUS_NDIS_LOW_POWER_STATE, ctx->PowerState >= NdisDeviceStateD1)) {
@@ -501,10 +503,7 @@ static NTSTATUS TunDispatchWrite(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 	 *     to make it work correctly. (2) seems like an acceptable stopgap solution until we're smart enough to reason about
 	 *     (1). So, let's implement (2) now, and we'll let more knowledgeable people advise us on (1) later.
 	 */
-
-	InterlockedAdd64(&ctx->ActiveNBLCount, nbl_count);
 	NdisMIndicateReceiveNetBufferLists(ctx->MiniportAdapterHandle, nbl_head, NDIS_DEFAULT_PORT_NUMBER, nbl_count, NDIS_RECEIVE_FLAGS_RESOURCES);
-	TunCompletePausing(ctx, nbl_count);
 
 cleanup_nbl_head:
 	for (NET_BUFFER_LIST *nbl = nbl_head, *nbl_next; nbl; nbl = nbl_next) {
@@ -525,6 +524,8 @@ cleanup_nbl_head:
 	}
 
 cleanup_statistics:
+	TunCompletePausing(ctx, nbl_count);
+
 	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifHCInOctets,      stat_size);
 	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifHCInUcastOctets, stat_size);
 	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifHCInUcastPkts,   stat_p_ok);
