@@ -166,6 +166,7 @@ static void TunCompleteRequest(_Inout_ IRP *Irp, _In_ ULONG_PTR Information, _In
 _IRQL_requires_same_
 static NTSTATUS TunCheckForPause(_Inout_ TUN_CTX *ctx, _In_ LONG64 increment)
 {
+	ASSERT(InterlockedGet64(&ctx->ActiveTransactionCount) <= MAXLONG64 - increment);
 	InterlockedAdd64(&ctx->ActiveTransactionCount, increment);
 	return
 		InterlockedGet((LONG *)&ctx->State) != TUN_STATE_RUNNING ? STATUS_NDIS_PAUSED :
@@ -176,6 +177,7 @@ static NTSTATUS TunCheckForPause(_Inout_ TUN_CTX *ctx, _In_ LONG64 increment)
 _IRQL_requires_max_(DISPATCH_LEVEL)
 static void TunCompletePause(_Inout_ TUN_CTX *ctx, _In_ LONG64 decrement)
 {
+	ASSERT(decrement <= InterlockedGet64(&ctx->ActiveTransactionCount));
 	if (!InterlockedSubtract64(&ctx->ActiveTransactionCount, decrement) &&
 	    InterlockedCompareExchange((LONG *)&ctx->State, TUN_STATE_PAUSED, TUN_STATE_PAUSING) == TUN_STATE_PAUSING)
 		NdisMPauseComplete(ctx->MiniportAdapterHandle);
@@ -350,6 +352,7 @@ static NTSTATUS TunDispatchCreate(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		goto cleanup_complete_req;
 	}
 
+	ASSERT(InterlockedGet64(&ctx->Device.RefCount) < MAXLONG64);
 	InterlockedIncrement64(&ctx->Device.RefCount);
 	TunIndicateStatus(ctx);
 	status = STATUS_SUCCESS;
@@ -371,6 +374,7 @@ static NTSTATUS TunDispatchClose(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		goto cleanup_complete_req;
 	}
 
+	ASSERT(InterlockedGet64(&ctx->Device.RefCount) > 0);
 	InterlockedDecrement64(&ctx->Device.RefCount);
 	TunIndicateStatus(ctx);
 	status = STATUS_SUCCESS;
@@ -448,7 +452,6 @@ static NTSTATUS TunDispatchWrite(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		if (!mdl)
 			goto skip_packet;
 
-		#pragma warning(suppress: 6014) /* Leaking memory 'nbl'. Note: 'nbl' is aliased in nbl_head/tail list and freed in TunReturnNetBufferLists. */
 		NET_BUFFER_LIST *nbl = NdisAllocateNetBufferAndNetBufferList(ctx->NBLPool, 0, 0, mdl, 0, p->Size);
 		if (!nbl)
 			goto cleanup_NdisFreeMdl;
@@ -601,6 +604,7 @@ static MINIPORT_RETURN_NET_BUFFER_LISTS TunReturnNetBufferLists;
 _Use_decl_annotations_
 static void TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUFFER_LIST NetBufferLists, ULONG ReturnFlags)
 {
+	ASSERTMSG("TunReturnNetBufferLists() should not be called as NBLs are delivered using NDIS_RECEIVE_FLAGS_RESOURCES flag in NdisMIndicateReceiveNetBufferLists().", 0);
 }
 
 static MINIPORT_CANCEL_SEND TunCancelSend;
@@ -900,6 +904,8 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 	if (InterlockedGet((LONG *)&ctx->State) != TUN_STATE_PAUSED)
 		return;
+
+	ASSERT(!InterlockedGet64(&ctx->ActiveTransactionCount));
 
 	/* Reset adapter context in device object, as Windows keep calling dispatch handlers even after NdisDeregisterDeviceEx(). */
 	TUN_CTX **control_device_extension = (TUN_CTX **)NdisGetDeviceReservedExtension(ctx->Device.Object);
