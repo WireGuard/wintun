@@ -163,8 +163,18 @@ static void TunCompleteRequest(_Inout_ IRP *Irp, _In_ ULONG_PTR Information, _In
 	IoCompleteRequest(Irp, IO_NO_INCREMENT);
 }
 
+_IRQL_requires_same_
+static NTSTATUS TunCheckForPause(_Inout_ TUN_CTX *ctx, _In_ LONG64 increment)
+{
+	InterlockedAdd64(&ctx->ActiveTransactionCount, increment);
+	return
+		InterlockedGet((LONG *)&ctx->State) != TUN_STATE_RUNNING ? STATUS_NDIS_PAUSED :
+		ctx->PowerState >= NdisDeviceStateD1                     ? STATUS_NDIS_LOW_POWER_STATE :
+		                                                           STATUS_SUCCESS;
+}
+
 _IRQL_requires_max_(DISPATCH_LEVEL)
-static void TunCompletePausing(_Inout_ TUN_CTX *ctx, _In_ LONG64 decrement)
+static void TunCompletePause(_Inout_ TUN_CTX *ctx, _In_ LONG64 decrement)
 {
 	if (!InterlockedSubtract64(&ctx->ActiveTransactionCount, decrement) &&
 	    InterlockedCompareExchange((LONG *)&ctx->State, TUN_STATE_PAUSED, TUN_STATE_PAUSING) == TUN_STATE_PAUSING)
@@ -298,7 +308,7 @@ cleanup_complete_req:
 
 	if (nbl_head) {
 		NdisMSendNetBufferListsComplete(ctx->MiniportAdapterHandle, nbl_head, SendCompleteFlags);
-		TunCompletePausing(ctx, nbl_count);
+		TunCompletePause(ctx, nbl_count);
 	}
 }
 
@@ -459,11 +469,8 @@ static NTSTATUS TunDispatchWrite(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		b += p_size;
 	}
 
-	InterlockedAdd64(&ctx->ActiveTransactionCount, nbl_count);
-
 	BOOLEAN update_statistics = TRUE;
-	if ((status = STATUS_NDIS_PAUSED,          InterlockedGet((LONG *)&ctx->State) != TUN_STATE_RUNNING) ||
-	    (status = STATUS_NDIS_LOW_POWER_STATE, ctx->PowerState >= NdisDeviceStateD1)) {
+	if ((status = TunCheckForPause(ctx, nbl_count)) != STATUS_SUCCESS) {
 		update_statistics = FALSE;
 		goto cleanup_nbl_head;
 	}
@@ -524,7 +531,7 @@ cleanup_nbl_head:
 	}
 
 cleanup_statistics:
-	TunCompletePausing(ctx, nbl_count);
+	TunCompletePause(ctx, nbl_count);
 
 	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifHCInOctets,      stat_size);
 	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifHCInUcastOctets, stat_size);
@@ -628,7 +635,7 @@ static void TunCancelSend(NDIS_HANDLE MiniportAdapterContext, PVOID CancelId)
 
 	if (nbl_drop_head) {
 		NdisMSendNetBufferListsComplete(ctx->MiniportAdapterHandle, nbl_drop_head, SendCompleteFlags);
-		TunCompletePausing(ctx, nbl_drop_count);
+		TunCompletePause(ctx, nbl_drop_count);
 	}
 }
 
@@ -1074,11 +1081,8 @@ static void TunSendNetBufferLists(NDIS_HANDLE MiniportAdapterContext, NET_BUFFER
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 	ULONG nbl_count = 0;
 
-	InterlockedIncrement64(&ctx->ActiveTransactionCount);
-
 	NDIS_STATUS status;
-	if ((status = NDIS_STATUS_PAUSED,          InterlockedGet((LONG *)&ctx->State) != TUN_STATE_RUNNING) ||
-	    (status = NDIS_STATUS_LOW_POWER_STATE, ctx->PowerState >= NdisDeviceStateD1)) {
+	if ((status = TunCheckForPause(ctx, 1i64)) != STATUS_SUCCESS) {
 		TunSetNBLStatus(NetBufferLists, status);
 		goto cleanup_NdisMSendNetBufferListsComplete;
 	}
@@ -1116,7 +1120,7 @@ cleanup_NdisMSendNetBufferListsComplete:
 	if (NetBufferLists)
 		NdisMSendNetBufferListsComplete(ctx->MiniportAdapterHandle, NetBufferLists, SendFlags & NDIS_SEND_FLAGS_DISPATCH_LEVEL ? NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL : 0);
 
-	TunCompletePausing(ctx, 1i64 + nbl_count);
+	TunCompletePause(ctx, 1i64 + nbl_count);
 }
 
 DRIVER_INITIALIZE DriverEntry;
