@@ -335,13 +335,14 @@ static void TunNBLRefInc(_Inout_ NET_BUFFER_LIST *nbl)
 	InterlockedAdd64(NET_BUFFER_LIST_MINIPORT_RESERVED_REFCOUNT(nbl), 1);
 }
 
-_IRQL_requires_same_
-static BOOLEAN TunNBLRefDec(_Inout_ TUN_CTX *ctx, _Inout_ NET_BUFFER_LIST *nbl)
+_When_( (SendCompleteFlags & NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL), _IRQL_requires_    (DISPATCH_LEVEL))
+_When_(!(SendCompleteFlags & NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL), _IRQL_requires_max_(DISPATCH_LEVEL))
+static BOOLEAN TunNBLRefDec(_Inout_ TUN_CTX *ctx, _Inout_ NET_BUFFER_LIST *nbl, _In_ ULONG SendCompleteFlags)
 {
 	ASSERT(InterlockedGet64(NET_BUFFER_LIST_MINIPORT_RESERVED_REFCOUNT(nbl)));
 	if (!InterlockedSubtract64(NET_BUFFER_LIST_MINIPORT_RESERVED_REFCOUNT(nbl), 1)) {
 		NET_BUFFER_LIST_NEXT_NBL(nbl) = NULL;
-		NdisMSendNetBufferListsComplete(ctx->MiniportAdapterHandle, nbl, 0);
+		NdisMSendNetBufferListsComplete(ctx->MiniportAdapterHandle, nbl, SendCompleteFlags);
 		InterlockedSubtract(&ctx->PacketQueue.NumNbl, 1);
 		TunCompletePause(ctx, 1);
 		return TRUE;
@@ -378,7 +379,7 @@ static void TunQueueAppend(_Inout_ TUN_CTX *ctx, _In_ NET_BUFFER_LIST *nbl, _In_
 			NET_BUFFER_LIST *nbl_second = NET_BUFFER_LIST_NEXT_NBL(ctx->PacketQueue.FirstNbl);
 
 			NET_BUFFER_LIST_STATUS(ctx->PacketQueue.FirstNbl) = NDIS_STATUS_SEND_ABORTED;
-			TunNBLRefDec(ctx, ctx->PacketQueue.FirstNbl);
+			TunNBLRefDec(ctx, ctx->PacketQueue.FirstNbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
 
 			ctx->PacketQueue.NextNb = NULL;
 			ctx->PacketQueue.FirstNbl = nbl_second;
@@ -454,7 +455,7 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 			}
 			Irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL);
 			if (!Irp) {
-				if (!nbl|| !TunNBLRefDec(ctx, nbl))
+				if (!nbl|| !TunNBLRefDec(ctx, nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL))
 					TunQueuePrepend(ctx, nb, nbl);
 				KeReleaseInStackQueuedSpinLock(&lqh);
 				return;
@@ -483,7 +484,7 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 			Irp = NULL;
 		}
 		if (nbl)
-			TunNBLRefDec(ctx, nbl);
+			TunNBLRefDec(ctx, nbl, 0);
 	}
 }
 
@@ -764,7 +765,7 @@ static NDIS_STATUS TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_P
 	TunSetNBLStatus(ctx->PacketQueue.FirstNbl, STATUS_NDIS_PAUSED);
 	for (NET_BUFFER_LIST *nbl = ctx->PacketQueue.FirstNbl, *nbl_next; nbl; nbl = nbl_next) {
 		nbl_next = NET_BUFFER_LIST_NEXT_NBL(nbl);
-		TunNBLRefDec(ctx, nbl);
+		TunNBLRefDec(ctx, nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
 	}
 	ctx->PacketQueue.FirstNbl = NULL;
 	ctx->PacketQueue.LastNbl  = NULL;
@@ -829,7 +830,7 @@ static void TunCancelSend(NDIS_HANDLE MiniportAdapterContext, PVOID CancelId)
 		nbl_next = NET_BUFFER_LIST_NEXT_NBL(nbl);
 		if (NDIS_GET_NET_BUFFER_LIST_CANCEL_ID(nbl) == CancelId) {
 			*LastLink = nbl_next;
-			TunNBLRefDec(ctx, nbl);
+			TunNBLRefDec(ctx, nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
 		} else {
 			Last = nbl;
 			LastLink = &NET_BUFFER_LIST_NEXT_NBL(nbl);
