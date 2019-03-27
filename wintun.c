@@ -102,6 +102,7 @@ static NDIS_HANDLE NdisMiniportDriverHandle = NULL;
 
 #define InterlockedGet(val)		(InterlockedAdd((val), 0))
 #define InterlockedGet64(val)		(InterlockedAdd64((val), 0))
+#define InterlockedGetPointer(val)	(InterlockedCompareExchangePointer((val), NULL, NULL))
 #define InterlockedSubtract(val, n)	(InterlockedAdd((val), -(LONG)(n)))
 #define InterlockedSubtract64(val, n)	(InterlockedAdd64((val), -(LONG64)(n)))
 #define TunPacketAlign(size)		(((UINT)(size) + (UINT)(TUN_EXCH_ALIGNMENT - 1)) & ~(UINT)(TUN_EXCH_ALIGNMENT - 1))
@@ -139,11 +140,18 @@ static void TunIndicateStatus(_In_ TUN_CTX *ctx)
 	NdisMIndicateStatusEx(ctx->MiniportAdapterHandle, &t);
 }
 
+
+_IRQL_requires_max_(HIGH_LEVEL)
+static TUN_CTX * volatile *TunGetContextPointer(_In_ DEVICE_OBJECT *DeviceObject)
+{
+	return (TUN_CTX * volatile *)NdisGetDeviceReservedExtension(DeviceObject);
+}
+
 _IRQL_requires_max_(HIGH_LEVEL)
 static TUN_CTX *TunGetContext(_In_ DEVICE_OBJECT *DeviceObject)
 {
-	volatile TUN_CTX **control_device_extension = (volatile TUN_CTX **)NdisGetDeviceReservedExtension(DeviceObject);
-	return control_device_extension ? (TUN_CTX*)*control_device_extension : NULL;
+	TUN_CTX * volatile * ctx = TunGetContextPointer(DeviceObject);
+	return ctx ? InterlockedGetPointer(ctx) : NULL;
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
@@ -1081,12 +1089,12 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 	ctx->Device.Object->Flags &= ~DO_BUFFERED_IO;
 	ctx->Device.Object->Flags |=  DO_DIRECT_IO;
 
-	volatile TUN_CTX **control_device_extension = (volatile TUN_CTX **)NdisGetDeviceReservedExtension(ctx->Device.Object);
+	TUN_CTX * volatile * control_device_extension = TunGetContextPointer(ctx->Device.Object);
 	if (!control_device_extension) {
 		status = NDIS_STATUS_FAILURE;
 		goto cleanup_NdisDeregisterDeviceEx;
 	}
-	*control_device_extension = ctx;
+	InterlockedExchangePointer(control_device_extension, ctx);
 
 	ctx->State = TUN_STATE_PAUSED;
 	return NDIS_STATUS_SUCCESS;
@@ -1119,9 +1127,9 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 	ASSERT(!InterlockedGet64(&ctx->Device.RefCount));
 
 	/* Reset adapter context in device object, as Windows keeps calling dispatch handlers even after NdisDeregisterDeviceEx(). */
-	volatile TUN_CTX **control_device_extension = (volatile TUN_CTX **)NdisGetDeviceReservedExtension(ctx->Device.Object);
+	TUN_CTX * volatile * control_device_extension = TunGetContextPointer(ctx->Device.Object);
 	if (control_device_extension)
-		*control_device_extension = NULL;
+		InterlockedExchangePointer(control_device_extension, NULL);
 
 	/* Release resources. */
 	NdisDeregisterDeviceEx(ctx->Device.Handle);
