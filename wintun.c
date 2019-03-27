@@ -102,7 +102,6 @@ static NDIS_HANDLE NdisMiniportDriverHandle = NULL;
 
 #define InterlockedGet(val)		(InterlockedAdd((val), 0))
 #define InterlockedGet64(val)		(InterlockedAdd64((val), 0))
-#define InterlockedGetPointer(val)	(InterlockedCompareExchangePointer((val), NULL, NULL))
 #define InterlockedSubtract(val, n)	(InterlockedAdd((val), -(LONG)(n)))
 #define InterlockedSubtract64(val, n)	(InterlockedAdd64((val), -(LONG64)(n)))
 #define TunPacketAlign(size)		(((UINT)(size) + (UINT)(TUN_EXCH_ALIGNMENT - 1)) & ~(UINT)(TUN_EXCH_ALIGNMENT - 1))
@@ -143,8 +142,8 @@ static void TunIndicateStatus(_In_ TUN_CTX *ctx)
 _IRQL_requires_max_(HIGH_LEVEL)
 static TUN_CTX *TunGetContext(_In_ DEVICE_OBJECT *DeviceObject)
 {
-	TUN_CTX **control_device_extension = (TUN_CTX **)NdisGetDeviceReservedExtension(DeviceObject);
-	return control_device_extension ? *control_device_extension : NULL;
+	volatile TUN_CTX **control_device_extension = (volatile TUN_CTX **)NdisGetDeviceReservedExtension(DeviceObject);
+	return control_device_extension ? (TUN_CTX*)*control_device_extension : NULL;
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
@@ -1082,12 +1081,12 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 	ctx->Device.Object->Flags &= ~DO_BUFFERED_IO;
 	ctx->Device.Object->Flags |=  DO_DIRECT_IO;
 
-	TUN_CTX **control_device_extension = (TUN_CTX **)NdisGetDeviceReservedExtension(ctx->Device.Object);
+	volatile TUN_CTX **control_device_extension = (volatile TUN_CTX **)NdisGetDeviceReservedExtension(ctx->Device.Object);
 	if (!control_device_extension) {
 		status = NDIS_STATUS_FAILURE;
 		goto cleanup_NdisDeregisterDeviceEx;
 	}
-	InterlockedExchangePointer(control_device_extension, ctx);
+	*control_device_extension = ctx;
 
 	ctx->State = TUN_STATE_PAUSED;
 	return NDIS_STATUS_SUCCESS;
@@ -1120,9 +1119,9 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 	ASSERT(!InterlockedGet64(&ctx->Device.RefCount));
 
 	/* Reset adapter context in device object, as Windows keeps calling dispatch handlers even after NdisDeregisterDeviceEx(). */
-	TUN_CTX **control_device_extension = (TUN_CTX **)NdisGetDeviceReservedExtension(ctx->Device.Object);
+	volatile TUN_CTX **control_device_extension = (volatile TUN_CTX **)NdisGetDeviceReservedExtension(ctx->Device.Object);
 	if (control_device_extension)
-		InterlockedExchangePointer(control_device_extension, NULL);
+		*control_device_extension = NULL;
 
 	/* Release resources. */
 	NdisDeregisterDeviceEx(ctx->Device.Handle);
