@@ -167,12 +167,18 @@ static NTSTATUS TunCheckForPause(_Inout_ TUN_CTX *ctx, _In_ LONG64 increment)
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-static void TunCompletePause(_Inout_ TUN_CTX *ctx, _In_ LONG64 decrement)
+static NDIS_STATUS TunCompletePause(_Inout_ TUN_CTX *ctx, _In_ LONG64 decrement)
 {
 	ASSERT(decrement <= InterlockedGet64(&ctx->ActiveTransactionCount));
 	if (!InterlockedSubtract64(&ctx->ActiveTransactionCount, decrement) &&
-		InterlockedCompareExchange((LONG *)&ctx->State, TUN_STATE_PAUSED, TUN_STATE_PAUSING) == TUN_STATE_PAUSING)
+		InterlockedCompareExchange((LONG *)&ctx->State, TUN_STATE_PAUSED, TUN_STATE_PAUSING) == TUN_STATE_PAUSING) {
+		InterlockedExchange64(&ctx->Device.RefCount, 0);
+		TunIndicateStatus(ctx);
 		NdisMPauseComplete(ctx->MiniportAdapterHandle);
+		return NDIS_STATUS_SUCCESS;
+	}
+
+	return NDIS_STATUS_PENDING;
 }
 
 static IO_CSQ_INSERT_IRP_EX TunCsqInsertIrpEx;
@@ -559,7 +565,7 @@ static NTSTATUS TunDispatchRead(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 	InterlockedIncrement64(&ctx->ActiveTransactionCount);
 	status = IoCsqInsertIrpEx(&ctx->Device.ReadQueue.Csq, Irp, NULL, TUN_CSQ_INSERT_TAIL);
 	if (!NT_SUCCESS(status)) {
-		TunCompletePause(ctx, 1);
+		InterlockedDecrement64(&ctx->ActiveTransactionCount);
 		goto cleanup_TunCompletePause;
 	}
 
@@ -718,8 +724,8 @@ static NTSTATUS TunDispatchCleanup(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		goto cleanup_complete_req;
 	}
 
-	LONG64 count = 0;
-	if (!NT_SUCCESS(status = TunCheckForPause(ctx, 1)))
+	LONG64 count = 1;
+	if (!NT_SUCCESS(status = TunCheckForPause(ctx, count)))
 		goto cleanup_TunCompletePause;
 
 	IO_STACK_LOCATION *stack = IoGetCurrentIrpStackLocation(Irp);
@@ -730,7 +736,7 @@ static NTSTATUS TunDispatchCleanup(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 	}
 
 cleanup_TunCompletePause:
-	TunCompletePause(ctx, 1LL + count);
+	TunCompletePause(ctx, count);
 cleanup_complete_req:
 	TunCompleteRequest(Irp, 0, status);
 	return status;
@@ -749,16 +755,14 @@ _Use_decl_annotations_
 static NDIS_STATUS TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_PAUSE_PARAMETERS MiniportPauseParameters)
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
-	if (InterlockedCompareExchange((LONG *)&ctx->State, TUN_STATE_PAUSING, TUN_STATE_RUNNING) != TUN_STATE_RUNNING)
-		return NDIS_STATUS_FAILURE;
-
-	/* Reset adapter context in device object, as Windows keeps calling dispatch handlers even after NdisDeregisterDeviceEx(). */
-	TUN_CTX **control_device_extension = (TUN_CTX **)NdisGetDeviceReservedExtension(ctx->Device.Object);
-	if (control_device_extension)
-		InterlockedExchangePointer(control_device_extension, NULL);
 
 	LONG64 count = 1;
-	InterlockedAdd64(&ctx->ActiveTransactionCount, 1);
+	InterlockedAdd64(&ctx->ActiveTransactionCount, count);
+
+	if (InterlockedCompareExchange((LONG *)&ctx->State, TUN_STATE_PAUSING, TUN_STATE_RUNNING) != TUN_STATE_RUNNING) {
+		InterlockedDecrement64(&ctx->ActiveTransactionCount);
+		return NDIS_STATUS_FAILURE;
+	}
 
 	KLOCK_QUEUE_HANDLE lqh;
 	KeAcquireInStackQueuedSpinLock(&ctx->PacketQueue.Lock, &lqh);
@@ -780,14 +784,7 @@ static NDIS_STATUS TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_P
 		TunCompleteRequest(pending_irp, 0, STATUS_CANCELLED);
 	}
 
-	InterlockedExchange64(&ctx->Device.RefCount, 0); //TODO: Is this correct? Aren't handles still open potentially? Do we have to do something with the close handler?
-	TunIndicateStatus(ctx);
-
-	if (InterlockedSubtract64(&ctx->ActiveTransactionCount, count))
-		return NDIS_STATUS_PENDING;
-
-	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_PAUSED);
-	return NDIS_STATUS_SUCCESS;
+	return TunCompletePause(ctx, count);
 }
 
 static MINIPORT_RESTART TunRestart;
@@ -797,10 +794,6 @@ static NDIS_STATUS TunRestart(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 	if (InterlockedCompareExchange((LONG *)&ctx->State, TUN_STATE_RESTARTING, TUN_STATE_PAUSED) != TUN_STATE_PAUSED)
 		return NDIS_STATUS_FAILURE;
-
-	TUN_CTX **control_device_extension = (TUN_CTX **)NdisGetDeviceReservedExtension(ctx->Device.Object);
-	if (control_device_extension)
-		InterlockedExchangePointer(control_device_extension, ctx);
 
 	ASSERT(!InterlockedGet64(&ctx->Device.RefCount));
 	TunIndicateStatus(ctx);
@@ -1089,9 +1082,18 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 	ctx->Device.Object->Flags &= ~DO_BUFFERED_IO;
 	ctx->Device.Object->Flags |=  DO_DIRECT_IO;
 
+	TUN_CTX **control_device_extension = (TUN_CTX **)NdisGetDeviceReservedExtension(ctx->Device.Object);
+	if (!control_device_extension) {
+		status = NDIS_STATUS_FAILURE;
+		goto cleanup_NdisDeregisterDeviceEx;
+	}
+	InterlockedExchangePointer(control_device_extension, ctx);
+
 	ctx->State = TUN_STATE_PAUSED;
 	return NDIS_STATUS_SUCCESS;
 
+cleanup_NdisDeregisterDeviceEx:
+	NdisDeregisterDeviceEx(ctx->Device.Handle);
 cleanup_NdisFreeNetBufferListPool:
 	NdisFreeNetBufferListPool(ctx->NBLPool);
 cleanup_ctx:
@@ -1116,6 +1118,11 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 
 	ASSERT(!InterlockedGet64(&ctx->ActiveTransactionCount));
 	ASSERT(!InterlockedGet64(&ctx->Device.RefCount));
+
+	/* Reset adapter context in device object, as Windows keeps calling dispatch handlers even after NdisDeregisterDeviceEx(). */
+	TUN_CTX **control_device_extension = (TUN_CTX **)NdisGetDeviceReservedExtension(ctx->Device.Object);
+	if (control_device_extension)
+		InterlockedExchangePointer(control_device_extension, NULL);
 
 	/* Release resources. */
 	NdisDeregisterDeviceEx(ctx->Device.Handle);
