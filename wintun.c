@@ -762,9 +762,9 @@ static NDIS_STATUS TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_P
 
 	KLOCK_QUEUE_HANDLE lqh;
 	KeAcquireInStackQueuedSpinLock(&ctx->PacketQueue.Lock, &lqh);
-	TunSetNBLStatus(ctx->PacketQueue.FirstNbl, STATUS_NDIS_PAUSED);
 	for (NET_BUFFER_LIST *nbl = ctx->PacketQueue.FirstNbl, *nbl_next; nbl; nbl = nbl_next) {
 		nbl_next = NET_BUFFER_LIST_NEXT_NBL(nbl);
+		NET_BUFFER_LIST_STATUS(nbl) = STATUS_NDIS_PAUSED;
 		TunNBLRefDec(ctx, nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
 	}
 	ctx->PacketQueue.FirstNbl = NULL;
@@ -825,18 +825,18 @@ static void TunCancelSend(NDIS_HANDLE MiniportAdapterContext, PVOID CancelId)
 
 	KeAcquireInStackQueuedSpinLock(&ctx->PacketQueue.Lock, &lqh);
 
-	NET_BUFFER_LIST *Last = NULL, **LastLink = &ctx->PacketQueue.FirstNbl;
+	NET_BUFFER_LIST *nbl_last = NULL, **nbl_last_link = &ctx->PacketQueue.FirstNbl;
 	for (NET_BUFFER_LIST *nbl = ctx->PacketQueue.FirstNbl, *nbl_next; nbl; nbl = nbl_next) {
 		nbl_next = NET_BUFFER_LIST_NEXT_NBL(nbl);
 		if (NDIS_GET_NET_BUFFER_LIST_CANCEL_ID(nbl) == CancelId) {
-			*LastLink = nbl_next;
+			*nbl_last_link = nbl_next;
 			TunNBLRefDec(ctx, nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
 		} else {
-			Last = nbl;
-			LastLink = &NET_BUFFER_LIST_NEXT_NBL(nbl);
+			nbl_last = nbl;
+			nbl_last_link = &NET_BUFFER_LIST_NEXT_NBL(nbl);
 		}
 	}
-	ctx->PacketQueue.LastNbl = Last;
+	ctx->PacketQueue.LastNbl = nbl_last;
 
 	KeReleaseInStackQueuedSpinLock(&lqh);
 }
