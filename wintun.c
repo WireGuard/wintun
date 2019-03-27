@@ -214,18 +214,18 @@ static IRP *TunCsqPeekNextIrp(IO_CSQ *Csq, IRP *Irp, _In_ PVOID PeekContext)
 	 * we will start from the listhead. This is done under the assumption that
 	 * new IRPs are always inserted at the tail. */
 	for (LIST_ENTRY
-			*listHead = &ctx->Device.ReadQueue.List,
-			*nextEntry = Irp ? Irp->Tail.Overlay.ListEntry.Flink : listHead->Flink;
-		nextEntry != listHead;
-		nextEntry = nextEntry->Flink)
+			*head = &ctx->Device.ReadQueue.List,
+			*next = Irp ? Irp->Tail.Overlay.ListEntry.Flink : head->Flink;
+		next != head;
+		next = next->Flink)
 	{
-		IRP *nextIrp = CONTAINING_RECORD(nextEntry, IRP, Tail.Overlay.ListEntry);
+		IRP *irp_next = CONTAINING_RECORD(next, IRP, Tail.Overlay.ListEntry);
 		if (!PeekContext)
-			return nextIrp;
+			return irp_next;
 
-		IO_STACK_LOCATION *stack = IoGetCurrentIrpStackLocation(nextIrp);
+		IO_STACK_LOCATION *stack = IoGetCurrentIrpStackLocation(irp_next);
 		if (stack->FileObject == (FILE_OBJECT *)PeekContext)
-			return nextIrp;
+			return irp_next;
 	}
 
 	return NULL;
@@ -451,7 +451,7 @@ _Requires_lock_not_held_(ctx->PacketQueue.Lock)
 _IRQL_requires_max_(DISPATCH_LEVEL)
 static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 {
-	IRP *Irp = NULL;
+	IRP *irp = NULL;
 	NET_BUFFER *nb;
 	KLOCK_QUEUE_HANDLE lqh;
 
@@ -460,14 +460,14 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 		NTSTATUS status;
 
 		KeAcquireInStackQueuedSpinLock(&ctx->PacketQueue.Lock, &lqh);
-		if (!Irp) {
+		if (!irp) {
 			nb = TunQueueRemove(ctx, &nbl);
 			if (!nb) {
 				KeReleaseInStackQueuedSpinLock(&lqh);
 				return;
 			}
-			Irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL);
-			if (!Irp) {
+			irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL);
+			if (!irp) {
 				if (!nbl|| !TunNBLRefDec(ctx, nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL))
 					TunQueuePrepend(ctx, nb, nbl);
 				KeReleaseInStackQueuedSpinLock(&lqh);
@@ -478,23 +478,23 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 		}
 		KeReleaseInStackQueuedSpinLock(&lqh);
 
-		if (!nb || (status = TunWriteIntoIrp(Irp, nb)) == STATUS_BUFFER_TOO_SMALL) { /* Irp complete */
-			Irp->IoStatus.Status = STATUS_SUCCESS;
-			IoCompleteRequest(Irp, IO_NETWORK_INCREMENT);
+		if (!nb || (status = TunWriteIntoIrp(irp, nb)) == STATUS_BUFFER_TOO_SMALL) { /* irp complete */
+			irp->IoStatus.Status = STATUS_SUCCESS;
+			IoCompleteRequest(irp, IO_NETWORK_INCREMENT);
 			TunCompletePause(ctx, 1);
-			Irp = NULL;
+			irp = NULL;
 		} else if (status == NDIS_STATUS_INVALID_LENGTH || status == NDIS_STATUS_RESOURCES) { /* nb-related errors */
 			KeAcquireInStackQueuedSpinLock(&ctx->PacketQueue.Lock, &lqh);
 			if (nbl)
 				NET_BUFFER_LIST_STATUS(nbl) = status;
 			KeReleaseInStackQueuedSpinLock(&lqh);
-			IoCsqInsertIrpEx(&ctx->Device.ReadQueue.Csq, Irp, NULL, TUN_CSQ_INSERT_HEAD);
-			Irp = NULL;
-		} else if (!NT_SUCCESS(status)) { /* Irp-related errors */
-			Irp->IoStatus.Status = status;
-			IoCompleteRequest(Irp, IO_NO_INCREMENT);
+			IoCsqInsertIrpEx(&ctx->Device.ReadQueue.Csq, irp, NULL, TUN_CSQ_INSERT_HEAD);
+			irp = NULL;
+		} else if (!NT_SUCCESS(status)) { /* irp-related errors */
+			irp->IoStatus.Status = status;
+			IoCompleteRequest(irp, IO_NO_INCREMENT);
 			TunCompletePause(ctx, 1);
-			Irp = NULL;
+			irp = NULL;
 		}
 		if (nbl)
 			TunNBLRefDec(ctx, nbl, 0);
