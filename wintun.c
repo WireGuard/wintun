@@ -32,6 +32,8 @@
 #define TUN_EXCH_ALIGNMENT		16	// Memory alignment in exchange buffers
 #define TUN_EXCH_MAX_IP_PACKET_SIZE	(TUN_EXCH_MAX_PACKET_SIZE - sizeof(TUN_PACKET))		// Maximum IP packet size (headers + payload)
 #define TUN_EXCH_MAX_BUFFER_SIZE	(TUN_EXCH_MAX_PACKETS * TUN_EXCH_MAX_PACKET_SIZE)	// Maximum size of read/write exchange buffer
+#define TUN_EXCH_MIN_BUFFER_SIZE_READ	TUN_EXCH_MAX_PACKET_SIZE				// Minimum size of read exchange buffer
+#define TUN_EXCH_MIN_BUFFER_SIZE_WRITE	(sizeof(TUN_PACKET))					// Minimum size of write exchange buffer
 #define TUN_QUEUE_MAX_NBLS		1000
 
 typedef struct _TUN_PACKET {
@@ -301,6 +303,18 @@ static NTSTATUS TunGetIrpBuffer(_In_ IRP *Irp, _Out_ UCHAR **buffer, _Out_ ULONG
 
 	if (*size > TUN_EXCH_MAX_BUFFER_SIZE)
 		return STATUS_INVALID_USER_BUFFER;
+
+	switch (stack->MajorFunction) {
+	case IRP_MJ_READ:
+		if (*size < TUN_EXCH_MIN_BUFFER_SIZE_READ)
+			return STATUS_INVALID_USER_BUFFER;
+		break;
+
+	case IRP_MJ_WRITE:
+		if (*size < TUN_EXCH_MIN_BUFFER_SIZE_WRITE)
+			return STATUS_INVALID_USER_BUFFER;
+		break;
+	}
 
 	return STATUS_SUCCESS;
 }
