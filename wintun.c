@@ -265,7 +265,8 @@ static void TunSetNBLStatus(_Inout_opt_ NET_BUFFER_LIST *nbl, _In_ NDIS_STATUS s
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-static NTSTATUS TunGetIRPBuffer(_Inout_ IRP *Irp, _Out_ UCHAR **buffer, _Out_ ULONG *size)
+_Must_inspect_result_
+static NTSTATUS TunGetIrpBuffer(_In_ IRP *Irp, _Out_ UCHAR **buffer, _Out_ ULONG *size)
 {
 	/* Get and validate request parameters. */
 	ULONG priority;
@@ -301,31 +302,35 @@ static NTSTATUS TunGetIRPBuffer(_Inout_ IRP *Irp, _Out_ UCHAR **buffer, _Out_ UL
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-static BOOLEAN TunCanFitIntoIrp(_In_ IRP *Irp, _In_ NET_BUFFER *nb)
+_Must_inspect_result_
+static _Return_type_success_(return != NULL) IRP *TunRemoveNextIrp(_Inout_ TUN_CTX *ctx, _Out_ UCHAR ** buffer, _Out_ ULONG *size)
 {
-	return TRUE; //TODO(rozmansi): Implement me!
+	IRP *irp;
+
+retry:
+	irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL);
+	if (!irp)
+		return NULL;
+
+	NTSTATUS status = TunGetIrpBuffer(irp, buffer, size);
+	if (!NT_SUCCESS(status)) {
+		irp->IoStatus.Status = status;
+		IoCompleteRequest(irp, IO_NETWORK_INCREMENT);
+		TunCompletePause(ctx, 1);
+		goto retry;
+	}
+
+	ASSERT(irp->IoStatus.Information <= (ULONG_PTR)*size);
+
+	return irp;
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-static NTSTATUS TunWriteIntoIrp(_Inout_ IRP *Irp, _In_ NET_BUFFER *nb)
+static NTSTATUS TunWriteIntoIrp(_Inout_ IRP *Irp, _Inout_ UCHAR *buffer, _In_ NET_BUFFER *nb)
 {
-	NTSTATUS status = STATUS_UNSUCCESSFUL;
-	UCHAR *buffer = NULL;
-	ULONG size = 0;
-	status = TunGetIRPBuffer(Irp, &buffer, &size);
-	if (status != STATUS_SUCCESS)
-		return status;
-
-	UCHAR *b = buffer + Irp->IoStatus.Information, *b_end = buffer + size;
 	ULONG p_size = NET_BUFFER_DATA_LENGTH(nb);
-	if (p_size > TUN_EXCH_MAX_IP_PACKET_SIZE)
-		return NDIS_STATUS_INVALID_LENGTH;
+	TUN_PACKET *p = (TUN_PACKET *)(buffer + Irp->IoStatus.Information);
 
-	UCHAR *b_next = b + TunPacketAlign(sizeof(TUN_PACKET) + p_size);
-	if (b_next > b_end)
-		return STATUS_BUFFER_TOO_SMALL;
-
-	TUN_PACKET *p = (TUN_PACKET *)b;
 	p->Size = p_size;
 	void *ptr = NdisGetDataBuffer(nb, p_size, p->Data, 1, 0);
 	if (!ptr)
@@ -333,7 +338,7 @@ static NTSTATUS TunWriteIntoIrp(_Inout_ IRP *Irp, _In_ NET_BUFFER *nb)
 	if (ptr != p->Data)
 		NdisMoveMemory(p->Data, ptr, p_size);
 
-	Irp->IoStatus.Information = b_next - buffer;
+	Irp->IoStatus.Information += TunPacketAlign(sizeof(TUN_PACKET) + p_size);
 	return STATUS_SUCCESS;
 }
 
@@ -467,21 +472,24 @@ _IRQL_requires_max_(DISPATCH_LEVEL)
 static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 {
 	IRP *irp = NULL;
+	UCHAR *buffer = NULL;
+	ULONG size = 0;
 	NET_BUFFER *nb;
 	KLOCK_QUEUE_HANDLE lqh;
 
 	for (;;) {
 		NET_BUFFER_LIST *nbl;
-		NTSTATUS status = STATUS_SUCCESS;
 
 		KeAcquireInStackQueuedSpinLock(&ctx->PacketQueue.Lock, &lqh);
+
+		/* Get head NB (and IRP). */
 		if (!irp) {
 			nb = TunQueueRemove(ctx, &nbl);
 			if (!nb) {
 				KeReleaseInStackQueuedSpinLock(&lqh);
 				return;
 			}
-			irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL);
+			irp = TunRemoveNextIrp(ctx, &buffer, &size);
 			if (!irp) {
 				TunQueuePrepend(ctx, nb, nbl);
 				KeReleaseInStackQueuedSpinLock(&lqh);
@@ -492,7 +500,8 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 		} else
 			nb = TunQueueRemove(ctx, &nbl);
 
-		if (!TunCanFitIntoIrp(irp, nb)) {
+		/* If the NB won't fit in the IRP, return it. */
+		if (nb && (ULONG_PTR)size < irp->IoStatus.Information + TunPacketAlign(sizeof(TUN_PACKET) + NET_BUFFER_DATA_LENGTH(nb))) {
 			TunQueuePrepend(ctx, nb, nbl);
 			if (nbl)
 				TunNBLRefDec(ctx, nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
@@ -502,22 +511,22 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 
 		KeReleaseInStackQueuedSpinLock(&lqh);
 
-		if (!nb || (status = TunWriteIntoIrp(irp, nb)) == STATUS_BUFFER_TOO_SMALL) { /* irp complete */
+		/* Process NB and IRP. */
+		if (nb) {
+			NTSTATUS status = TunWriteIntoIrp(irp, buffer, nb);
+			if (!NT_SUCCESS(status)) {
+				if (nbl)
+					NET_BUFFER_LIST_STATUS(nbl) = status;
+				IoCsqInsertIrpEx(&ctx->Device.ReadQueue.Csq, irp, NULL, TUN_CSQ_INSERT_HEAD);
+				irp = NULL; buffer = NULL; size = 0;
+			}
+		} else {
 			irp->IoStatus.Status = STATUS_SUCCESS;
 			IoCompleteRequest(irp, IO_NETWORK_INCREMENT);
 			TunCompletePause(ctx, 1);
-			irp = NULL;
-		} else if (status == NDIS_STATUS_INVALID_LENGTH || status == NDIS_STATUS_RESOURCES) { /* nb-related errors */
-			if (nbl)
-				NET_BUFFER_LIST_STATUS(nbl) = status;
-			IoCsqInsertIrpEx(&ctx->Device.ReadQueue.Csq, irp, NULL, TUN_CSQ_INSERT_HEAD);
-			irp = NULL;
-		} else if (!NT_SUCCESS(status)) { /* irp-related errors */
-			irp->IoStatus.Status = status;
-			IoCompleteRequest(irp, IO_NO_INCREMENT);
-			TunCompletePause(ctx, 1);
-			irp = NULL;
+			irp = NULL; buffer = NULL; size = 0;
 		}
+
 		if (nbl)
 			TunNBLRefDec(ctx, nbl, 0);
 	}
@@ -626,9 +635,9 @@ static NTSTATUS TunDispatchWrite(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 	if (!NT_SUCCESS(status = TunCheckForPause(ctx, 1)))
 		goto cleanup_TunCompletePause;
 
-	UCHAR *buffer = NULL;
-	ULONG size = 0;
-	status = TunGetIRPBuffer(Irp, &buffer, &size);
+	UCHAR *buffer;
+	ULONG size;
+	status = TunGetIrpBuffer(Irp, &buffer, &size);
 	if (!NT_SUCCESS(status))
 		goto cleanup_TunCompletePause;
 
