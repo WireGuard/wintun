@@ -288,8 +288,6 @@ static NTSTATUS TunGetIrpBuffer(_In_ IRP *Irp, _Out_ UCHAR **buffer, _Out_ ULONG
 	default:
 		return STATUS_INVALID_PARAMETER;
 	}
-	if (*size > TUN_EXCH_MAX_BUFFER_SIZE)
-		return STATUS_INVALID_USER_BUFFER;
 
 	/* Get buffer size and address. */
 	if (!Irp->MdlAddress)
@@ -300,6 +298,9 @@ static NTSTATUS TunGetIrpBuffer(_In_ IRP *Irp, _Out_ UCHAR **buffer, _Out_ ULONG
 		return STATUS_INSUFFICIENT_RESOURCES;
 	if (size_mdl < *size)
 		*size = size_mdl;
+
+	if (*size > TUN_EXCH_MAX_BUFFER_SIZE)
+		return STATUS_INVALID_USER_BUFFER;
 
 	return STATUS_SUCCESS;
 }
