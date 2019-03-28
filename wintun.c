@@ -142,13 +142,15 @@ static void TunIndicateStatus(_In_ TUN_CTX *ctx)
 
 
 _IRQL_requires_max_(HIGH_LEVEL)
-static TUN_CTX * volatile *TunGetContextPointer(_In_ DEVICE_OBJECT *DeviceObject)
+_Must_inspect_result_
+static _Return_type_success_(return != NULL) TUN_CTX * volatile *TunGetContextPointer(_In_ DEVICE_OBJECT *DeviceObject)
 {
 	return (TUN_CTX * volatile *)NdisGetDeviceReservedExtension(DeviceObject);
 }
 
 _IRQL_requires_max_(HIGH_LEVEL)
-static TUN_CTX *TunGetContext(_In_ DEVICE_OBJECT *DeviceObject)
+_Must_inspect_result_
+static _Return_type_success_(return != NULL) TUN_CTX *TunGetContext(_In_ DEVICE_OBJECT *DeviceObject)
 {
 	TUN_CTX * volatile * ctx = TunGetContextPointer(DeviceObject);
 	return ctx ? InterlockedGetPointer(ctx) : NULL;
@@ -163,6 +165,7 @@ static void TunCompleteRequest(_Inout_ IRP *Irp, _In_ ULONG_PTR Information, _In
 }
 
 _IRQL_requires_same_
+_Must_inspect_result_
 static NTSTATUS TunCheckForPause(_Inout_ TUN_CTX *ctx, _In_ LONG64 increment)
 {
 	ASSERT(InterlockedGet64(&ctx->ActiveTransactionCount) <= MAXLONG64 - increment);
@@ -326,6 +329,7 @@ retry:
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
+_Must_inspect_result_
 static NTSTATUS TunWriteIntoIrp(_Inout_ IRP *Irp, _Inout_ UCHAR *buffer, _In_ NET_BUFFER *nb)
 {
 	ULONG p_size = NET_BUFFER_DATA_LENGTH(nb);
@@ -417,7 +421,8 @@ static void TunQueueAppend(_Inout_ TUN_CTX *ctx, _In_ NET_BUFFER_LIST *nbl, _In_
 
 _Requires_lock_held_(ctx->PacketQueue.Lock)
 _IRQL_requires_(DISPATCH_LEVEL)
-static NET_BUFFER *TunQueueRemove(_Inout_ TUN_CTX *ctx, _Out_ NET_BUFFER_LIST **nbl)
+_Must_inspect_result_
+static _Return_type_success_(return != NULL) NET_BUFFER *TunQueueRemove(_Inout_ TUN_CTX *ctx, _Out_ NET_BUFFER_LIST **nbl)
 {
 	NET_BUFFER_LIST *nbl_top;
 	NET_BUFFER *ret;
@@ -1169,7 +1174,6 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
-_IRQL_requires_same_
 static NDIS_STATUS TunOidSet(_Inout_ TUN_CTX *ctx, _In_ NDIS_OID Oid, _In_bytecount_(InformationBufferLength) const void *InformationBuffer, _In_ UINT InformationBufferLength, _Out_ UINT *BytesRead, _Out_ UINT *BytesNeeded)
 {
 	*BytesRead = 0;
@@ -1206,7 +1210,7 @@ static NDIS_STATUS TunOidSet(_Inout_ TUN_CTX *ctx, _In_ NDIS_OID Oid, _In_byteco
 }
 
 _IRQL_requires_max_(APC_LEVEL)
-_IRQL_requires_same_
+_Must_inspect_result_
 static NDIS_STATUS TunOidQuery(_Inout_ TUN_CTX *ctx, _In_ NDIS_OID Oid, _Out_bytecap_post_bytecount_(InformationBufferLength, *BytesWritten) void *InformationBuffer, _In_ UINT InformationBufferLength, _Out_ UINT *BytesWritten, _Out_ UINT *BytesNeeded)
 {
 	UINT value32;
