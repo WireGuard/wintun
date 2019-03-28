@@ -457,7 +457,7 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 
 	for (;;) {
 		NET_BUFFER_LIST *nbl;
-		NTSTATUS status;
+		NTSTATUS status = STATUS_SUCCESS;
 
 		KeAcquireInStackQueuedSpinLock(&ctx->PacketQueue.Lock, &lqh);
 		if (!irp) {
@@ -473,9 +473,8 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 				KeReleaseInStackQueuedSpinLock(&lqh);
 				return;
 			}
-		} else {
+		} else
 			nb = TunQueueRemove(ctx, &nbl);
-		}
 		KeReleaseInStackQueuedSpinLock(&lqh);
 
 		if (!nb || (status = TunWriteIntoIrp(irp, nb)) == STATUS_BUFFER_TOO_SMALL) { /* irp complete */
@@ -484,10 +483,8 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 			TunCompletePause(ctx, 1);
 			irp = NULL;
 		} else if (status == NDIS_STATUS_INVALID_LENGTH || status == NDIS_STATUS_RESOURCES) { /* nb-related errors */
-			KeAcquireInStackQueuedSpinLock(&ctx->PacketQueue.Lock, &lqh);
 			if (nbl)
 				NET_BUFFER_LIST_STATUS(nbl) = status;
-			KeReleaseInStackQueuedSpinLock(&lqh);
 			IoCsqInsertIrpEx(&ctx->Device.ReadQueue.Csq, irp, NULL, TUN_CSQ_INSERT_HEAD);
 			irp = NULL;
 		} else if (!NT_SUCCESS(status)) { /* irp-related errors */
