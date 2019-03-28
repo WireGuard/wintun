@@ -13,6 +13,10 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav</Extensions>
     </Filter>
+    <Filter Include="Documentation Files">
+      <UniqueIdentifier>{84798863-f538-43a0-bac1-a361529f66c0}</UniqueIdentifier>
+      <Extensions>md</Extensions>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="wintun.c">
@@ -28,5 +32,13 @@
     <Inf Include="wintun.inf">
       <Filter>Source Files</Filter>
     </Inf>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="COPYING">
+      <Filter>Documentation Files</Filter>
+    </None>
+    <None Include="README.md">
+      <Filter>Documentation Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
