@@ -301,7 +301,7 @@ static NTSTATUS TunGetIRPBuffer(_Inout_ IRP *Irp, _Out_ UCHAR **buffer, _Out_ UL
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-static BOOLEAN TunCanFitIntoIrp(_Inout_ IRP *Irp, _In_ NET_BUFFER *nb)
+static BOOLEAN TunCanFitIntoIrp(_In_ IRP *Irp, _In_ NET_BUFFER *nb)
 {
 	return TRUE; //TODO(rozmansi): Implement me!
 }
@@ -417,6 +417,7 @@ static NET_BUFFER *TunQueueRemove(_Inout_ TUN_CTX *ctx, _Out_ NET_BUFFER_LIST **
 	NET_BUFFER_LIST *nbl_top;
 	NET_BUFFER *ret;
 
+retry:
 	nbl_top = ctx->PacketQueue.FirstNbl;
 	*nbl = nbl_top;
 	if (!nbl_top)
@@ -432,6 +433,13 @@ static NET_BUFFER *TunQueueRemove(_Inout_ TUN_CTX *ctx, _Out_ NET_BUFFER_LIST **
 		NET_BUFFER_LIST_NEXT_NBL(nbl_top) = NULL;
 	} else
 		TunNBLRefInc(nbl_top);
+
+	if (ret && NET_BUFFER_DATA_LENGTH(ret) > TUN_EXCH_MAX_IP_PACKET_SIZE) {
+		NET_BUFFER_LIST_STATUS(nbl_top) = NDIS_STATUS_INVALID_LENGTH;
+		TunNBLRefDec(ctx, nbl_top, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+		goto retry; /* A for (;;) and a break would be fine, but this is clearer actually. */
+	}
+
 	return ret;
 }
 
