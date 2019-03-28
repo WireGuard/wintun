@@ -38,11 +38,11 @@ CopyFiles = Wintun.CopyFiles.Sys
 EnableDhcp = 0 ; Disable DHCP
 
 [Wintun.Install.Services]
-AddService = %Wintun.Name%, 2, Wintun.Service, Wintun.EventLog, , %Wintun.Name%
+AddService = wintun, 2, Wintun.Service, Wintun.EventLog
 
 [Wintun.Ndi]
 HKR, , DeviceVxDs, , wintun.sys
-HKR, Ndi, Service, 0, Wintun.Name
+HKR, Ndi, Service, 0, wintun
 HKR, Ndi\Interfaces, UpperRange, , "ndis5"
 HKR, Ndi\Interfaces, LowerRange, , "nolower"
 
