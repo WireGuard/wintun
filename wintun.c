@@ -301,6 +301,12 @@ static NTSTATUS TunGetIRPBuffer(_Inout_ IRP *Irp, _Out_ UCHAR **buffer, _Out_ UL
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
+static BOOLEAN TunCanFitIntoIrp(_Inout_ IRP *Irp, _In_ NET_BUFFER *nb)
+{
+	return TRUE; //TODO(rozmansi): Implement me!
+}
+
+_IRQL_requires_max_(DISPATCH_LEVEL)
 static NTSTATUS TunWriteIntoIrp(_Inout_ IRP *Irp, _In_ NET_BUFFER *nb)
 {
 	NTSTATUS status = STATUS_UNSUCCESSFUL;
@@ -432,18 +438,19 @@ static NET_BUFFER *TunQueueRemove(_Inout_ TUN_CTX *ctx, _Out_ NET_BUFFER_LIST **
 /* Note: Must be called immediately after TunQueueRemove without dropping ctx->PacketQueue.Lock. */
 _Requires_lock_held_(ctx->PacketQueue.Lock)
 _IRQL_requires_(DISPATCH_LEVEL)
-static void TunQueuePrepend(_Inout_ TUN_CTX *ctx, _In_ NET_BUFFER *nb, _In_ NET_BUFFER_LIST *nbl_detached)
+static void TunQueuePrepend(_Inout_ TUN_CTX *ctx, _In_ NET_BUFFER *nb, _In_ NET_BUFFER_LIST *nbl)
 {
 	ctx->PacketQueue.NextNb = nb;
 
-	if (!nbl_detached)
+	if (!nbl || nbl == ctx->PacketQueue.FirstNbl)
 		return;
 
+	TunNBLRefInc(nbl);
 	if (!ctx->PacketQueue.FirstNbl)
-		ctx->PacketQueue.FirstNbl = ctx->PacketQueue.LastNbl = nbl_detached;
+		ctx->PacketQueue.FirstNbl = ctx->PacketQueue.LastNbl = nbl;
 	else {
-		NET_BUFFER_LIST_NEXT_NBL(nbl_detached) = ctx->PacketQueue.FirstNbl;
-		ctx->PacketQueue.FirstNbl = nbl_detached;
+		NET_BUFFER_LIST_NEXT_NBL(nbl) = ctx->PacketQueue.FirstNbl;
+		ctx->PacketQueue.FirstNbl = nbl;
 	}
 }
 
@@ -468,13 +475,23 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 			}
 			irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL);
 			if (!irp) {
-				if (!nbl|| !TunNBLRefDec(ctx, nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL))
-					TunQueuePrepend(ctx, nb, nbl);
+				TunQueuePrepend(ctx, nb, nbl);
 				KeReleaseInStackQueuedSpinLock(&lqh);
+				if (nbl)
+					TunNBLRefDec(ctx, nbl, 0);
 				return;
 			}
 		} else
 			nb = TunQueueRemove(ctx, &nbl);
+
+		if (!TunCanFitIntoIrp(irp, nb)) {
+			TunQueuePrepend(ctx, nb, nbl);
+			if (nbl)
+				TunNBLRefDec(ctx, nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+			nbl = NULL;
+			nb = NULL;
+		}
+
 		KeReleaseInStackQueuedSpinLock(&lqh);
 
 		if (!nb || (status = TunWriteIntoIrp(irp, nb)) == STATUS_BUFFER_TOO_SMALL) { /* irp complete */
