@@ -351,19 +351,25 @@ static BOOLEAN TunCanFitIntoIrp(_In_ IRP *Irp, _In_ ULONG size, _In_ NET_BUFFER 
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 _Must_inspect_result_
-static NTSTATUS TunWriteIntoIrp(_Inout_ IRP *Irp, _Inout_ UCHAR *buffer, _In_ NET_BUFFER *nb)
+static NTSTATUS TunWriteIntoIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp, _Inout_ UCHAR *buffer, _In_ NET_BUFFER *nb)
 {
 	ULONG p_size = NET_BUFFER_DATA_LENGTH(nb);
 	TUN_PACKET *p = (TUN_PACKET *)(buffer + Irp->IoStatus.Information);
 
 	p->Size = p_size;
 	void *ptr = NdisGetDataBuffer(nb, p_size, p->Data, 1, 0);
-	if (!ptr)
+	if (!ptr) {
+		InterlockedIncrement64((LONG64 *)&ctx->Statistics.ifOutErrors);
 		return NDIS_STATUS_RESOURCES;
+	}
 	if (ptr != p->Data)
 		NdisMoveMemory(p->Data, ptr, p_size);
 
 	Irp->IoStatus.Information += TunPacketAlign(sizeof(TUN_PACKET) + p_size);
+
+	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifHCOutOctets,      p_size);
+	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifHCOutUcastOctets, p_size);
+	InterlockedIncrement64((LONG64 *)&ctx->Statistics.ifHCOutUcastPkts);
 	return STATUS_SUCCESS;
 }
 
@@ -468,6 +474,7 @@ retry:
 	if (ret && NET_BUFFER_DATA_LENGTH(ret) > TUN_EXCH_MAX_IP_PACKET_SIZE) {
 		NET_BUFFER_LIST_STATUS(nbl_top) = NDIS_STATUS_INVALID_LENGTH;
 		TunNBLRefDec(ctx, nbl_top, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+		InterlockedIncrement64((LONG64 *)&ctx->Statistics.ifOutDiscards);
 		goto retry; /* A for (;;) and a break would be fine, but this is clearer actually. */
 	}
 
@@ -539,7 +546,7 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 
 		/* Process NB and IRP. */
 		if (nb) {
-			NTSTATUS status = TunWriteIntoIrp(irp, buffer, nb);
+			NTSTATUS status = TunWriteIntoIrp(ctx, irp, buffer, nb);
 			if (!NT_SUCCESS(status)) {
 				if (nbl)
 					NET_BUFFER_LIST_STATUS(nbl) = status;
