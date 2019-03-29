@@ -5,8 +5,8 @@
 
 #define NDIS_MINIPORT_DRIVER
 #define NDIS620_MINIPORT
-#define NDIS_SUPPORT_NDIS620	1
-#define NDIS_WDM		1
+#define NDIS_SUPPORT_NDIS620    1
+#define NDIS_WDM                1
 
 #include <stdio.h>
 #include <string.h>
@@ -21,94 +21,94 @@
 #pragma warning(disable : 4204) // nonstandard extension used: non-constant aggregate initializer
 #pragma warning(disable : 4221) // nonstandard extension used: <member>: cannot be initialized using address of automatic variable <variable>
 
-#define TUN_DEVICE_NAME		L"WINTUN%u"
+#define TUN_DEVICE_NAME         L"WINTUN%u"
 
-#define TUN_VENDOR_NAME		"Wintun Tunnel"
-#define TUN_VENDOR_ID		0xFFFFFF00
-#define TUN_LINK_SPEED 		100000000000ULL // 100gbps
+#define TUN_VENDOR_NAME         "Wintun Tunnel"
+#define TUN_VENDOR_ID           0xFFFFFF00
+#define TUN_LINK_SPEED          100000000000ULL // 100gbps
 
-#define TUN_EXCH_MAX_PACKETS		256	// Maximum number of exchange packets that can be exchanged in a single read/write
-#define TUN_EXCH_MAX_PACKET_SIZE	0xF000	// Maximum exchange packet size - empirically determined by net buffer list (pool) limitations
-#define TUN_EXCH_ALIGNMENT		16	// Memory alignment in exchange buffers
-#define TUN_EXCH_MAX_IP_PACKET_SIZE	(TUN_EXCH_MAX_PACKET_SIZE - sizeof(TUN_PACKET))		// Maximum IP packet size (headers + payload)
-#define TUN_EXCH_MAX_BUFFER_SIZE	(TUN_EXCH_MAX_PACKETS * TUN_EXCH_MAX_PACKET_SIZE)	// Maximum size of read/write exchange buffer
-#define TUN_EXCH_MIN_BUFFER_SIZE_READ	TUN_EXCH_MAX_PACKET_SIZE				// Minimum size of read exchange buffer
-#define TUN_EXCH_MIN_BUFFER_SIZE_WRITE	(sizeof(TUN_PACKET))					// Minimum size of write exchange buffer
-#define TUN_QUEUE_MAX_NBLS		1000
+#define TUN_EXCH_MAX_PACKETS            256                                                 // Maximum number of exchange packets that can be exchanged in a single read/write
+#define TUN_EXCH_MAX_PACKET_SIZE        0xF000                                              // Maximum exchange packet size - empirically determined by net buffer list (pool) limitations
+#define TUN_EXCH_ALIGNMENT              16                                                  // Memory alignment in exchange buffers
+#define TUN_EXCH_MAX_IP_PACKET_SIZE     (TUN_EXCH_MAX_PACKET_SIZE - sizeof(TUN_PACKET))     // Maximum IP packet size (headers + payload)
+#define TUN_EXCH_MAX_BUFFER_SIZE        (TUN_EXCH_MAX_PACKETS * TUN_EXCH_MAX_PACKET_SIZE)   // Maximum size of read/write exchange buffer
+#define TUN_EXCH_MIN_BUFFER_SIZE_READ   TUN_EXCH_MAX_PACKET_SIZE                            // Minimum size of read exchange buffer
+#define TUN_EXCH_MIN_BUFFER_SIZE_WRITE  (sizeof(TUN_PACKET))                                // Minimum size of write exchange buffer
+#define TUN_QUEUE_MAX_NBLS              1000
 
 typedef struct _TUN_PACKET {
-	ULONG	Size;			// Size of packet data (TUN_EXCH_MAX_IP_PACKET_SIZE max)
+	ULONG Size;                     // Size of packet data (TUN_EXCH_MAX_IP_PACKET_SIZE max)
 	_Field_size_bytes_(Size)
 	__declspec(align(TUN_EXCH_ALIGNMENT))
-	UCHAR	Data[];			// Packet data
+	UCHAR Data[];                   // Packet data
 } TUN_PACKET;
 
 typedef enum _TUN_STATE {
-	TUN_STATE_HALTED = 0,		// The Halted state is the initial state of all adapters. When an adapter is in the Halted state, NDIS can call the driver's MiniportInitializeEx function to initialize the adapter.
-	TUN_STATE_SHUTDOWN,		// In the Shutdown state, a system shutdown and restart must occur before the system can use the adapter again
-	TUN_STATE_INITIALIZING,		// In the Initializing state, a miniport driver completes any operations that are required to initialize an adapter.
-	TUN_STATE_PAUSED,		// In the Paused state, the adapter does not indicate received network data or accept send requests.
-	TUN_STATE_RESTARTING,		// In the Restarting state, a miniport driver completes any operations that are required to restart send and receive operations for an adapter.
-	TUN_STATE_RUNNING,		// In the Running state, a miniport driver performs send and receive processing for an adapter.
-	TUN_STATE_PAUSING,		// In the Pausing state, a miniport driver completes any operations that are required to stop send and receive operations for an adapter.
+	TUN_STATE_HALTED = 0,           // The Halted state is the initial state of all adapters. When an adapter is in the Halted state, NDIS can call the driver's MiniportInitializeEx function to initialize the adapter.
+	TUN_STATE_SHUTDOWN,             // In the Shutdown state, a system shutdown and restart must occur before the system can use the adapter again
+	TUN_STATE_INITIALIZING,         // In the Initializing state, a miniport driver completes any operations that are required to initialize an adapter.
+	TUN_STATE_PAUSED,               // In the Paused state, the adapter does not indicate received network data or accept send requests.
+	TUN_STATE_RESTARTING,           // In the Restarting state, a miniport driver completes any operations that are required to restart send and receive operations for an adapter.
+	TUN_STATE_RUNNING,              // In the Running state, a miniport driver performs send and receive processing for an adapter.
+	TUN_STATE_PAUSING,              // In the Pausing state, a miniport driver completes any operations that are required to stop send and receive operations for an adapter.
 } TUN_STATE;
 
 typedef struct _TUN_CTX {
-	volatile TUN_STATE	State;
+	volatile TUN_STATE State;
 
 	volatile NDIS_DEVICE_POWER_STATE PowerState;
 
-	NDIS_HANDLE		MiniportAdapterHandle;
-	NDIS_STATISTICS_INFO	Statistics;
+	NDIS_HANDLE MiniportAdapterHandle;
+	NDIS_STATISTICS_INFO Statistics;
 
-	volatile LONG64		ActiveTransactionCount;
+	volatile LONG64 ActiveTransactionCount;
 
 	struct {
-		NDIS_HANDLE	Handle;
-		DEVICE_OBJECT	*Object;
-		volatile LONG64	RefCount;
+		NDIS_HANDLE Handle;
+		DEVICE_OBJECT *Object;
+		volatile LONG64 RefCount;
 
 		struct {
-			KSPIN_LOCK	Lock;
-			IO_CSQ		Csq;
-			LIST_ENTRY	List;
+			KSPIN_LOCK Lock;
+			IO_CSQ Csq;
+			LIST_ENTRY List;
 		} ReadQueue;
 	} Device;
 
 	struct {
-		KSPIN_LOCK		Lock;
-		NET_BUFFER_LIST		*FirstNbl, *LastNbl;
-		NET_BUFFER		*NextNb;
-		LONG			NumNbl;
+		KSPIN_LOCK Lock;
+		NET_BUFFER_LIST *FirstNbl, *LastNbl;
+		NET_BUFFER *NextNb;
+		LONG NumNbl;
 	} PacketQueue;
 
-	NDIS_HANDLE		NBLPool;
+	NDIS_HANDLE NBLPool;
 } TUN_CTX;
 
 static NDIS_HANDLE NdisMiniportDriverHandle = NULL;
 
 #if REG_DWORD == REG_DWORD_BIG_ENDIAN
-#define TUN_MEMORY_TAG	'wtun'
-#define TunHtons(x)	((USHORT)(x))
-#define TunHtonl(x)	((ULONG)(x))
+#define TUN_MEMORY_TAG  'wtun'
+#define TunHtons(x)     ((USHORT)(x))
+#define TunHtonl(x)     ((ULONG)(x))
 #elif REG_DWORD == REG_DWORD_LITTLE_ENDIAN
-#define TUN_MEMORY_TAG	'nutw'
-#define TunHtons(x)	RtlUshortByteSwap(x)
-#define TunHtonl(x)	RtlUlongByteSwap(x)
+#define TUN_MEMORY_TAG  'nutw'
+#define TunHtons(x)     RtlUshortByteSwap(x)
+#define TunHtonl(x)     RtlUlongByteSwap(x)
 #else
 #error "Unable to determine endianess"
 #endif
 
-#define TUN_CSQ_INSERT_HEAD		((PVOID)TRUE)
-#define TUN_CSQ_INSERT_TAIL		((PVOID)FALSE)
+#define TUN_CSQ_INSERT_HEAD             ((PVOID)TRUE)
+#define TUN_CSQ_INSERT_TAIL             ((PVOID)FALSE)
 
-#define InterlockedGet(val)		(InterlockedAdd((val), 0))
-#define InterlockedGet64(val)		(InterlockedAdd64((val), 0))
-#define InterlockedGetPointer(val)	(InterlockedCompareExchangePointer((val), NULL, NULL))
-#define InterlockedSubtract(val, n)	(InterlockedAdd((val), -(LONG)(n)))
-#define InterlockedSubtract64(val, n)	(InterlockedAdd64((val), -(LONG64)(n)))
-#define TunPacketAlign(size)		(((UINT)(size) + (UINT)(TUN_EXCH_ALIGNMENT - 1)) & ~(UINT)(TUN_EXCH_ALIGNMENT - 1))
-#define TunInitUnicodeString(str, buf)	{ (str)->Length = 0; (str)->MaximumLength = sizeof(buf); (str)->Buffer = buf; }
+#define InterlockedGet(val)             (InterlockedAdd((val), 0))
+#define InterlockedGet64(val)           (InterlockedAdd64((val), 0))
+#define InterlockedGetPointer(val)      (InterlockedCompareExchangePointer((val), NULL, NULL))
+#define InterlockedSubtract(val, n)     (InterlockedAdd((val), -(LONG)(n)))
+#define InterlockedSubtract64(val, n)   (InterlockedAdd64((val), -(LONG64)(n)))
+#define TunPacketAlign(size)            (((UINT)(size) + (UINT)(TUN_EXCH_ALIGNMENT - 1)) & ~(UINT)(TUN_EXCH_ALIGNMENT - 1))
+#define TunInitUnicodeString(str, buf)  { (str)->Length = 0; (str)->MaximumLength = sizeof(buf); (str)->Buffer = buf; }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 _IRQL_requires_same_
