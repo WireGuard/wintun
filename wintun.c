@@ -1210,35 +1210,37 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
-static NDIS_STATUS TunOidSet(_Inout_ TUN_CTX *ctx, _In_ NDIS_OID Oid, _In_bytecount_(InformationBufferLength) const void *InformationBuffer, _In_ UINT InformationBufferLength, _Out_ UINT *BytesRead, _Out_ UINT *BytesNeeded)
+static NDIS_STATUS TunOidSet(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *OidRequest)
 {
-	*BytesRead = 0;
-	*BytesNeeded = 0;
+	ASSERT(OidRequest->RequestType == NdisRequestSetInformation);
 
-	switch (Oid) {
+	OidRequest->DATA.SET_INFORMATION.BytesRead   = 0;
+	OidRequest->DATA.SET_INFORMATION.BytesNeeded = 0;
+
+	switch (OidRequest->DATA.SET_INFORMATION.Oid) {
 	case OID_GEN_CURRENT_PACKET_FILTER:
 	case OID_GEN_CURRENT_LOOKAHEAD:
-		if (InformationBufferLength != 4) {
-			*BytesNeeded = 4;
+		if (OidRequest->DATA.SET_INFORMATION.InformationBufferLength != 4) {
+			OidRequest->DATA.SET_INFORMATION.BytesNeeded = 4;
 			return NDIS_STATUS_INVALID_LENGTH;
 		}
-		*BytesRead = 4;
+		OidRequest->DATA.SET_INFORMATION.BytesRead = 4;
 		return NDIS_STATUS_SUCCESS;
 
 	case OID_GEN_LINK_PARAMETERS:
-		*BytesRead = InformationBufferLength;
+		OidRequest->DATA.SET_INFORMATION.BytesRead = OidRequest->DATA.SET_INFORMATION.InformationBufferLength;
 		return NDIS_STATUS_SUCCESS;
 
 	case OID_GEN_INTERRUPT_MODERATION:
 		return NDIS_STATUS_INVALID_DATA;
 
 	case OID_PNP_SET_POWER:
-		if (InformationBufferLength != sizeof(NDIS_DEVICE_POWER_STATE)) {
-			*BytesNeeded = sizeof(NDIS_DEVICE_POWER_STATE);
+		if (OidRequest->DATA.SET_INFORMATION.InformationBufferLength != sizeof(NDIS_DEVICE_POWER_STATE)) {
+			OidRequest->DATA.SET_INFORMATION.BytesNeeded = sizeof(NDIS_DEVICE_POWER_STATE);
 			return NDIS_STATUS_INVALID_LENGTH;
 		}
-		*BytesRead = sizeof(NDIS_DEVICE_POWER_STATE);
-		ctx->PowerState = *((NDIS_DEVICE_POWER_STATE *)InformationBuffer);
+		OidRequest->DATA.SET_INFORMATION.BytesRead = sizeof(NDIS_DEVICE_POWER_STATE);
+		ctx->PowerState = *((NDIS_DEVICE_POWER_STATE *)OidRequest->DATA.SET_INFORMATION.InformationBuffer);
 		return NDIS_STATUS_SUCCESS;
 	}
 
@@ -1247,13 +1249,15 @@ static NDIS_STATUS TunOidSet(_Inout_ TUN_CTX *ctx, _In_ NDIS_OID Oid, _In_byteco
 
 _IRQL_requires_max_(APC_LEVEL)
 _Must_inspect_result_
-static NDIS_STATUS TunOidQuery(_Inout_ TUN_CTX *ctx, _In_ NDIS_OID Oid, _Out_bytecap_post_bytecount_(InformationBufferLength, *BytesWritten) void *InformationBuffer, _In_ UINT InformationBufferLength, _Out_ UINT *BytesWritten, _Out_ UINT *BytesNeeded)
+static NDIS_STATUS TunOidQuery(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *OidRequest)
 {
+	ASSERT(OidRequest->RequestType == NdisRequestQueryInformation || OidRequest->RequestType == NdisRequestQueryStatistics);
+
 	UINT value32;
 	UINT size = sizeof(value32);
 	const void *buf = &value32;
 
-	switch (Oid) {
+	switch (OidRequest->DATA.QUERY_INFORMATION.Oid) {
 	case OID_GEN_MAXIMUM_TOTAL_SIZE:
 	case OID_GEN_TRANSMIT_BLOCK_SIZE:
 	case OID_GEN_RECEIVE_BLOCK_SIZE:
@@ -1316,18 +1320,18 @@ static NDIS_STATUS TunOidQuery(_Inout_ TUN_CTX *ctx, _In_ NDIS_OID Oid, _Out_byt
 		break;
 
 	default:
-		*BytesWritten = 0;
+		OidRequest->DATA.QUERY_INFORMATION.BytesWritten = 0;
 		return NDIS_STATUS_INVALID_OID;
 	}
 
-	if (size > InformationBufferLength) {
-		*BytesNeeded = size;
-		*BytesWritten = 0;
+	if (size > OidRequest->DATA.QUERY_INFORMATION.InformationBufferLength) {
+		OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  = size;
+		OidRequest->DATA.QUERY_INFORMATION.BytesWritten = 0;
 		return NDIS_STATUS_INVALID_LENGTH;
 	}
 
-	NdisMoveMemory(InformationBuffer, buf, size);
-	*BytesNeeded = *BytesWritten = size;
+	NdisMoveMemory(OidRequest->DATA.QUERY_INFORMATION.InformationBuffer, buf, size);
+	OidRequest->DATA.QUERY_INFORMATION.BytesNeeded = OidRequest->DATA.QUERY_INFORMATION.BytesWritten = size;
 
 	return NDIS_STATUS_SUCCESS;
 }
@@ -1339,10 +1343,10 @@ static NDIS_STATUS TunOidRequest(NDIS_HANDLE MiniportAdapterContext, PNDIS_OID_R
 	switch (OidRequest->RequestType) {
 	case NdisRequestQueryInformation:
 	case NdisRequestQueryStatistics:
-		return TunOidQuery(MiniportAdapterContext, OidRequest->DATA.QUERY_INFORMATION.Oid, OidRequest->DATA.QUERY_INFORMATION.InformationBuffer, OidRequest->DATA.QUERY_INFORMATION.InformationBufferLength, &OidRequest->DATA.QUERY_INFORMATION.BytesWritten, &OidRequest->DATA.QUERY_INFORMATION.BytesNeeded);
+		return TunOidQuery(MiniportAdapterContext, OidRequest);
 
 	case NdisRequestSetInformation:
-		return TunOidSet(MiniportAdapterContext, OidRequest->DATA.SET_INFORMATION.Oid, OidRequest->DATA.SET_INFORMATION.InformationBuffer, OidRequest->DATA.SET_INFORMATION.InformationBufferLength, &OidRequest->DATA.SET_INFORMATION.BytesRead, &OidRequest->DATA.SET_INFORMATION.BytesNeeded);
+		return TunOidSet(MiniportAdapterContext, OidRequest);
 
 	default:
 		return NDIS_STATUS_NOT_SUPPORTED;
