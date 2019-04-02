@@ -503,6 +503,24 @@ static void TunQueuePrepend(_Inout_ TUN_CTX *ctx, _In_ NET_BUFFER *nb, _In_ NET_
 
 _Requires_lock_not_held_(ctx->PacketQueue.Lock)
 _IRQL_requires_max_(DISPATCH_LEVEL)
+static void TunQueueClear(_Inout_ TUN_CTX *ctx)
+{
+	KLOCK_QUEUE_HANDLE lqh;
+	KeAcquireInStackQueuedSpinLock(&ctx->PacketQueue.Lock, &lqh);
+	for (NET_BUFFER_LIST *nbl = ctx->PacketQueue.FirstNbl, *nbl_next; nbl; nbl = nbl_next) {
+		nbl_next = NET_BUFFER_LIST_NEXT_NBL(nbl);
+		NET_BUFFER_LIST_STATUS(nbl) = STATUS_NDIS_PAUSED;
+		TunNBLRefDec(ctx, nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+	}
+	ctx->PacketQueue.FirstNbl = NULL;
+	ctx->PacketQueue.LastNbl  = NULL;
+	ctx->PacketQueue.NextNb   = NULL;
+	InterlockedExchange(&ctx->PacketQueue.NumNbl, 0);
+	KeReleaseInStackQueuedSpinLock(&lqh);
+}
+
+_Requires_lock_not_held_(ctx->PacketQueue.Lock)
+_IRQL_requires_max_(DISPATCH_LEVEL)
 static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 {
 	IRP *irp = NULL;
@@ -836,18 +854,7 @@ static NDIS_STATUS TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_P
 		return NDIS_STATUS_FAILURE;
 	}
 
-	KLOCK_QUEUE_HANDLE lqh;
-	KeAcquireInStackQueuedSpinLock(&ctx->PacketQueue.Lock, &lqh);
-	for (NET_BUFFER_LIST *nbl = ctx->PacketQueue.FirstNbl, *nbl_next; nbl; nbl = nbl_next) {
-		nbl_next = NET_BUFFER_LIST_NEXT_NBL(nbl);
-		NET_BUFFER_LIST_STATUS(nbl) = STATUS_NDIS_PAUSED;
-		TunNBLRefDec(ctx, nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
-	}
-	ctx->PacketQueue.FirstNbl = NULL;
-	ctx->PacketQueue.LastNbl  = NULL;
-	ctx->PacketQueue.NextNb   = NULL;
-	InterlockedExchange(&ctx->PacketQueue.NumNbl, 0);
-	KeReleaseInStackQueuedSpinLock(&lqh);
+	TunQueueClear(ctx);
 
 	/* Cancel pending IRPs to unblock waiting clients. */
 	IRP *pending_irp;
