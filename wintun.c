@@ -173,8 +173,8 @@ static NTSTATUS TunCheckForPause(_Inout_ TUN_CTX *ctx, _In_ LONG64 increment)
 	ASSERT(InterlockedGet64(&ctx->ActiveTransactionCount) <= MAXLONG64 - increment);
 	InterlockedAdd64(&ctx->ActiveTransactionCount, increment);
 	return
-		InterlockedGet((LONG *)&ctx->State) != TUN_STATE_RUNNING ? STATUS_NDIS_PAUSED :
-		ctx->PowerState >= NdisDeviceStateD1                     ? STATUS_NDIS_LOW_POWER_STATE :
+		InterlockedGet((LONG *)&ctx->State)      != TUN_STATE_RUNNING ? STATUS_NDIS_PAUSED :
+		InterlockedGet((LONG *)&ctx->PowerState) >= NdisDeviceStateD1 ? STATUS_NDIS_LOW_POWER_STATE :
 		STATUS_SUCCESS;
 }
 
@@ -1240,7 +1240,7 @@ static NDIS_STATUS TunOidSet(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *Oid
 			return NDIS_STATUS_INVALID_LENGTH;
 		}
 		OidRequest->DATA.SET_INFORMATION.BytesRead = sizeof(NDIS_DEVICE_POWER_STATE);
-		ctx->PowerState = *((NDIS_DEVICE_POWER_STATE *)OidRequest->DATA.SET_INFORMATION.InformationBuffer);
+		InterlockedExchange((LONG *)&ctx->PowerState, *((NDIS_DEVICE_POWER_STATE *)OidRequest->DATA.SET_INFORMATION.InformationBuffer));
 		return NDIS_STATUS_SUCCESS;
 	}
 
