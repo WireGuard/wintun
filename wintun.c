@@ -1481,8 +1481,8 @@ NTSTATUS DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
 			.Size                  = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2
 		},
 
-		.MajorNdisVersion              = NDIS_MINIPORT_MAJOR_VERSION,
-		.MinorNdisVersion              = NDIS_MINIPORT_MINOR_VERSION,
+		.MajorNdisVersion              = (UCHAR)((NdisVersion & 0x00ff0000) >> 16),
+		.MinorNdisVersion              = (UCHAR) (NdisVersion & 0x000000ff),
 
 		.MajorDriverVersion            = WINTUN_VERSION_MAJ,
 		.MinorDriverVersion            = WINTUN_VERSION_MIN,
