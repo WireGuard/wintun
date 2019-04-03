@@ -1313,6 +1313,8 @@ static NDIS_STATUS TunOidSet(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *Oid
 			if (InterlockedCompareExchange((LONG *)&ctx->Power, TUN_POWER_RESUMING, TUN_POWER_SUSPENDED) != TUN_POWER_SUSPENDED)
 				return NDIS_STATUS_FAILURE;
 
+			ASSERT(!InterlockedGet64(&ctx->PoweredTransactionCount));
+
 			InterlockedExchange((LONG *)&ctx->Power, TUN_POWER_RUNNING);
 		}
 		return NDIS_STATUS_SUCCESS;
