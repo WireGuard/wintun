@@ -330,7 +330,7 @@ retry:
 	NTSTATUS status = TunGetIrpBuffer(irp, buffer, size);
 	if (!NT_SUCCESS(status)) {
 		irp->IoStatus.Status = status;
-		IoCompleteRequest(irp, IO_NETWORK_INCREMENT);
+		IoCompleteRequest(irp, IO_NO_INCREMENT);
 		goto retry;
 	}
 
