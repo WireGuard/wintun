@@ -168,10 +168,10 @@ static void TunCompleteRequest(_Inout_ IRP *Irp, _In_ ULONG_PTR Information, _In
 
 _IRQL_requires_same_
 _Must_inspect_result_
-static NTSTATUS TunCheckForPause(_Inout_ TUN_CTX *ctx, _In_ LONG64 increment)
+static NTSTATUS TunCheckForPause(_Inout_ TUN_CTX *ctx)
 {
-	ASSERT(InterlockedGet64(&ctx->ActiveTransactionCount) <= MAXLONG64 - increment);
-	InterlockedAdd64(&ctx->ActiveTransactionCount, increment);
+	ASSERT(InterlockedGet64(&ctx->ActiveTransactionCount) < MAXLONG64);
+	InterlockedIncrement64(&ctx->ActiveTransactionCount);
 	return
 		InterlockedGet((LONG *)&ctx->State)      != TUN_STATE_RUNNING ? STATUS_NDIS_PAUSED :
 		InterlockedGet((LONG *)&ctx->PowerState) >= NdisDeviceStateD1 ? STATUS_NDIS_LOW_POWER_STATE :
@@ -179,13 +179,11 @@ static NTSTATUS TunCheckForPause(_Inout_ TUN_CTX *ctx, _In_ LONG64 increment)
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-static NDIS_STATUS TunCompletePause(_Inout_ TUN_CTX *ctx, _In_ LONG64 decrement, _In_ BOOLEAN async_completion)
+static NDIS_STATUS TunCompletePause(_Inout_ TUN_CTX *ctx, _In_ BOOLEAN async_completion)
 {
-	ASSERT(decrement <= InterlockedGet64(&ctx->ActiveTransactionCount));
-	if (!InterlockedSubtract64(&ctx->ActiveTransactionCount, decrement) &&
+	ASSERT(InterlockedGet64(&ctx->ActiveTransactionCount) > 0);
+	if (!InterlockedDecrement64(&ctx->ActiveTransactionCount) &&
 		InterlockedCompareExchange((LONG *)&ctx->State, TUN_STATE_PAUSED, TUN_STATE_PAUSING) == TUN_STATE_PAUSING) {
-		InterlockedExchange64(&ctx->Device.RefCount, 0);
-		TunIndicateStatus(ctx);
 		if (async_completion)
 			NdisMPauseComplete(ctx->MiniportAdapterHandle);
 		return NDIS_STATUS_SUCCESS;
@@ -258,9 +256,7 @@ static IO_CSQ_COMPLETE_CANCELED_IRP TunCsqCompleteCanceledIrp;
 _Use_decl_annotations_
 static VOID TunCsqCompleteCanceledIrp(IO_CSQ *Csq, IRP *Irp)
 {
-	TUN_CTX *ctx = CONTAINING_RECORD(Csq, TUN_CTX, Device.ReadQueue.Csq);
 	TunCompleteRequest(Irp, 0, STATUS_CANCELLED);
-	TunCompletePause(ctx, 1, TRUE);
 }
 
 _IRQL_requires_same_
@@ -335,7 +331,6 @@ retry:
 	if (!NT_SUCCESS(status)) {
 		irp->IoStatus.Status = status;
 		IoCompleteRequest(irp, IO_NETWORK_INCREMENT);
-		TunCompletePause(ctx, 1, TRUE);
 		goto retry;
 	}
 
@@ -400,7 +395,7 @@ static BOOLEAN TunNBLRefDec(_Inout_ TUN_CTX *ctx, _Inout_ NET_BUFFER_LIST *nbl, 
 		NET_BUFFER_LIST_NEXT_NBL(nbl) = NULL;
 		NdisMSendNetBufferListsComplete(ctx->MiniportAdapterHandle, nbl, SendCompleteFlags);
 		InterlockedSubtract(&ctx->PacketQueue.NumNbl, 1);
-		TunCompletePause(ctx, 1, TRUE);
+		TunCompletePause(ctx, TRUE);
 		return TRUE;
 	}
 	return FALSE;
@@ -575,7 +570,6 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 		} else {
 			irp->IoStatus.Status = STATUS_SUCCESS;
 			IoCompleteRequest(irp, IO_NETWORK_INCREMENT);
-			TunCompletePause(ctx, 1, TRUE);
 			irp = NULL;
 		}
 
@@ -588,7 +582,7 @@ static DRIVER_DISPATCH TunDispatchCreate;
 _Use_decl_annotations_
 static NTSTATUS TunDispatchCreate(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 {
-	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	NTSTATUS status = STATUS_SUCCESS;
 
 	TUN_CTX *ctx = TunGetContext(DeviceObject);
 	if (!ctx) {
@@ -596,15 +590,10 @@ static NTSTATUS TunDispatchCreate(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		goto cleanup_complete_req;
 	}
 
-	if (!NT_SUCCESS(status = TunCheckForPause(ctx, 1)))
-		goto cleanup_TunCompletePause;
-
 	ASSERT(InterlockedGet64(&ctx->Device.RefCount) < MAXLONG64);
 	InterlockedIncrement64(&ctx->Device.RefCount);
 	TunIndicateStatus(ctx);
 
-cleanup_TunCompletePause:
-	TunCompletePause(ctx, 1, TRUE);
 cleanup_complete_req:
 	TunCompleteRequest(Irp, 0, status);
 	return status;
@@ -614,7 +603,7 @@ static DRIVER_DISPATCH TunDispatchClose;
 _Use_decl_annotations_
 static NTSTATUS TunDispatchClose(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 {
-	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	NTSTATUS status = STATUS_SUCCESS;
 
 	TUN_CTX *ctx = TunGetContext(DeviceObject);
 	if (!ctx) {
@@ -622,15 +611,10 @@ static NTSTATUS TunDispatchClose(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		goto cleanup_complete_req;
 	}
 
-	if (!NT_SUCCESS(status = TunCheckForPause(ctx, 1)))
-		goto cleanup_TunCompletePause;
-
 	ASSERT(InterlockedGet64(&ctx->Device.RefCount) > 0);
 	InterlockedDecrement64(&ctx->Device.RefCount);
 	TunIndicateStatus(ctx);
 
-cleanup_TunCompletePause:
-	TunCompletePause(ctx, 1, TRUE);
 cleanup_complete_req:
 	TunCompleteRequest(Irp, 0, status);
 	return status;
@@ -640,7 +624,7 @@ static DRIVER_DISPATCH TunDispatchRead;
 _Use_decl_annotations_
 static NTSTATUS TunDispatchRead(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 {
-	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	NTSTATUS status = STATUS_SUCCESS;
 
 	TUN_CTX *ctx = TunGetContext(DeviceObject);
 	if (!ctx) {
@@ -648,24 +632,14 @@ static NTSTATUS TunDispatchRead(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		goto cleanup_complete_req;
 	}
 
-	if (!NT_SUCCESS(status = TunCheckForPause(ctx, 1)))
-		goto cleanup_TunCompletePause;
-
 	Irp->IoStatus.Information = 0;
-	InterlockedIncrement64(&ctx->ActiveTransactionCount);
 	status = IoCsqInsertIrpEx(&ctx->Device.ReadQueue.Csq, Irp, NULL, TUN_CSQ_INSERT_TAIL);
-	if (!NT_SUCCESS(status)) {
-		InterlockedDecrement64(&ctx->ActiveTransactionCount);
-		goto cleanup_TunCompletePause;
-	}
+	if (!NT_SUCCESS(status))
+		goto cleanup_complete_req;
 
 	TunQueueProcess(ctx);
-
-	TunCompletePause(ctx, 1, TRUE);
 	return STATUS_PENDING;
 
-cleanup_TunCompletePause:
-	TunCompletePause(ctx, 1, TRUE);
 cleanup_complete_req:
 	TunCompleteRequest(Irp, 0, status);
 	return status;
@@ -675,7 +649,7 @@ static DRIVER_DISPATCH TunDispatchWrite;
 _Use_decl_annotations_
 static NTSTATUS TunDispatchWrite(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 {
-	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	NTSTATUS status = STATUS_SUCCESS;
 	ULONG_PTR information = 0;
 
 	TUN_CTX *ctx = TunGetContext(DeviceObject);
@@ -684,7 +658,7 @@ static NTSTATUS TunDispatchWrite(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		goto cleanup_complete_req;
 	}
 
-	if (!NT_SUCCESS(status = TunCheckForPause(ctx, 1)))
+	if (!NT_SUCCESS(status = TunCheckForPause(ctx)))
 		goto cleanup_TunCompletePause;
 
 	UCHAR *buffer;
@@ -796,7 +770,7 @@ static NTSTATUS TunDispatchWrite(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 	information = b - buffer;
 
 cleanup_TunCompletePause:
-	TunCompletePause(ctx, 1, TRUE);
+	TunCompletePause(ctx, TRUE);
 cleanup_complete_req:
 	TunCompleteRequest(Irp, information, status);
 	return status;
@@ -806,7 +780,7 @@ static DRIVER_DISPATCH TunDispatchCleanup;
 _Use_decl_annotations_
 static NTSTATUS TunDispatchCleanup(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 {
-	NTSTATUS status = STATUS_UNSUCCESSFUL;
+	NTSTATUS status = STATUS_SUCCESS;
 
 	TUN_CTX *ctx = TunGetContext(DeviceObject);
 	if (!ctx) {
@@ -814,19 +788,11 @@ static NTSTATUS TunDispatchCleanup(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		goto cleanup_complete_req;
 	}
 
-	LONG64 count = 1;
-	if (!NT_SUCCESS(status = TunCheckForPause(ctx, count)))
-		goto cleanup_TunCompletePause;
-
 	IO_STACK_LOCATION *stack = IoGetCurrentIrpStackLocation(Irp);
 	IRP *pending_irp;
-	while ((pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, stack->FileObject)) != NULL) {
-		count++;
+	while ((pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, stack->FileObject)) != NULL)
 		TunCompleteRequest(pending_irp, 0, STATUS_CANCELLED);
-	}
 
-cleanup_TunCompletePause:
-	TunCompletePause(ctx, count, TRUE);
 cleanup_complete_req:
 	TunCompleteRequest(Irp, 0, status);
 	return status;
@@ -846,9 +812,7 @@ static NDIS_STATUS TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_P
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
-	LONG64 count = 1;
-	InterlockedAdd64(&ctx->ActiveTransactionCount, count);
-
+	InterlockedIncrement64(&ctx->ActiveTransactionCount);
 	if (InterlockedCompareExchange((LONG *)&ctx->State, TUN_STATE_PAUSING, TUN_STATE_RUNNING) != TUN_STATE_RUNNING) {
 		InterlockedDecrement64(&ctx->ActiveTransactionCount);
 		return NDIS_STATUS_FAILURE;
@@ -856,14 +820,7 @@ static NDIS_STATUS TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_P
 
 	TunQueueClear(ctx);
 
-	/* Cancel pending IRPs to unblock waiting clients. */
-	IRP *pending_irp;
-	while ((pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL)) != NULL) {
-		count++;
-		TunCompleteRequest(pending_irp, 0, STATUS_CANCELLED);
-	}
-
-	return TunCompletePause(ctx, count, FALSE);
+	return TunCompletePause(ctx, FALSE);
 }
 
 static MINIPORT_RESTART TunRestart;
@@ -873,9 +830,6 @@ static NDIS_STATUS TunRestart(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 	if (InterlockedCompareExchange((LONG *)&ctx->State, TUN_STATE_RESTARTING, TUN_STATE_PAUSED) != TUN_STATE_PAUSED)
 		return NDIS_STATUS_FAILURE;
-
-	ASSERT(!InterlockedGet64(&ctx->Device.RefCount));
-	TunIndicateStatus(ctx);
 
 	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_RUNNING);
 	return NDIS_STATUS_SUCCESS;
@@ -1197,7 +1151,11 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 		return;
 
 	ASSERT(!InterlockedGet64(&ctx->ActiveTransactionCount));
-	ASSERT(!InterlockedGet64(&ctx->Device.RefCount));
+
+	/* Cancel pending IRPs to unblock waiting clients. */
+	IRP *pending_irp;
+	while ((pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL)) != NULL)
+		TunCompleteRequest(pending_irp, 0, STATUS_CANCELLED);
 
 	/* Reset adapter context in device object, as Windows keeps calling dispatch handlers even after NdisDeregisterDeviceEx(). */
 	TUN_CTX * volatile * control_device_extension = TunGetContextPointer(ctx->Device.Object);
@@ -1404,7 +1362,7 @@ static void TunSendNetBufferLists(NDIS_HANDLE MiniportAdapterContext, NET_BUFFER
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
 	NDIS_STATUS status;
-	if (!NT_SUCCESS(status = TunCheckForPause(ctx, 1))) {
+	if (!NT_SUCCESS(status = TunCheckForPause(ctx))) {
 		TunSetNBLStatus(NetBufferLists, status);
 		NdisMSendNetBufferListsComplete(ctx->MiniportAdapterHandle, NetBufferLists, SendFlags & NDIS_SEND_FLAGS_DISPATCH_LEVEL ? NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL : 0);
 		goto cleanup_TunCompletePause;
@@ -1414,7 +1372,7 @@ static void TunSendNetBufferLists(NDIS_HANDLE MiniportAdapterContext, NET_BUFFER
 	TunQueueProcess(ctx);
 
 cleanup_TunCompletePause:
-	TunCompletePause(ctx, 1, TRUE);
+	TunCompletePause(ctx, TRUE);
 }
 
 DRIVER_INITIALIZE DriverEntry;
