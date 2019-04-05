@@ -1274,6 +1274,8 @@ static NDIS_STATUS TunOidQuery(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *O
 		return TunOidQueryWrite(OidRequest, TUN_EXCH_MAX_IP_PACKET_SIZE);
 
 	case OID_GEN_TRANSMIT_BUFFER_SPACE:
+		return TunOidQueryWrite(OidRequest, TUN_EXCH_MAX_IP_PACKET_SIZE * TUN_QUEUE_MAX_NBLS);
+
 	case OID_GEN_RECEIVE_BUFFER_SPACE:
 		return TunOidQueryWrite(OidRequest, TUN_EXCH_MAX_IP_PACKET_SIZE * TUN_EXCH_MAX_PACKETS);
 
