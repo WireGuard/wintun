@@ -1214,8 +1214,8 @@ static NDIS_STATUS TunOidSet(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *Oid
 {
 	ASSERT(OidRequest->RequestType == NdisRequestSetInformation);
 
+	OidRequest->DATA.SET_INFORMATION.BytesNeeded =
 	OidRequest->DATA.SET_INFORMATION.BytesRead   = 0;
-	OidRequest->DATA.SET_INFORMATION.BytesNeeded = 0;
 
 	switch (OidRequest->DATA.SET_INFORMATION.Oid) {
 	case OID_GEN_CURRENT_PACKET_FILTER:
@@ -1249,57 +1249,98 @@ static NDIS_STATUS TunOidSet(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *Oid
 
 _IRQL_requires_max_(APC_LEVEL)
 _Must_inspect_result_
+static NDIS_STATUS TunOidQueryWrite(_Inout_ NDIS_OID_REQUEST *OidRequest, _In_ ULONG value)
+{
+	if (OidRequest->DATA.QUERY_INFORMATION.InformationBufferLength < sizeof(ULONG)) {
+		OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  = sizeof(ULONG);
+		OidRequest->DATA.QUERY_INFORMATION.BytesWritten = 0;
+		return NDIS_STATUS_INVALID_LENGTH;
+	}
+
+	OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  =
+	OidRequest->DATA.QUERY_INFORMATION.BytesWritten = sizeof(ULONG);
+	*(ULONG *)OidRequest->DATA.QUERY_INFORMATION.InformationBuffer = value;
+	return NDIS_STATUS_SUCCESS;
+}
+
+_IRQL_requires_max_(APC_LEVEL)
+_Must_inspect_result_
+static NDIS_STATUS TunOidQueryWrite32or64(_Inout_ NDIS_OID_REQUEST *OidRequest, _In_ ULONG64 value)
+{
+	if (OidRequest->DATA.QUERY_INFORMATION.InformationBufferLength < sizeof(ULONG)) {
+		OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  = sizeof(ULONG64);
+		OidRequest->DATA.QUERY_INFORMATION.BytesWritten = 0;
+		return NDIS_STATUS_INVALID_LENGTH;
+	}
+
+	if (OidRequest->DATA.QUERY_INFORMATION.InformationBufferLength < sizeof(ULONG64)) {
+		OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  = sizeof(ULONG64);
+		OidRequest->DATA.QUERY_INFORMATION.BytesWritten = sizeof(ULONG);
+		*(ULONG *)OidRequest->DATA.QUERY_INFORMATION.InformationBuffer = (ULONG)(value & 0xffffffff);
+		return NDIS_STATUS_SUCCESS;
+	}
+
+	OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  =
+	OidRequest->DATA.QUERY_INFORMATION.BytesWritten = sizeof(ULONG64);
+	*(ULONG64 *)OidRequest->DATA.QUERY_INFORMATION.InformationBuffer = value;
+	return NDIS_STATUS_SUCCESS;
+}
+
+_IRQL_requires_max_(APC_LEVEL)
+_Must_inspect_result_
+static NDIS_STATUS TunOidQueryWriteBuf(_Inout_ NDIS_OID_REQUEST *OidRequest, _In_bytecount_(size) const void *buf, _In_ UINT size)
+{
+	if (OidRequest->DATA.QUERY_INFORMATION.InformationBufferLength < size) {
+		OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  = size;
+		OidRequest->DATA.QUERY_INFORMATION.BytesWritten = 0;
+		return NDIS_STATUS_INVALID_LENGTH;
+	}
+
+	OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  =
+	OidRequest->DATA.QUERY_INFORMATION.BytesWritten = size;
+	NdisMoveMemory(OidRequest->DATA.QUERY_INFORMATION.InformationBuffer, buf, size);
+	return NDIS_STATUS_SUCCESS;
+}
+
+_IRQL_requires_max_(APC_LEVEL)
+_Must_inspect_result_
 static NDIS_STATUS TunOidQuery(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *OidRequest)
 {
 	ASSERT(OidRequest->RequestType == NdisRequestQueryInformation || OidRequest->RequestType == NdisRequestQueryStatistics);
-
-	UINT value32;
-	UINT size = sizeof(value32);
-	const void *buf = &value32;
 
 	switch (OidRequest->DATA.QUERY_INFORMATION.Oid) {
 	case OID_GEN_MAXIMUM_TOTAL_SIZE:
 	case OID_GEN_TRANSMIT_BLOCK_SIZE:
 	case OID_GEN_RECEIVE_BLOCK_SIZE:
-		value32 = TUN_EXCH_MAX_IP_PACKET_SIZE;
-		break;
+		return TunOidQueryWrite(OidRequest, TUN_EXCH_MAX_IP_PACKET_SIZE);
 
 	case OID_GEN_TRANSMIT_BUFFER_SPACE:
 	case OID_GEN_RECEIVE_BUFFER_SPACE:
-		value32 = TUN_EXCH_MAX_IP_PACKET_SIZE * TUN_EXCH_MAX_PACKETS;
-		break;
+		return TunOidQueryWrite(OidRequest, TUN_EXCH_MAX_IP_PACKET_SIZE * TUN_EXCH_MAX_PACKETS);
 
 	case OID_GEN_VENDOR_ID:
-		value32 = TunHtonl(TUN_VENDOR_ID);
-		break;
+		return TunOidQueryWrite(OidRequest, TunHtonl(TUN_VENDOR_ID));
 
 	case OID_GEN_VENDOR_DESCRIPTION:
-		size = (UINT)sizeof(TUN_VENDOR_NAME);
-		buf = TUN_VENDOR_NAME;
-		break;
+		return TunOidQueryWriteBuf(OidRequest, TUN_VENDOR_NAME, (UINT)sizeof(TUN_VENDOR_NAME));
 
 	case OID_GEN_VENDOR_DRIVER_VERSION:
-		value32 = (WINTUN_VERSION_MAJ << 16) | WINTUN_VERSION_MIN;
-		break;
+		return TunOidQueryWrite(OidRequest, (WINTUN_VERSION_MAJ << 16) | WINTUN_VERSION_MIN);
 
 	case OID_GEN_XMIT_OK:
-		value32 = (UINT)(
+		return TunOidQueryWrite32or64(OidRequest,
 			InterlockedGet64((LONG64 *)&ctx->Statistics.ifHCOutUcastPkts    ) +
 			InterlockedGet64((LONG64 *)&ctx->Statistics.ifHCOutMulticastPkts) +
 			InterlockedGet64((LONG64 *)&ctx->Statistics.ifHCOutBroadcastPkts));
-		break;
 
 	case OID_GEN_RCV_OK:
-		value32 = (UINT)(
+		return TunOidQueryWrite32or64(OidRequest,
 			InterlockedGet64((LONG64 *)&ctx->Statistics.ifHCInUcastPkts    ) +
 			InterlockedGet64((LONG64 *)&ctx->Statistics.ifHCInMulticastPkts) +
 			InterlockedGet64((LONG64 *)&ctx->Statistics.ifHCInBroadcastPkts));
-		break;
 
 	case OID_GEN_STATISTICS:
-		size = (UINT)sizeof(ctx->Statistics);
-		buf = &ctx->Statistics;
-		break;
+		return TunOidQueryWriteBuf(OidRequest, &ctx->Statistics, (UINT)sizeof(ctx->Statistics));
 
 	case OID_GEN_INTERRUPT_MODERATION: {
 		static const NDIS_INTERRUPT_MODERATION_PARAMETERS intp = {
@@ -1310,30 +1351,17 @@ static NDIS_STATUS TunOidQuery(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *O
 			},
 			.InterruptModeration = NdisInterruptModerationNotSupported
 		};
-		size = (UINT)sizeof(intp);
-		buf = &intp;
-		break;
+		return TunOidQueryWriteBuf(OidRequest, &intp, (UINT)sizeof(intp));
 	}
 
 	case OID_PNP_QUERY_POWER:
-		size = 0;
-		break;
-
-	default:
+		OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  =
 		OidRequest->DATA.QUERY_INFORMATION.BytesWritten = 0;
-		return NDIS_STATUS_INVALID_OID;
+		return NDIS_STATUS_SUCCESS;
 	}
 
-	if (size > OidRequest->DATA.QUERY_INFORMATION.InformationBufferLength) {
-		OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  = size;
-		OidRequest->DATA.QUERY_INFORMATION.BytesWritten = 0;
-		return NDIS_STATUS_INVALID_LENGTH;
-	}
-
-	NdisMoveMemory(OidRequest->DATA.QUERY_INFORMATION.InformationBuffer, buf, size);
-	OidRequest->DATA.QUERY_INFORMATION.BytesNeeded = OidRequest->DATA.QUERY_INFORMATION.BytesWritten = size;
-
-	return NDIS_STATUS_SUCCESS;
+	OidRequest->DATA.QUERY_INFORMATION.BytesWritten = 0;
+	return NDIS_STATUS_INVALID_OID;
 }
 
 static MINIPORT_OID_REQUEST TunOidRequest;
