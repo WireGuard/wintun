@@ -1135,9 +1135,9 @@ cleanup_ctx:
 	return status;
 }
 
-static MINIPORT_UNLOAD TunDriverUnload;
+static MINIPORT_UNLOAD TunUnload;
 _Use_decl_annotations_
-static VOID TunDriverUnload(PDRIVER_OBJECT DriverObject)
+static VOID TunUnload(PDRIVER_OBJECT DriverObject)
 {
 	NdisMDeregisterMiniportDriver(NdisMiniportDriverHandle);
 }
@@ -1403,7 +1403,7 @@ NTSTATUS DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
 		.SetOptionsHandler             = TunSetOptions,
 		.InitializeHandlerEx           = TunInitializeEx,
 		.HaltHandlerEx                 = TunHaltEx,
-		.UnloadHandler                 = TunDriverUnload,
+		.UnloadHandler                 = TunUnload,
 		.PauseHandler                  = TunPause,
 		.RestartHandler                = TunRestart,
 		.OidRequestHandler             = TunOidRequest,
