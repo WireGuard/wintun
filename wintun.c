@@ -768,10 +768,7 @@ static NDIS_STATUS TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_P
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
 	InterlockedIncrement64(&ctx->ActiveTransactionCount);
-	if (InterlockedCompareExchange((LONG *)&ctx->State, TUN_STATE_PAUSING, TUN_STATE_RUNNING) != TUN_STATE_RUNNING) {
-		InterlockedDecrement64(&ctx->ActiveTransactionCount);
-		return NDIS_STATUS_FAILURE;
-	}
+	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_PAUSING);
 
 	TunQueueClear(ctx);
 
@@ -783,9 +780,8 @@ _Use_decl_annotations_
 static NDIS_STATUS TunRestart(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_RESTART_PARAMETERS MiniportRestartParameters)
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
-	if (InterlockedCompareExchange((LONG *)&ctx->State, TUN_STATE_RESTARTING, TUN_STATE_PAUSED) != TUN_STATE_PAUSED)
-		return NDIS_STATUS_FAILURE;
 
+	//InterlockedExchange((LONG *)&ctx->State, TUN_STATE_RESTARTING);
 	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_RUNNING);
 	return NDIS_STATUS_SUCCESS;
 }
@@ -1098,10 +1094,8 @@ _Use_decl_annotations_
 static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltAction)
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
-	if (InterlockedCompareExchange((LONG *)&ctx->State, TUN_STATE_HALTING, TUN_STATE_PAUSED) != TUN_STATE_PAUSED)
-		return;
 
-	ASSERT(!InterlockedGet64(&ctx->ActiveTransactionCount));
+	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_HALTING);
 
 	/* Cancel pending IRPs to unblock waiting clients. */
 	for (IRP *pending_irp; (pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL)) != NULL;)
