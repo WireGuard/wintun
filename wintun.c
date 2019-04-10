@@ -695,7 +695,7 @@ static DRIVER_DISPATCH TunDispatch;
 _Use_decl_annotations_
 static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 {
-	NTSTATUS status = STATUS_SUCCESS;
+	NTSTATUS status;
 
 	Irp->IoStatus.Information = 0;
 
@@ -709,6 +709,11 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 	IO_STACK_LOCATION *stack = IoGetCurrentIrpStackLocation(Irp);
 	switch (stack->MajorFunction) {
 	case IRP_MJ_READ:
+		if (!ctx) {
+			status = STATUS_INVALID_HANDLE;
+			break;
+		}
+
 		status = IoCsqInsertIrpEx(&devext->ReadQueue.Csq, Irp, NULL, TUN_CSQ_INSERT_TAIL);
 		if (!NT_SUCCESS(status))
 			break;
@@ -717,24 +722,40 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		return STATUS_PENDING;
 
 	case IRP_MJ_WRITE:
-		status = ctx ? TunWriteFromIrp(ctx, Irp) : NDIS_STATUS_ADAPTER_REMOVED;
+		if (!ctx) {
+			status = STATUS_INVALID_HANDLE;
+			break;
+		}
+
+		status = TunWriteFromIrp(ctx, Irp);
 		break;
 
 	case IRP_MJ_CREATE:
+		if (!ctx) {
+			status = STATUS_INVALID_HANDLE;
+			break;
+		}
+
 		ASSERT(InterlockedGet64(&devext->RefCount) < MAXLONG64);
-		if (InterlockedIncrement64(&devext->RefCount) > 0 && ctx)
+		if (InterlockedIncrement64(&devext->RefCount) > 0)
 			TunIndicateStatus(ctx->MiniportAdapterHandle, MediaConnectStateConnected);
+
+		status = STATUS_SUCCESS;
 		break;
 
 	case IRP_MJ_CLOSE:
 		ASSERT(InterlockedGet64(&devext->RefCount) > 0);
 		if (InterlockedDecrement64(&devext->RefCount) <= 0 && ctx)
 			TunIndicateStatus(ctx->MiniportAdapterHandle, MediaConnectStateDisconnected);
+
+		status = STATUS_SUCCESS;
 		break;
 
 	case IRP_MJ_CLEANUP:
 		for (IRP *pending_irp; (pending_irp = IoCsqRemoveNextIrp(&devext->ReadQueue.Csq, stack->FileObject)) != NULL; )
 			TunCompleteRequest(pending_irp, 0, STATUS_CANCELLED);
+
+		status = STATUS_SUCCESS;
 		break;
 
 	default:
@@ -1113,6 +1134,10 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 	if (devext) {
 		/* Reset adapter context in device object, as Windows keeps calling dispatch handlers even after NdisDeregisterDeviceEx(). */
 		InterlockedExchangePointer(&devext->MiniportAdapterContext, NULL);
+
+		/* Cancel pending IRPs to unblock waiting clients. */
+		for (IRP *pending_irp; (pending_irp = IoCsqRemoveNextIrp(&devext->ReadQueue.Csq, NULL)) != NULL;)
+			TunCompleteRequest(pending_irp, 0, STATUS_CANCELLED);
 	}
 
 	/* Release resources. */
