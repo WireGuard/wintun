@@ -633,34 +633,34 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 	}
 
 	/* Commentary from Jason:
-	*
-	* Problem statement:
-	*     We call IoCompleteRequest(Irp) immediately after NdisMIndicateReceiveNetBufferLists, which frees Irp->MdlAddress.
-	*     Since we've just given the same memory to NdisMIndicateReceiveNetBufferLists (in a different MDL), we wind up
-	*     freeing the memory before NDIS finishes processing them.
-	*
-	* Fix possibility 1:
-	*     Move IoCompleteRequest(Irp) to TunReturnNetBufferLists. This reqiures reference counting how many NBLs are currently
-	*     in flight that are using an IRP. When that drops to zero, we can call IoCompleteRequest(Irp).
-	* Problem:
-	*     This means we have to block future wireguard-go Writes until *all* NBLs have completed processing in the networking
-	*     stack. Is that safe to do? Will that introduce latency? Can userspace processes sabotage it by refusing to read from
-	*     a TCP socket buffer? We don't know enough about how NdisMIndicateReceiveNetBufferLists works to assess its
-	*     characteristics here.
-	*
-	* Fix possibility 2:
-	*     Use NDIS_RECEIVE_FLAGS_RESOURCES, so that NdisMIndicateReceiveNetBufferLists makes a copy, and then we'll simply
-	*     free everything immediately after. This is slow, and it could potentially lead to wireguard-go making the kernel
-	*     allocate lots of memory in the case that NdisAllocateNetBufferAndNetBufferList doesn't ratelimit its creation in the
-	*     same way Linux's skb_alloc does. However, it does make the lifetime of Irps shorter, which is easier to analyze, and
-	*     it might lead to better latency, since we don't need to wait until userspace sends its next packets, so long as
-	*     Ndis' ingestion queue doesn't become too large.
-	*
-	* Choice:
-	*     Both (1) and (2) have pros and cons. Making (1) work is clearly the better long term goal. But we lack the knowledge
-	*     to make it work correctly. (2) seems like an acceptable stopgap solution until we're smart enough to reason about
-	*     (1). So, let's implement (2) now, and we'll let more knowledgeable people advise us on (1) later.
-	*/
+	 *
+	 * Problem statement:
+	 *     We call IoCompleteRequest(Irp) immediately after NdisMIndicateReceiveNetBufferLists, which frees Irp->MdlAddress.
+	 *     Since we've just given the same memory to NdisMIndicateReceiveNetBufferLists (in a different MDL), we wind up
+	 *     freeing the memory before NDIS finishes processing them.
+	 *
+	 * Fix possibility 1:
+	 *     Move IoCompleteRequest(Irp) to TunReturnNetBufferLists. This reqiures reference counting how many NBLs are currently
+	 *     in flight that are using an IRP. When that drops to zero, we can call IoCompleteRequest(Irp).
+	 * Problem:
+	 *     This means we have to block future wireguard-go Writes until *all* NBLs have completed processing in the networking
+	 *     stack. Is that safe to do? Will that introduce latency? Can userspace processes sabotage it by refusing to read from
+	 *     a TCP socket buffer? We don't know enough about how NdisMIndicateReceiveNetBufferLists works to assess its
+	 *     characteristics here.
+	 *
+	 * Fix possibility 2:
+	 *     Use NDIS_RECEIVE_FLAGS_RESOURCES, so that NdisMIndicateReceiveNetBufferLists makes a copy, and then we'll simply
+	 *     free everything immediately after. This is slow, and it could potentially lead to wireguard-go making the kernel
+	 *     allocate lots of memory in the case that NdisAllocateNetBufferAndNetBufferList doesn't ratelimit its creation in the
+	 *     same way Linux's skb_alloc does. However, it does make the lifetime of Irps shorter, which is easier to analyze, and
+	 *     it might lead to better latency, since we don't need to wait until userspace sends its next packets, so long as
+	 *     Ndis' ingestion queue doesn't become too large.
+	 *
+	 * Choice:
+	 *     Both (1) and (2) have pros and cons. Making (1) work is clearly the better long term goal. But we lack the knowledge
+	 *     to make it work correctly. (2) seems like an acceptable stopgap solution until we're smart enough to reason about
+	 *     (1). So, let's implement (2) now, and we'll let more knowledgeable people advise us on (1) later.
+	 */
 	if (nbl_head)
 		NdisMIndicateReceiveNetBufferLists(ctx->MiniportAdapterHandle, nbl_head, NDIS_DEFAULT_PORT_NUMBER, nbl_count, NDIS_RECEIVE_FLAGS_RESOURCES);
 
