@@ -761,14 +761,6 @@ cleanup_complete_req:
 	return status;
 }
 
-static MINIPORT_SET_OPTIONS TunSetOptions;
-_Use_decl_annotations_
-static NDIS_STATUS TunSetOptions(NDIS_HANDLE NdisDriverHandle, NDIS_HANDLE DriverContext)
-{
-	/* TODO: This handler is optional. See if it can be removed. */
-	return NDIS_STATUS_SUCCESS;
-}
-
 static MINIPORT_PAUSE TunPause;
 _Use_decl_annotations_
 static NDIS_STATUS TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_PAUSE_PARAMETERS MiniportPauseParameters)
@@ -1357,7 +1349,6 @@ NTSTATUS DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
 		.MajorDriverVersion            = WINTUN_VERSION_MAJ,
 		.MinorDriverVersion            = WINTUN_VERSION_MIN,
 
-		.SetOptionsHandler             = TunSetOptions,
 		.InitializeHandlerEx           = TunInitializeEx,
 		.HaltHandlerEx                 = TunHaltEx,
 		.UnloadHandler                 = TunUnload,
