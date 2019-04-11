@@ -359,7 +359,7 @@ static NTSTATUS TunWriteIntoIrp(_Inout_ IRP *Irp, _Inout_ UCHAR *buffer, _In_ NE
 _IRQL_requires_same_
 static void TunNBLRefInit(_Inout_ TUN_CTX *ctx, _Inout_ NET_BUFFER_LIST *nbl)
 {
-	InterlockedAdd64(&ctx->ActiveTransactionCount, 1);
+	InterlockedIncrement64(&ctx->ActiveTransactionCount);
 	InterlockedAdd(&ctx->PacketQueue.NumNbl, 1);
 	InterlockedExchange64(NET_BUFFER_LIST_MINIPORT_RESERVED_REFCOUNT(nbl), 1);
 }
@@ -767,7 +767,6 @@ static NDIS_STATUS TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_P
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
-	InterlockedIncrement64(&ctx->ActiveTransactionCount);
 	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_PAUSING);
 
 	TunQueueClear(ctx);
@@ -781,7 +780,10 @@ static NDIS_STATUS TunRestart(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
-	//InterlockedExchange((LONG *)&ctx->State, TUN_STATE_RESTARTING);
+	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_RESTARTING);
+
+	InterlockedExchange64(&ctx->ActiveTransactionCount, 1);
+
 	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_RUNNING);
 	return NDIS_STATUS_SUCCESS;
 }
