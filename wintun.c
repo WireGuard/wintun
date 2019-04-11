@@ -703,7 +703,7 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 	switch (stack->MajorFunction) {
 	case IRP_MJ_READ:
 		if (InterlockedGet((LONG *)&ctx->State) < TUN_STATE_PAUSED) {
-			status = STATUS_INVALID_HANDLE;
+			status = STATUS_FILE_FORCED_CLOSED;
 			break;
 		}
 
@@ -716,7 +716,7 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 
 	case IRP_MJ_WRITE:
 		if (InterlockedGet((LONG *)&ctx->State) < TUN_STATE_PAUSED) {
-			status = STATUS_INVALID_HANDLE;
+			status = STATUS_FILE_FORCED_CLOSED;
 			break;
 		}
 
@@ -725,7 +725,7 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 
 	case IRP_MJ_CREATE:
 		if (InterlockedGet((LONG *)&ctx->State) < TUN_STATE_PAUSED) {
-			status = STATUS_INVALID_HANDLE;
+			status = STATUS_DELETE_PENDING;
 			break;
 		}
 
@@ -1099,9 +1099,9 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 
 	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_HALTING);
 
-	/* Cancel pending IRPs to unblock waiting clients. */
+	/* Complete pending IRPs to unblock waiting clients. */
 	for (IRP *pending_irp; (pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL)) != NULL;)
-		TunCompleteRequest(pending_irp, 0, STATUS_CANCELLED);
+		TunCompleteRequest(pending_irp, 0, STATUS_FILE_FORCED_CLOSED);
 
 	NdisFreeNetBufferListPool(ctx->NBLPool);
 	ctx->NBLPool = NULL;
