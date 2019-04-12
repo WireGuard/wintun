@@ -322,7 +322,7 @@ retry:
 }
 
 _IRQL_requires_same_
-static BOOLEAN TunCanFitIntoIrp(_In_ IRP *Irp, _In_ ULONG size, _In_ NET_BUFFER *nb)
+static BOOLEAN TunWontFitIntoIrp(_In_ IRP *Irp, _In_ ULONG size, _In_ NET_BUFFER *nb)
 {
 	return (ULONG_PTR)size < Irp->IoStatus.Information + TunPacketAlign(sizeof(TUN_PACKET) + NET_BUFFER_DATA_LENGTH(nb));
 }
@@ -531,7 +531,7 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 			nb = TunQueueRemove(ctx, &nbl);
 
 		/* If the NB won't fit in the IRP, return it. */
-		if (nb && TunCanFitIntoIrp(irp, size, nb)) {
+		if (nb && TunWontFitIntoIrp(irp, size, nb)) {
 			TunQueuePrepend(ctx, nb, nbl);
 			if (nbl)
 				TunNBLRefDec(ctx, nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
