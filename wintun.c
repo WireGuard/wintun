@@ -1162,7 +1162,7 @@ static NDIS_STATUS TunOidSet(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *Oid
 		return NDIS_STATUS_SUCCESS;
 	}
 
-	return NDIS_STATUS_INVALID_OID;
+	return NDIS_STATUS_NOT_SUPPORTED;
 }
 
 _IRQL_requires_max_(APC_LEVEL)
@@ -1172,7 +1172,7 @@ static NDIS_STATUS TunOidQueryWrite(_Inout_ NDIS_OID_REQUEST *OidRequest, _In_ U
 	if (OidRequest->DATA.QUERY_INFORMATION.InformationBufferLength < sizeof(ULONG)) {
 		OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  = sizeof(ULONG);
 		OidRequest->DATA.QUERY_INFORMATION.BytesWritten = 0;
-		return NDIS_STATUS_INVALID_LENGTH;
+		return NDIS_STATUS_BUFFER_TOO_SHORT;
 	}
 
 	OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  =
@@ -1188,7 +1188,7 @@ static NDIS_STATUS TunOidQueryWrite32or64(_Inout_ NDIS_OID_REQUEST *OidRequest, 
 	if (OidRequest->DATA.QUERY_INFORMATION.InformationBufferLength < sizeof(ULONG)) {
 		OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  = sizeof(ULONG64);
 		OidRequest->DATA.QUERY_INFORMATION.BytesWritten = 0;
-		return NDIS_STATUS_INVALID_LENGTH;
+		return NDIS_STATUS_BUFFER_TOO_SHORT;
 	}
 
 	if (OidRequest->DATA.QUERY_INFORMATION.InformationBufferLength < sizeof(ULONG64)) {
@@ -1211,7 +1211,7 @@ static NDIS_STATUS TunOidQueryWriteBuf(_Inout_ NDIS_OID_REQUEST *OidRequest, _In
 	if (OidRequest->DATA.QUERY_INFORMATION.InformationBufferLength < size) {
 		OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  = size;
 		OidRequest->DATA.QUERY_INFORMATION.BytesWritten = 0;
-		return NDIS_STATUS_INVALID_LENGTH;
+		return NDIS_STATUS_BUFFER_TOO_SHORT;
 	}
 
 	OidRequest->DATA.QUERY_INFORMATION.BytesNeeded  =
@@ -1281,7 +1281,7 @@ static NDIS_STATUS TunOidQuery(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *O
 	}
 
 	OidRequest->DATA.QUERY_INFORMATION.BytesWritten = 0;
-	return NDIS_STATUS_INVALID_OID;
+	return NDIS_STATUS_NOT_SUPPORTED;
 }
 
 static MINIPORT_OID_REQUEST TunOidRequest;
@@ -1297,7 +1297,7 @@ static NDIS_STATUS TunOidRequest(NDIS_HANDLE MiniportAdapterContext, PNDIS_OID_R
 		return TunOidSet(MiniportAdapterContext, OidRequest);
 
 	default:
-		return NDIS_STATUS_NOT_SUPPORTED;
+		return NDIS_STATUS_INVALID_OID;
 	}
 }
 
@@ -1309,10 +1309,10 @@ static NDIS_STATUS TunDirectOidRequest(NDIS_HANDLE MiniportAdapterContext, PNDIS
 	case NdisRequestQueryInformation:
 	case NdisRequestQueryStatistics:
 	case NdisRequestSetInformation:
-		return NDIS_STATUS_INVALID_OID;
+		return NDIS_STATUS_NOT_SUPPORTED;
 
 	default:
-		return NDIS_STATUS_NOT_SUPPORTED;
+		return NDIS_STATUS_INVALID_OID;
 	}
 }
 
