@@ -3,10 +3,6 @@
  * Copyright (C) 2018-2019 WireGuard LLC. All Rights Reserved.
  */
 
-#define NDIS_MINIPORT_DRIVER    1
-#define NDIS630_MINIPORT        1
-#define NDIS_WDM                1
-
 #include <stdio.h>
 #include <string.h>
 #include <wdm.h>
