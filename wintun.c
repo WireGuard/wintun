@@ -106,8 +106,6 @@ static NDIS_HANDLE NdisMiniportDriverHandle = NULL;
 #define InterlockedGet(val)             (InterlockedAdd((val), 0))
 #define InterlockedGet64(val)           (InterlockedAdd64((val), 0))
 #define InterlockedGetPointer(val)      (InterlockedCompareExchangePointer((val), NULL, NULL))
-#define InterlockedSubtract(val, n)     (InterlockedAdd((val), -(LONG)(n)))
-#define InterlockedSubtract64(val, n)   (InterlockedAdd64((val), -(LONG64)(n)))
 #define TunPacketAlign(size)            (((UINT)(size) + (UINT)(TUN_EXCH_ALIGNMENT - 1)) & ~(UINT)(TUN_EXCH_ALIGNMENT - 1))
 #define TunInitUnicodeString(str, buf)  { (str)->Length = 0; (str)->MaximumLength = sizeof(buf); (str)->Buffer = buf; }
 
@@ -364,7 +362,7 @@ _IRQL_requires_same_
 static void TunNBLRefInit(_Inout_ TUN_CTX *ctx, _Inout_ NET_BUFFER_LIST *nbl)
 {
 	InterlockedIncrement64(&ctx->ActiveTransactionCount);
-	InterlockedAdd(&ctx->PacketQueue.NumNbl, 1);
+	InterlockedIncrement(&ctx->PacketQueue.NumNbl);
 	InterlockedExchange64(NET_BUFFER_LIST_MINIPORT_RESERVED_REFCOUNT(nbl), 1);
 }
 
@@ -372,7 +370,7 @@ _IRQL_requires_same_
 static void TunNBLRefInc(_Inout_ NET_BUFFER_LIST *nbl)
 {
 	ASSERT(InterlockedGet64(NET_BUFFER_LIST_MINIPORT_RESERVED_REFCOUNT(nbl)));
-	InterlockedAdd64(NET_BUFFER_LIST_MINIPORT_RESERVED_REFCOUNT(nbl), 1);
+	InterlockedIncrement64(NET_BUFFER_LIST_MINIPORT_RESERVED_REFCOUNT(nbl));
 }
 
 _When_( (SendCompleteFlags & NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL), _IRQL_requires_    (DISPATCH_LEVEL))
@@ -380,10 +378,10 @@ _When_(!(SendCompleteFlags & NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL), _IRQL_req
 static BOOLEAN TunNBLRefDec(_Inout_ TUN_CTX *ctx, _Inout_ NET_BUFFER_LIST *nbl, _In_ ULONG SendCompleteFlags)
 {
 	ASSERT(InterlockedGet64(NET_BUFFER_LIST_MINIPORT_RESERVED_REFCOUNT(nbl)));
-	if (!InterlockedSubtract64(NET_BUFFER_LIST_MINIPORT_RESERVED_REFCOUNT(nbl), 1)) {
+	if (!InterlockedDecrement64(NET_BUFFER_LIST_MINIPORT_RESERVED_REFCOUNT(nbl))) {
 		NET_BUFFER_LIST_NEXT_NBL(nbl) = NULL;
 		NdisMSendNetBufferListsComplete(ctx->MiniportAdapterHandle, nbl, SendCompleteFlags);
-		InterlockedSubtract(&ctx->PacketQueue.NumNbl, 1);
+		InterlockedDecrement(&ctx->PacketQueue.NumNbl);
 		TunCompletePause(ctx, TRUE);
 		return TRUE;
 	}
