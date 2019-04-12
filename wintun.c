@@ -527,6 +527,9 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 					TunNBLRefDec(ctx, nbl, 0);
 				return;
 			}
+
+			_Analysis_assume_(buffer);
+			_Analysis_assume_(irp->IoStatus.Information <= size);
 		} else
 			nb = TunQueueRemove(ctx, &nbl);
 
