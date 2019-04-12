@@ -903,10 +903,10 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 	};
 	NDIS_DEVICE_OBJECT_ATTRIBUTES t = {
 		.Header = {
-		.Type      = NDIS_OBJECT_TYPE_DEVICE_OBJECT_ATTRIBUTES,
-		.Revision  = NDIS_DEVICE_OBJECT_ATTRIBUTES_REVISION_1,
-		.Size      = NDIS_SIZEOF_DEVICE_OBJECT_ATTRIBUTES_REVISION_1
-	},
+			.Type      = NDIS_OBJECT_TYPE_DEVICE_OBJECT_ATTRIBUTES,
+			.Revision  = NDIS_DEVICE_OBJECT_ATTRIBUTES_REVISION_1,
+			.Size      = NDIS_SIZEOF_DEVICE_OBJECT_ATTRIBUTES_REVISION_1
+		},
 		.DeviceName        = &unicode_device_name,
 		.SymbolicName      = &unicode_symbolic_name,
 		.MajorFunctions    = dispatch_table,
@@ -970,7 +970,7 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 	KeInitializeSpinLock(&ctx->PacketQueue.Lock);
 
 	NET_BUFFER_LIST_POOL_PARAMETERS nbl_pool_param = {
-			.Header = {
+		.Header = {
 			.Type       = NDIS_OBJECT_TYPE_DEFAULT,
 			.Revision   = NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1,
 			.Size       = NDIS_SIZEOF_NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1
