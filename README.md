@@ -30,6 +30,45 @@ Modify the `<CrossCertificateFile>` to contain the full path to the cross-signin
 
 If you already have `wintun.vcxproj.user` file, just add the `<PropertyGroup>` section.
 
+
+## Building from Command Line
+
+Open _Developer Command Prompt for VS 2017_ and use `nmake` command:
+
+```
+nmake [<target>] [CFG=<configuration>] [PLAT=<platform>]
+```
+
+### Targets
+
+`build`
+  Builds the driver. This is the default target.
+
+`clean`
+  Deletes all intermediate and output files.
+
+`dvl`
+  Runs Static Driver Verifier, which includes a clean driver build, and creates a Driver Verification Log in `wintun.DVL.XML` file. Release configurations only. When you are ready to test your driver using the Windows Hardware Certification Kit (HCK), you need to copy the `wintun.DVL.XML` file to the `%SystemDrive%\DVL` directory on the test computer.
+
+The driver output folder is:
+| Platform and Configuration | Folder               |
+| -------------------------- | -------------------- |
+| x86 Debug                  | `Debug\wintun`       |
+| x86 Release                | `Release\wintun`     |
+| AMD64 Debug                | `x64\Debug\wintun`   |
+| AMD64 Release              | `x64\Release\wintun` |
+
+### Properties
+
+Properties may be defined as environment variables, or specified on the `nmake` command line.
+
+`CFG`
+  Specifies configuration to build or clean. May be `Debug` or `Release` (default).
+
+`PLAT`
+  Specifies driver platform to build. May be `Win32` or `x64` (default).
+
+
 ## Usage
 
 After loading the driver and creating a network interface the typical way using [SetupAPI](https://docs.microsoft.com/en-us/windows-hardware/drivers/install/setupapi), open `\\.\Device\WINTUN%d` as Local System, where `%d` is the [LUID](https://docs.microsoft.com/en-us/windows/desktop/api/ifdef/ns-ifdef-_net_luid_lh) index (`NetLuidIndex` member) of the network device. You may then [`ReadFile`](https://docs.microsoft.com/en-us/windows/desktop/api/fileapi/nf-fileapi-readfile) and [`WriteFile`](https://docs.microsoft.com/en-us/windows/desktop/api/fileapi/nf-fileapi-writefile) bundles of packets of the following format:

@@ -9,10 +9,9 @@
 /x64/Debug
 
 # Static Driver Verifier Output
-/runsdvui.cmd
 /sdv
-/SDV-default.xml
-/sdv-user.sdv
 /smvbuild.log
-/smvexecute-*.log
 /smvstats.txt
+
+# Driver Verification Log
+/wintun.DVL.XML
