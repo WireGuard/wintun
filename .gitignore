@@ -7,6 +7,8 @@
 /x86/Debug
 /amd64/Release
 /amd64/Debug
+/arm64/Release
+/arm64/Debug
 
 # Static Driver Verifier Output
 /sdv

@@ -16,8 +16,11 @@ PLAT_MSBUILD=Win32
 !ELSEIF "$(PLAT)" == "amd64" || "$(PLAT)" == "AMD64"
 PLAT=amd64
 PLAT_MSBUILD=x64
+!ELSEIF "$(PLAT)" == "arm64" || "$(PLAT)" == "ARM64"
+PLAT=arm64
+PLAT_MSBUILD=ARM64
 !ELSE
-!ERROR Invalid platform "$(PLAT)". PLAT must be "x86" or "amd64".
+!ERROR Invalid platform "$(PLAT)". PLAT must be "x86", "amd64", or "arm64".
 !ENDIF
 OUTPUT_DIR=$(PLAT)\$(CFG)
 MSBUILD_FLAGS=/p:Configuration="$(CFG)" /p:Platform="$(PLAT_MSBUILD)" /m /v:minimal /nologo
@@ -28,7 +31,7 @@ build ::
 clean ::
 	msbuild.exe "wintun.vcxproj" /t:Clean $(MSBUILD_FLAGS)
 
-!IF "$(CFG)" == "Release"
+!IF "$(CFG)" == "Release" && "$(PLAT)" != "arm64"
 
 dvl :: "wintun.DVL.XML"
 

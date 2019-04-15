@@ -55,6 +55,8 @@ x86 Debug                  | `x86\Debug\wintun`
 x86 Release                | `x86\Release\wintun`
 AMD64 Debug                | `amd64\Debug\wintun`
 AMD64 Release              | `amd64\Release\wintun`
+ARM64 Debug                | `arm64\Debug\wintun`
+ARM64 Release              | `arm64\Release\wintun`
 
 ### Properties
 
@@ -62,7 +64,7 @@ Properties may be defined as environment variables, or specified on the `nmake` 
 
   - `CFG`: Specifies configuration to build or clean. May be `Debug` or `Release` (default).
 
-  - `PLAT`: Specifies driver platform to build. May be `x86` or `amd64` (default).
+  - `PLAT`: Specifies driver platform to build. May be `x86` or `amd64` (default), or `arm64`.
 
 
 ## Usage
