@@ -85,26 +85,26 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <RunCodeAnalysis>true</RunCodeAnalysis>
     <CodeAnalysisRuleSet>$(WDKContentRoot)CodeAnalysis\DriverMustFixRules.ruleset</CodeAnalysisRuleSet>
-    <IntDir>$(ConfigurationName)\</IntDir>
-    <OutDir>$(ConfigurationName)\</OutDir>
+    <IntDir>x86\$(ConfigurationName)\</IntDir>
+    <OutDir>x86\$(ConfigurationName)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <RunCodeAnalysis>true</RunCodeAnalysis>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
-    <IntDir>$(ConfigurationName)\</IntDir>
-    <OutDir>$(ConfigurationName)\</OutDir>
+    <IntDir>x86\$(ConfigurationName)\</IntDir>
+    <OutDir>x86\$(ConfigurationName)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <RunCodeAnalysis>true</RunCodeAnalysis>
     <CodeAnalysisRuleSet>$(WDKContentRoot)CodeAnalysis\DriverMustFixRules.ruleset</CodeAnalysisRuleSet>
-    <IntDir>$(Platform)\$(ConfigurationName)\</IntDir>
-    <OutDir>$(Platform)\$(ConfigurationName)\</OutDir>
+    <IntDir>amd64\$(ConfigurationName)\</IntDir>
+    <OutDir>amd64\$(ConfigurationName)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <RunCodeAnalysis>true</RunCodeAnalysis>
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
-    <IntDir>$(Platform)\$(ConfigurationName)\</IntDir>
-    <OutDir>$(Platform)\$(ConfigurationName)\</OutDir>
+    <IntDir>amd64\$(ConfigurationName)\</IntDir>
+    <OutDir>amd64\$(ConfigurationName)\</OutDir>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>

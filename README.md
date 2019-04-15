@@ -51,10 +51,10 @@ The driver output folder is:
 
 Platform and Configuration | Folder
 -------------------------- | --------------------
-x86 Debug                  | `Debug\wintun`
-x86 Release                | `Release\wintun`
-AMD64 Debug                | `x64\Debug\wintun`
-AMD64 Release              | `x64\Release\wintun`
+x86 Debug                  | `x86\Debug\wintun`
+x86 Release                | `x86\Release\wintun`
+AMD64 Debug                | `amd64\Debug\wintun`
+AMD64 Release              | `amd64\Release\wintun`
 
 ### Properties
 
@@ -62,7 +62,7 @@ Properties may be defined as environment variables, or specified on the `nmake` 
 
   - `CFG`: Specifies configuration to build or clean. May be `Debug` or `Release` (default).
 
-  - `PLAT`: Specifies driver platform to build. May be `Win32` or `x64` (default).
+  - `PLAT`: Specifies driver platform to build. May be `x86` or `amd64` (default).
 
 
 ## Usage

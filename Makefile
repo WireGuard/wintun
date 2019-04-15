@@ -8,14 +8,19 @@
 CFG=Release
 !ENDIF
 !IFNDEF PLAT
-PLAT=x64
+PLAT=amd64
 !ENDIF
-!IF "$(PLAT)" == "Win32"
-OUTPUT_DIR=$(CFG)
+!IF "$(PLAT)" == "x86" || "$(PLAT)" == "X86"
+PLAT=x86
+PLAT_MSBUILD=Win32
+!ELSEIF "$(PLAT)" == "amd64" || "$(PLAT)" == "AMD64"
+PLAT=amd64
+PLAT_MSBUILD=x64
 !ELSE
-OUTPUT_DIR=$(PLAT)\$(CFG)
+!ERROR Invalid platform "$(PLAT)". PLAT must be "x86" or "amd64".
 !ENDIF
-MSBUILD_FLAGS=/p:Configuration="$(CFG)" /p:Platform="$(PLAT)" /m /v:minimal /nologo
+OUTPUT_DIR=$(PLAT)\$(CFG)
+MSBUILD_FLAGS=/p:Configuration="$(CFG)" /p:Platform="$(PLAT_MSBUILD)" /m /v:minimal /nologo
 
 build ::
 	msbuild.exe "wintun.vcxproj" /t:Build $(MSBUILD_FLAGS)

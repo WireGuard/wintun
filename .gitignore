@@ -3,10 +3,10 @@
 *.user
 
 # Build Output
-/Release
-/Debug
-/x64/Release
-/x64/Debug
+/x86/Release
+/x86/Debug
+/amd64/Release
+/amd64/Debug
 
 # Static Driver Verifier Output
 /sdv
