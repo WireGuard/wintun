@@ -4,6 +4,12 @@
 # Copyright (C) 2018-2019 WireGuard LLC. All Rights Reserved.
 #
 
+# TODO: Unify version definition with wintun.vcxproj.
+WINTUN_VERSION_MAJ=0
+WINTUN_VERSION_MIN=0
+WINTUN_VERSION_REV=2019
+WINTUN_VERSION_BUILD=0128
+
 !IFNDEF CFG
 CFG=Release
 !ENDIF
@@ -13,17 +19,26 @@ PLAT=amd64
 !IF "$(PLAT)" == "x86" || "$(PLAT)" == "X86"
 PLAT=x86
 PLAT_MSBUILD=Win32
+PLAT_WIX=x86
 !ELSEIF "$(PLAT)" == "amd64" || "$(PLAT)" == "AMD64"
 PLAT=amd64
 PLAT_MSBUILD=x64
+PLAT_WIX=x64
 !ELSEIF "$(PLAT)" == "arm64" || "$(PLAT)" == "ARM64"
 PLAT=arm64
 PLAT_MSBUILD=ARM64
+PLAT_WIX=arm64 # TODO: Follow WiX ARM64 support.
 !ELSE
 !ERROR Invalid platform "$(PLAT)". PLAT must be "x86", "amd64", or "arm64".
 !ENDIF
 OUTPUT_DIR=$(PLAT)\$(CFG)
 MSBUILD_FLAGS=/p:Configuration="$(CFG)" /p:Platform="$(PLAT_MSBUILD)" /m /v:minimal /nologo
+WIX_CANDLE_FLAGS=-nologo -ext WixDifxAppExtension -ext WixIIsExtension -arch "$(PLAT_WIX)" \
+	-dWINTUN_VERSION_MAJ="$(WINTUN_VERSION_MAJ)" \
+	-dWINTUN_VERSION_MIN="$(WINTUN_VERSION_MIN)" \
+	-dWINTUN_VERSION_REV="$(WINTUN_VERSION_REV)" \
+	-dWINTUN_VERSION_BUILD="$(WINTUN_VERSION_BUILD)"
+WIX_LIGHT_FLAGS=-nologo -ext WixDifxAppExtension -ext WixIIsExtension -b output_dir="$(OUTPUT_DIR)"
 
 build ::
 	msbuild.exe "wintun.vcxproj" /t:Build $(MSBUILD_FLAGS)
@@ -38,7 +53,7 @@ dvl :: "wintun.DVL.XML"
 clean ::
 	msbuild.exe "wintun.vcxproj" /t:sdv /p:Inputs="/clean" $(MSBUILD_FLAGS)
 	-if exist "wintun.DVL.XML" del /f /q "wintun.DVL.XML"
-	-if exist "smvstats.txt" del /f /q "smvstats.txt"
+	-if exist "smvstats.txt"   del /f /q "smvstats.txt"
 
 "sdv\SDV.DVL.xml" "$(OUTPUT_DIR)\vc.nativecodeanalysis.all.xml" :
 	msbuild.exe "wintun.vcxproj" /t:sdv /p:Inputs="/check:*" $(MSBUILD_FLAGS)
@@ -47,3 +62,22 @@ clean ::
 	msbuild.exe "wintun.vcxproj" /t:dvl $(MSBUILD_FLAGS)
 
 !ENDIF
+
+msm :: "$(OUTPUT_DIR)\wintun.msm"
+
+clean ::
+	-if exist "$(OUTPUT_DIR)\wintun.wixobj" del /f /q "$(OUTPUT_DIR)\wintun.wixobj"
+	-if exist "$(OUTPUT_DIR)\wintun.wixpdb" del /f /q "$(OUTPUT_DIR)\wintun.wixpdb"
+	-if exist "$(OUTPUT_DIR)\wintun.msm"    del /f /q "$(OUTPUT_DIR)\wintun.msm"
+
+"$(OUTPUT_DIR)\wintun.wixobj" : "wintun.wxs"
+	"$(WIX)bin\candle.exe" $(WIX_CANDLE_FLAGS) -out $@ $**
+
+"$(OUTPUT_DIR)\wintun.msm" "$(OUTPUT_DIR)\wintun.wixpdb" : \
+	"$(OUTPUT_DIR)\wintun.cer" \
+	"$(OUTPUT_DIR)\wintun\wintun.cat" \
+	"$(OUTPUT_DIR)\wintun\wintun.inf" \
+	"$(OUTPUT_DIR)\wintun\wintun.sys" \
+	"$(OUTPUT_DIR)\wintun.wixobj" \
+	"$(WIX)bin\difxapp_$(PLAT_WIX).wixlib"
+	"$(WIX)bin\light.exe" $(WIX_LIGHT_FLAGS) -out "$(OUTPUT_DIR)\wintun.msm" "$(OUTPUT_DIR)\wintun.wixobj" "$(WIX)bin\difxapp_$(PLAT_WIX).wixlib"

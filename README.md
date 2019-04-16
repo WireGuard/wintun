@@ -7,6 +7,7 @@ This is a layer 3 TUN driver for Windows 7, 8, 8.1, and 10. Originally created f
 
 - [Visual Studio 2017](https://visualstudio.microsoft.com/downloads/)
 - [Windows Driver Kit for Windows 10](https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk)
+- [WiX Toolset 3.11.1](http://wixtoolset.org/releases/)
 
 
 ## Digital Signing
@@ -45,7 +46,9 @@ nmake [<target>] [CFG=<configuration>] [PLAT=<platform>]
 
   - `clean`: Deletes all intermediate and output files.
 
-  - `dvl`:  Runs Static Driver Verifier, which includes a clean driver build, and creates a Driver Verification Log in `wintun.DVL.XML` file. Release configurations only. When you are ready to test your driver using the Windows Hardware Certification Kit (HCK), you need to copy the `wintun.DVL.XML` file to the `%SystemDrive%\DVL` directory on the test computer.
+  - `dvl`: Runs Static Driver Verifier, which includes a clean driver build, and creates a Driver Verification Log in `wintun.DVL.XML` file. Release configurations only. When you are ready to test your driver using the Windows Hardware Certification Kit (HCK), you need to copy the `wintun.DVL.XML` file to the `%SystemDrive%\DVL` directory on the test computer.
+
+  - `msm`: Builds Microsoft Installer Merge Module in `<output folder>\wintun.msm`. This target requires the driver to be built first (e.g. `nmake build msm` or `nmake dvl msm`).
 
 The driver output folder is:
 
