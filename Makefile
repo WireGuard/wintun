@@ -48,8 +48,8 @@ dvl :: "wintun.DVL.XML"
 
 clean ::
 	msbuild.exe "wintun.vcxproj" /t:sdv /p:Inputs="/clean" $(MSBUILD_FLAGS)
-	-if exist "wintun.DVL.XML" del /f /q "wintun.DVL.XML"
-	-if exist "smvstats.txt"   del /f /q "smvstats.txt"
+	-del /f /q "wintun.DVL.XML" > NUL 2>&1
+	-del /f /q "smvstats.txt"   > NUL 2>&1
 
 "sdv\SDV.DVL.xml" "$(OUTPUT_DIR)\vc.nativecodeanalysis.all.xml" :
 	msbuild.exe "wintun.vcxproj" /t:sdv /p:Inputs="/check:*" $(MSBUILD_FLAGS)
@@ -62,9 +62,9 @@ clean ::
 msm :: "$(OUTPUT_DIR)\wintun.msm"
 
 clean ::
-	-if exist "$(OUTPUT_DIR)\wintun.wixobj" del /f /q "$(OUTPUT_DIR)\wintun.wixobj"
-	-if exist "$(OUTPUT_DIR)\wintun.wixpdb" del /f /q "$(OUTPUT_DIR)\wintun.wixpdb"
-	-if exist "$(OUTPUT_DIR)\wintun.msm"    del /f /q "$(OUTPUT_DIR)\wintun.msm"
+	-del /f /q "$(OUTPUT_DIR)\wintun.wixobj" > NUL 2>&1
+	-del /f /q "$(OUTPUT_DIR)\wintun.wixpdb" > NUL 2>&1
+	-del /f /q "$(OUTPUT_DIR)\wintun.msm"    > NUL 2>&1
 
 "$(OUTPUT_DIR)\wintun.wixobj" : "wintun.wxs"
 	"$(WIX)bin\candle.exe" $(WIX_CANDLE_FLAGS) -out $@ $**
