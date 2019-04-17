@@ -8,7 +8,7 @@
 	xmlns="http://schemas.microsoft.com/wix/2006/wi"
 	xmlns:diffx="http://schemas.microsoft.com/wix/DifxAppExtension"
 	xmlns:iis="http://schemas.microsoft.com/wix/IIsExtension">
-	<Module Id="wintun" Language="1033" Version="$(var.WINTUN_VERSION_MAJ).$(var.WINTUN_VERSION_MIN).$(var.WINTUN_VERSION_REV).$(var.WINTUN_VERSION_BUILD)">
+	<Module Id="wintun" Language="0" Version="$(var.WINTUN_VERSION_MAJ).$(var.WINTUN_VERSION_MIN).$(var.WINTUN_VERSION_REV).$(var.WINTUN_VERSION_BUILD)">
 		<Package
 			Id="c28309d9-1954-4f2d-a7d1-228850092460"
 			Description="Wintun Userspace Tunnel"
