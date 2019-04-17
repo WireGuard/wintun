@@ -8,7 +8,7 @@
 WINTUN_VERSION_MAJ=0
 WINTUN_VERSION_MIN=0
 WINTUN_VERSION_REV=2019
-WINTUN_VERSION_BUILD=0128
+WINTUN_VERSION_BUILD=128
 
 !IFNDEF CFG
 CFG=Release
@@ -33,12 +33,8 @@ PLAT_WIX=arm64 # TODO: Follow WiX ARM64 support.
 !ENDIF
 OUTPUT_DIR=$(PLAT)\$(CFG)
 MSBUILD_FLAGS=/p:Configuration="$(CFG)" /p:Platform="$(PLAT_MSBUILD)" /m /v:minimal /nologo
-WIX_CANDLE_FLAGS=-nologo -ext WixDifxAppExtension -ext WixIIsExtension -arch "$(PLAT_WIX)" \
-	-dWINTUN_VERSION_MAJ="$(WINTUN_VERSION_MAJ)" \
-	-dWINTUN_VERSION_MIN="$(WINTUN_VERSION_MIN)" \
-	-dWINTUN_VERSION_REV="$(WINTUN_VERSION_REV)" \
-	-dWINTUN_VERSION_BUILD="$(WINTUN_VERSION_BUILD)"
-WIX_LIGHT_FLAGS=-nologo -ext WixDifxAppExtension -ext WixIIsExtension -b output_dir="$(OUTPUT_DIR)"
+WIX_CANDLE_FLAGS=-nologo -ext WixDifxAppExtension -ext WixIIsExtension -arch "$(PLAT_WIX)" -dWINTUN_VERSION="$(WINTUN_VERSION_MAJ).$(WINTUN_VERSION_MIN).$(WINTUN_VERSION_REV).$(WINTUN_VERSION_BUILD)"
+WIX_LIGHT_FLAGS=-nologo -ext WixDifxAppExtension -ext WixIIsExtension -b output_dir="$(OUTPUT_DIR)" -sw1103
 
 build ::
 	msbuild.exe "wintun.vcxproj" /t:Build $(MSBUILD_FLAGS)
