@@ -15,7 +15,8 @@
 			Manufacturer="WireGuard LLC"
 			InstallerVersion="200"
 			InstallPrivileges="elevated"
-			InstallScope="perMachine" />
+			InstallScope="perMachine"
+			ReadOnly="yes"/>
 
 		<Binary Id="wintun.cer" SourceFile="!(bindpath.output_dir)wintun.cer"/>
 
