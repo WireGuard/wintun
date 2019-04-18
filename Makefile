@@ -4,12 +4,8 @@
 # Copyright (C) 2018-2019 WireGuard LLC. All Rights Reserved.
 #
 
-# TODO: Unify version definition with wintun.vcxproj.
-WINTUN_VERSION_MAJ=0
-WINTUN_VERSION_MIN=0
-WINTUN_VERSION_REV=2019
-WINTUN_VERSION_BUILD=0128
-WINTUN_VERSION=$(WINTUN_VERSION_MAJ).$(WINTUN_VERSION_MIN).$(WINTUN_VERSION_REV).$(WINTUN_VERSION_BUILD)
+# TODO: Unify version definition with wintun.vcxproj. Migrate from NMAKE to MSBuild?
+WINTUN_VERSION=0.1
 
 DIST_DIR=dist
 MSBUILD_FLAGS=/m /v:minimal /nologo
