@@ -65,11 +65,11 @@ msm :: "$(OUTPUT_DIR)\wintun.msm"
 "$(OUTPUT_DIR)\wintun.wixobj" : "wintun.wxs"
 	"$(WIX)bin\candle.exe" $(WIX_CANDLE_FLAGS) -out $@ $**
 
-"$(OUTPUT_DIR)\wintun.msm" "$(OUTPUT_DIR)\wintun.wixpdb" : \
+"$(OUTPUT_DIR)\wintun.msm" : \
 	"$(OUTPUT_DIR)\wintun.cer" \
 	"$(OUTPUT_DIR)\wintun\wintun.cat" \
 	"$(OUTPUT_DIR)\wintun\wintun.inf" \
 	"$(OUTPUT_DIR)\wintun\wintun.sys" \
 	"$(OUTPUT_DIR)\wintun.wixobj" \
 	"$(WIX)bin\difxapp_$(PLAT_WIX).wixlib"
-	"$(WIX)bin\light.exe" $(WIX_LIGHT_FLAGS) -out "$(OUTPUT_DIR)\wintun.msm" "$(OUTPUT_DIR)\wintun.wixobj" "$(WIX)bin\difxapp_$(PLAT_WIX).wixlib"
+	"$(WIX)bin\light.exe" $(WIX_LIGHT_FLAGS) -out "$(OUTPUT_DIR)\wintun.msm" -spdb "$(OUTPUT_DIR)\wintun.wixobj" "$(WIX)bin\difxapp_$(PLAT_WIX).wixlib"
