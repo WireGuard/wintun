@@ -8,7 +8,8 @@
 WINTUN_VERSION_MAJ=0
 WINTUN_VERSION_MIN=0
 WINTUN_VERSION_REV=2019
-WINTUN_VERSION_BUILD=128
+WINTUN_VERSION_BUILD=0128
+WINTUN_VERSION=$(WINTUN_VERSION_MAJ).$(WINTUN_VERSION_MIN).$(WINTUN_VERSION_REV).$(WINTUN_VERSION_BUILD)
 
 !IFNDEF CFG
 CFG=Release
@@ -32,8 +33,9 @@ PLAT_WIX=arm64 # TODO: Follow WiX ARM64 support.
 !ERROR Invalid platform "$(PLAT)". PLAT must be "x86", "amd64", or "arm64".
 !ENDIF
 OUTPUT_DIR=$(PLAT)\$(CFG)
+MSM_NAME=wintun_$(WINTUN_VERSION)_$(PLAT)
 MSBUILD_FLAGS=/p:Configuration="$(CFG)" /p:Platform="$(PLAT_MSBUILD)" /m /v:minimal /nologo
-WIX_CANDLE_FLAGS=-nologo -ext WixDifxAppExtension -ext WixIIsExtension -arch "$(PLAT_WIX)" -dWINTUN_VERSION="$(WINTUN_VERSION_MAJ).$(WINTUN_VERSION_MIN).$(WINTUN_VERSION_REV).$(WINTUN_VERSION_BUILD)"
+WIX_CANDLE_FLAGS=-nologo -ext WixDifxAppExtension -ext WixIIsExtension -arch "$(PLAT_WIX)" -dWINTUN_VERSION="$(WINTUN_VERSION)"
 WIX_LIGHT_FLAGS=-nologo -ext WixDifxAppExtension -ext WixIIsExtension -b output_dir="$(OUTPUT_DIR)" -sw1103
 
 build ::
@@ -60,16 +62,16 @@ clean ::
 
 !ENDIF
 
-msm :: "$(OUTPUT_DIR)\wintun.msm"
+msm :: "$(OUTPUT_DIR)\$(MSM_NAME).msm"
 
 "$(OUTPUT_DIR)\wintun.wixobj" : "wintun.wxs"
 	"$(WIX)bin\candle.exe" $(WIX_CANDLE_FLAGS) -out $@ $**
 
-"$(OUTPUT_DIR)\wintun.msm" : \
+"$(OUTPUT_DIR)\$(MSM_NAME).msm" : \
 	"$(OUTPUT_DIR)\wintun.cer" \
 	"$(OUTPUT_DIR)\wintun\wintun.cat" \
 	"$(OUTPUT_DIR)\wintun\wintun.inf" \
 	"$(OUTPUT_DIR)\wintun\wintun.sys" \
 	"$(OUTPUT_DIR)\wintun.wixobj" \
 	"$(WIX)bin\difxapp_$(PLAT_WIX).wixlib"
-	"$(WIX)bin\light.exe" $(WIX_LIGHT_FLAGS) -out "$(OUTPUT_DIR)\wintun.msm" -spdb "$(OUTPUT_DIR)\wintun.wixobj" "$(WIX)bin\difxapp_$(PLAT_WIX).wixlib"
+	"$(WIX)bin\light.exe" $(WIX_LIGHT_FLAGS) -out "$(OUTPUT_DIR)\$(MSM_NAME).msm" -spdb "$(OUTPUT_DIR)\wintun.wixobj" "$(WIX)bin\difxapp_$(PLAT_WIX).wixlib"
