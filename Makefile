@@ -21,8 +21,8 @@ dvl :: "wintun.DVL.XML"
 
 msm :: \
 	"$(DIST_DIR)" \
-	"$(DIST_DIR)\wintun_$(WINTUN_VERSION)_x86.msm" \
-	"$(DIST_DIR)\wintun_$(WINTUN_VERSION)_amd64.msm"
+	"$(DIST_DIR)\wintun-x86-$(WINTUN_VERSION).msm" \
+	"$(DIST_DIR)\wintun-amd64-$(WINTUN_VERSION).msm"
 
 "sdv\SDV.DVL.xml" "amd64\Release\vc.nativecodeanalysis.all.xml" :
 	msbuild.exe "wintun.vcxproj" /t:sdv /p:Inputs="/check:*" /p:Configuration="Release" /p:Platform="x64" $(MSBUILD_FLAGS)

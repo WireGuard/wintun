@@ -30,7 +30,7 @@ clean ::
 "$(OUTPUT_DIR)\wintun.wixobj" : "wintun.wxs"
 	"$(WIX)bin\candle.exe" $(WIX_CANDLE_FLAGS) -arch "$(PLAT_WIX)" -out $@ $**
 
-"$(DIST_DIR)\wintun_$(WINTUN_VERSION)_$(PLAT).msm" : \
+"$(DIST_DIR)\wintun-$(PLAT)-$(WINTUN_VERSION).msm" : \
 	"$(DIST_DIR)" \
 	"$(OUTPUT_DIR)\wintun.cer" \
 	"$(OUTPUT_DIR)\wintun\wintun.cat" \
