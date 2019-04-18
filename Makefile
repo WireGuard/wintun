@@ -49,6 +49,7 @@ dvl :: "wintun.DVL.XML"
 clean ::
 	-rd /s /q "sdv"             > NUL 2>&1
 	-del /f /q "wintun.DVL.XML" > NUL 2>&1
+	-del /f /q "smvbuild.log"   > NUL 2>&1
 	-del /f /q "smvstats.txt"   > NUL 2>&1
 
 "sdv\SDV.DVL.xml" "$(OUTPUT_DIR)\vc.nativecodeanalysis.all.xml" :
