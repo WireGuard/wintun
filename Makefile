@@ -32,6 +32,7 @@ PLAT_WIX=arm64 # TODO: Follow WiX ARM64 support.
 !ELSE
 !ERROR Invalid platform "$(PLAT)". PLAT must be "x86", "amd64", or "arm64".
 !ENDIF
+DIST_DIR=dist
 OUTPUT_DIR=$(PLAT)\$(CFG)
 MSM_NAME=wintun_$(WINTUN_VERSION)_$(PLAT)
 MSBUILD_FLAGS=/p:Configuration="$(CFG)" /p:Platform="$(PLAT_MSBUILD)" /m /v:minimal /nologo
@@ -42,6 +43,7 @@ build ::
 	msbuild.exe "wintun.vcxproj" /t:Build $(MSBUILD_FLAGS)
 
 clean ::
+	-rd /s /q "$(DIST_DIR)"   > NUL 2>&1
 	-rd /s /q "$(OUTPUT_DIR)" > NUL 2>&1
 
 !IF "$(CFG)" == "Release" && "$(PLAT)" != "arm64"
@@ -60,18 +62,22 @@ clean ::
 "wintun.DVL.XML" : "sdv\SDV.DVL.xml" "$(OUTPUT_DIR)\vc.nativecodeanalysis.all.xml"
 	msbuild.exe "wintun.vcxproj" /t:dvl $(MSBUILD_FLAGS)
 
-!ENDIF
-
-msm :: "$(OUTPUT_DIR)\$(MSM_NAME).msm"
+msm :: "$(DIST_DIR)\$(MSM_NAME).msm"
 
 "$(OUTPUT_DIR)\wintun.wixobj" : "wintun.wxs"
 	"$(WIX)bin\candle.exe" $(WIX_CANDLE_FLAGS) -out $@ $**
 
-"$(OUTPUT_DIR)\$(MSM_NAME).msm" : \
+"$(DIST_DIR)\$(MSM_NAME).msm" : \
+	"$(DIST_DIR)" \
 	"$(OUTPUT_DIR)\wintun.cer" \
 	"$(OUTPUT_DIR)\wintun\wintun.cat" \
 	"$(OUTPUT_DIR)\wintun\wintun.inf" \
 	"$(OUTPUT_DIR)\wintun\wintun.sys" \
 	"$(OUTPUT_DIR)\wintun.wixobj" \
 	"$(WIX)bin\difxapp_$(PLAT_WIX).wixlib"
-	"$(WIX)bin\light.exe" $(WIX_LIGHT_FLAGS) -out "$(OUTPUT_DIR)\$(MSM_NAME).msm" -spdb "$(OUTPUT_DIR)\wintun.wixobj" "$(WIX)bin\difxapp_$(PLAT_WIX).wixlib"
+	"$(WIX)bin\light.exe" $(WIX_LIGHT_FLAGS) -out "$(DIST_DIR)\$(MSM_NAME).msm" -spdb "$(OUTPUT_DIR)\wintun.wixobj" "$(WIX)bin\difxapp_$(PLAT_WIX).wixlib"
+
+!ENDIF
+
+"$(DIST_DIR)" :
+	md $@ > NUL 2>&1

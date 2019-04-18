@@ -3,6 +3,7 @@
 *.user
 
 # Build Output
+/dist
 /x86/Release
 /x86/Debug
 /amd64/Release
