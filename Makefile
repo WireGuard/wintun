@@ -40,14 +40,14 @@ build ::
 	msbuild.exe "wintun.vcxproj" /t:Build $(MSBUILD_FLAGS)
 
 clean ::
-	msbuild.exe "wintun.vcxproj" /t:Clean $(MSBUILD_FLAGS)
+	-rd /s /q "$(OUTPUT_DIR)" > NUL 2>&1
 
 !IF "$(CFG)" == "Release" && "$(PLAT)" != "arm64"
 
 dvl :: "wintun.DVL.XML"
 
 clean ::
-	msbuild.exe "wintun.vcxproj" /t:sdv /p:Inputs="/clean" $(MSBUILD_FLAGS)
+	-rd /s /q "sdv"             > NUL 2>&1
 	-del /f /q "wintun.DVL.XML" > NUL 2>&1
 	-del /f /q "smvstats.txt"   > NUL 2>&1
 
@@ -60,11 +60,6 @@ clean ::
 !ENDIF
 
 msm :: "$(OUTPUT_DIR)\wintun.msm"
-
-clean ::
-	-del /f /q "$(OUTPUT_DIR)\wintun.wixobj" > NUL 2>&1
-	-del /f /q "$(OUTPUT_DIR)\wintun.wixpdb" > NUL 2>&1
-	-del /f /q "$(OUTPUT_DIR)\wintun.msm"    > NUL 2>&1
 
 "$(OUTPUT_DIR)\wintun.wixobj" : "wintun.wxs"
 	"$(WIX)bin\candle.exe" $(WIX_CANDLE_FLAGS) -out $@ $**
