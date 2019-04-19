@@ -54,15 +54,14 @@
   <PropertyGroup>
     <SigningCertificate Condition="$(SignMode)=='TestSign' And '$(TestCertificate)'!=''">$(TestCertificate)</SigningCertificate>
     <SigningCertificate Condition="$(SignMode)=='ProductionSign' And '$(ProductionCertificate)'!=''">$(ProductionCertificate)</SigningCertificate>
-    <AfterBuildDependsOnTargets Condition="'$(SigningCertificate)'!='' And '$(TimeStampServer)'!=''">SignTarget</AfterBuildDependsOnTargets>
-    <BuildDependsOn>$(BuildDependsOn);SignTarget</BuildDependsOn>
+    <BuildDependsOn Condition="'$(SigningCertificate)'!='' And '$(TimeStampServer)'!=''">$(BuildDependsOn);SignTarget</BuildDependsOn>
     <CleanDependsOn>CleanSignTarget;$(CleanDependsOn)</CleanDependsOn>
   </PropertyGroup>
   <Target
     Name="SignTarget"
     Inputs="$(TargetPath)"
     Outputs="$(IntermediateOutputPath)$(TargetName).sign">
-    <Exec Command="signtool.exe sign /sha1 &quot;$(SigningCertificate)&quot; /fd sha256 /tr &quot;$(TimeStampServer)&quot; /td sha256 /q &quot;$(TargetPath)&quot;" />
+    <Exec Command="signtool.exe sign /sha1 &quot;$(SigningCertificate)&quot; /fd sha256 /tr &quot;$(TimeStampServer)&quot; /td sha256 &quot;$(TargetPath)&quot;" />
     <Touch Files="$(IntermediateOutputPath)$(TargetName).sign" AlwaysCreate="true"/>
   </Target>
   <Target Name="CleanSignTarget">
