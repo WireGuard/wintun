@@ -25,6 +25,7 @@
     <OutputPath>$(WintunPlatform)\$(Configuration)\</OutputPath>
     <OutputName>$(ProjectName)</OutputName>
     <DefineConstants>WINTUN_VERSION=$(WintunVersion);$(DefineConstants)</DefineConstants>
+    <SuppressSpecificWarnings>1006;1086;$(SuppressSpecificWarnings)</SuppressSpecificWarnings>
     <CompilerAdditionalOptions>-ext WixDifxAppExtension -ext WixIIsExtension $(CompilerAdditionalOptions)</CompilerAdditionalOptions>
     <LinkerSuppressSpecificWarnings>1103;$(LinkerSuppressSpecificWarnings)</LinkerSuppressSpecificWarnings>
     <LinkerAdditionalOptions>-ext WixDifxAppExtension -ext WixIIsExtension -b output_dir="$(IntermediateOutputPath.TrimEnd('\'))" $(LinkerAdditionalOptions)</LinkerAdditionalOptions>

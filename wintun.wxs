@@ -4,6 +4,11 @@
 
 	Copyright (C) 2018-2019 WireGuard LLC. All Rights Reserved.
 -->
+<?if $(var.Platform) = x86?>
+	<?define PlatformProgramFilesFolder = "ProgramFilesFolder"?>
+<?else?>
+	<?define PlatformProgramFilesFolder = "ProgramFiles64Folder"?>
+<?endif?>
 <Wix
 	xmlns="http://schemas.microsoft.com/wix/2006/wi"
 	xmlns:diffx="http://schemas.microsoft.com/wix/DifxAppExtension"
@@ -21,7 +26,7 @@
 		<Binary Id="wintun.cer" SourceFile="!(bindpath.output_dir)wintun.cer"/>
 
 		<Directory Id="TARGETDIR" Name="SourceDir">
-			<Directory Id="MergeRedirectFolder">
+			<Directory Id="WintunFolder">
 				<Component Id="wintun.cat" Guid="41fbe711-a1af-4b83-8b5d-fc1b112969c1">
 					<File
 						Id="wintun.cat"
@@ -58,5 +63,28 @@
 				</Component>
 			</Directory>
 		</Directory>
+
+		<!--
+			The WintunFolder is relocated inside product folder when our module is merged.
+			To avoid this, set WintunFolder property to [ProgramFilesFolder]\Wintun explicitly
+			in each installer sequence.
+		-->
+		<Property Id="$(var.PlatformProgramFilesFolder)" SuppressModularization="yes"/><!-- This will produce CNDL1006 and CNDL1086 warnings, but it prevents "[ProgramFiles(64)Folder]" from being modularized to "[ProgramFiles(64)Folder.C28309D9_1954_4F2D_A7D1_228850092460]". -->
+		<CustomAction Id="WintunFolder" Property="WintunFolder" Value="[$(var.PlatformProgramFilesFolder)]\Wintun"/>
+		<AdminExecuteSequence>
+			<Custom Action="WintunFolder" Before="CostInitialize"/>
+		</AdminExecuteSequence>
+		<AdminUISequence>
+			<Custom Action="WintunFolder" Before="CostInitialize"/>
+		</AdminUISequence>
+		<AdvertiseExecuteSequence>
+			<Custom Action="WintunFolder" Before="CostInitialize"/>
+		</AdvertiseExecuteSequence>
+		<InstallExecuteSequence>
+			<Custom Action="WintunFolder" Before="CostInitialize"/>
+		</InstallExecuteSequence>
+		<InstallUISequence>
+			<Custom Action="WintunFolder" Before="CostInitialize"/>
+		</InstallUISequence>
 	</Module>
 </Wix>
