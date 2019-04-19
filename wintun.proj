@@ -1,0 +1,100 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: MIT
+
+  Copyright (C) 2019 WireGuard LLC. All Rights Reserved.
+-->
+<Project
+  xmlns="http://schemas.microsoft.com/developer/msbuild/2003"
+  DefaultTargets="Build">
+
+  <!--
+    General Properties
+  -->
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <Platform Condition="'$(Platform)' == ''">amd64</Platform>
+    <OutputDir>$(Platform)\$(Configuration)\</OutputDir>
+  </PropertyGroup>
+
+  <Import Project="wintun.props"/>
+  <Import Project="wintun.vcxproj.user" Condition="exists('wintun.vcxproj.user')"/>
+
+  <PropertyGroup Condition="'$(Platform)' == 'x86'">
+    <MSBuildPlatform>Win32</MSBuildPlatform>
+    <WiXPlatform>x86</WiXPlatform>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)' == 'amd64'">
+    <MSBuildPlatform>x64</MSBuildPlatform>
+    <WiXPlatform>x64</WiXPlatform>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)' == 'arm64'">
+    <MSBuildPlatform>ARM64</MSBuildPlatform>
+    <WiXPlatform>arm64</WiXPlatform> <!-- TODO: Follow WiX ARM64 support. -->
+  </PropertyGroup>
+
+  <Target Name="Build" DependsOnTargets="Driver"/>
+  <Target Name="Clean">
+    <RemoveDir Directories="$(OutputDir)"/>
+    <RemoveDir Directories="$(SDVDir)"/>
+    <RemoveDir Directories="$(DistributionDir)"/>
+    <Delete Files="smvbuild.log;smvstats.txt;wintun.DVL.XML"/>
+  </Target>
+  <Target Name="Rebuild" DependsOnTargets="Clean;Build"/>
+
+  <!--
+    Driver Building
+    Note: Use explicit Inputs/Outputs as WindowsDriver.Common.targets triggers driver re-packaging and signing on every invocation.
+  -->
+  <Target Name="Driver"
+    Outputs="$(OutputDir)wintun\wintun.sys;$(OutputDir)wintun\wintun.inf;$(OutputDir)wintun\wintun.cat"
+    Inputs="wintun.c;wintun.vcxproj">
+    <MSBuild
+      Projects="wintun.vcxproj"
+      Targets="Build"
+      Properties="Configuration=$(Configuration);Platform=$(MSBuildPlatform)"/>
+  </Target>
+
+  <!--
+    Static Driver Verifier
+  -->
+  <Target Name="SDV"
+    Outputs="$(SDVDir)SDV.DVL.xml;$(OutputDir)vc.nativecodeanalysis.all.xml">
+    <MSBuild
+      Projects="wintun.vcxproj"
+      Targets="sdv"
+      Properties="Inputs=/check:*;Configuration=$(Configuration);Platform=$(MSBuildPlatform)"/>
+  </Target>
+
+  <!--
+    Driver Verification Log
+  -->
+  <Target Name="DVL"
+    DependsOnTargets="SDV"
+    Outputs="wintun.DVL.XML"
+    Inputs="$(SDVDir)SDV.DVL.xml;$(OutputDir)vc.nativecodeanalysis.all.xml">
+    <MSBuild
+      Projects="wintun.vcxproj"
+      Targets="dvl"
+      Properties="Configuration=$(Configuration);Platform=$(MSBuildPlatform)"/>
+  </Target>
+
+  <!--
+    MSM Building
+  -->
+  <PropertyGroup>
+    <MSMDir>$(DistributionDir)</MSMDir>
+    <MSMName>wintun-$(WintunPlatform)-$(WintunVersionStr)</MSMName>
+    <MSMExt>.msm</MSMExt>
+    <MSMFileName>$(MSMName)$(MSMExt)</MSMFileName>
+    <MSMPath>$(MSMDir)$(MSMFileName)</MSMPath>
+  </PropertyGroup>
+  <Target Name="MSM"
+    DependsOnTargets="Build"
+    Outputs="$(MSMPath)">
+    <MSBuild
+      Projects="wintun.wixproj"
+      Targets="Build"
+      Properties="Configuration=$(Configuration);Platform=$(WiXPlatform)"/>
+  </Target>
+</Project>

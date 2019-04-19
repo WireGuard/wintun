@@ -37,18 +37,22 @@ If you already have `wintun.vcxproj.user` file, just add the `<PropertyGroup>` s
 Open _Developer Command Prompt for VS 2017_ and use the `nmake` command:
 
 ```
-nmake [<target>]
+msbuild wintun.proj [/t:<target>] [/p:Configuration=<configuration>] [/p:Platform=<platform>]
 ```
 
 ### Targets
 
-  - `build`: Builds the driver. This is the default target.
+  - `Build`: Builds the driver. This is the default target.
 
-  - `clean`: Deletes all intermediate and output files.
+  - `Clean`: Deletes all intermediate and output files.
 
-  - `dvl`: Runs Static Driver Verifier, which includes a clean driver build, and creates a Driver Verification Log in `wintun.DVL.XML` file. When you are ready to test your driver using the Windows Hardware Certification Kit (HCK), you need to copy the `wintun.DVL.XML` file to the `%SystemDrive%\DVL` directory on the test computer.
+  - `Rebuild`: Alias for `Clean` followed by `Build`.
 
-  - `msm`: Builds Microsoft Installer Merge Module in `<output folder>\wintun.msm`. This target requires the driver to be built first (e.g. `nmake build msm` or `nmake dvl msm`).
+  - `SDV`: Runs Static Driver Verifier, which includes a clean driver build. Release configurations only.
+
+  - `DVL`: Runs the `SDV`, and creates a Driver Verification Log in `wintun.DVL.XML` file. Release configurations only. When you are ready to test your driver using the Windows Hardware Certification Kit (HCK), you need to copy the `wintun.DVL.XML` file to the `%SystemDrive%\DVL` directory on the test computer.
+
+  - `MSM`: Builds Microsoft Installer Merge Module in `<output folder>\wintun-<platform>-<version>.msm`.
 
 The driver output folder is:
 
@@ -60,6 +64,14 @@ AMD64 Debug                | `amd64\Debug\wintun`
 AMD64 Release              | `amd64\Release\wintun`
 ARM64 Debug                | `arm64\Debug\wintun`
 ARM64 Release              | `arm64\Release\wintun`
+
+### Properties
+
+Properties may be defined as environment variables, or specified on the `msbuild` command line.
+
+  - `Configuration`: Specifies configuration to build or clean. May be `Debug` or `Release` (default).
+
+  - `Platform`: Specifies driver platform to build. May be `x86` or `amd64` (default), or `arm64`.
 
 
 ## Usage

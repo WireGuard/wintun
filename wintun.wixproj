@@ -1,0 +1,70 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-License-Identifier: GPL-2.0
+
+  Copyright (C) 2018-2019 WireGuard LLC. All Rights Reserved.
+-->
+<Project
+  xmlns="http://schemas.microsoft.com/developer/msbuild/2003"
+  ToolsVersion="4.0"
+  InitialTargets="EnsureWixToolsetInstalled"
+  DefaultTargets="Build">
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)'==''">Release</Configuration>
+    <Platform Condition="'$(Platform)'==''">x64</Platform>
+    <ProjectGuid>{F95A1EBF-1E19-47D4-9D8C-4F0C41B9E3B8}</ProjectGuid>
+    <ProjectName>wintun</ProjectName>
+    <OutputType>Module</OutputType>
+    <DefineSolutionProperties>false</DefineSolutionProperties>
+  </PropertyGroup>
+
+  <Import Project="wintun.props"/>
+
+  <PropertyGroup>
+    <IntermediateOutputPath>$(WintunPlatform)\$(Configuration)\</IntermediateOutputPath>
+    <OutputPath>$(WintunPlatform)\$(Configuration)\</OutputPath>
+    <OutputName>$(ProjectName)</OutputName>
+    <DefineConstants>WINTUN_VERSION=$(WintunVersion);$(DefineConstants)</DefineConstants>
+    <CompilerAdditionalOptions>-ext WixDifxAppExtension -ext WixIIsExtension $(CompilerAdditionalOptions)</CompilerAdditionalOptions>
+    <LinkerSuppressSpecificWarnings>1103;$(LinkerSuppressSpecificWarnings)</LinkerSuppressSpecificWarnings>
+    <LinkerAdditionalOptions>-ext WixDifxAppExtension -ext WixIIsExtension -b output_dir="$(IntermediateOutputPath.TrimEnd('\'))" $(LinkerAdditionalOptions)</LinkerAdditionalOptions>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <SuppressPdbOutput>true</SuppressPdbOutput>
+    <OutputPath>$(DistributionDir)</OutputPath>
+    <OutputName>$(ProjectName)-$(WintunPlatform)-$(WintunVersionStr)</OutputName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="wintun.wxs"/>
+  </ItemGroup>
+  <ItemGroup>
+    <WixLibrary Include="difxapp_$(Platform).wixlib"/>
+  </ItemGroup>
+
+  <Import Project="$(MSBuildProjectName).user" Condition="exists('$(MSBuildProjectName).user')"/>
+  <Import Project="$(WixTargetsPath)" Condition="'$(WixTargetsPath)'!=''"/>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets" Condition="'$(WixTargetsPath)'=='' AND Exists('$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets')"/>
+  <Target Name="EnsureWixToolsetInstalled" Condition="'$(WixTargetsImported)'!='true'">
+    <Error Text="The WiX Toolset v3.11 (or newer) build tools must be installed to build this project. To download the WiX Toolset, see http://wixtoolset.org/releases/"/>
+  </Target>
+
+  <Import Project="wintun.vcxproj.user" Condition="exists('wintun.vcxproj.user')"/>
+  <PropertyGroup>
+    <SigningCertificate Condition="$(SignMode)=='TestSign' And '$(TestCertificate)'!=''">$(TestCertificate)</SigningCertificate>
+    <SigningCertificate Condition="$(SignMode)=='ProductionSign' And '$(ProductionCertificate)'!=''">$(ProductionCertificate)</SigningCertificate>
+    <AfterBuildDependsOnTargets Condition="'$(SigningCertificate)'!='' And '$(TimeStampServer)'!=''">SignTarget</AfterBuildDependsOnTargets>
+    <BuildDependsOn>$(BuildDependsOn);SignTarget</BuildDependsOn>
+    <CleanDependsOn>CleanSignTarget;$(CleanDependsOn)</CleanDependsOn>
+  </PropertyGroup>
+  <Target
+    Name="SignTarget"
+    Inputs="$(TargetPath)"
+    Outputs="$(IntermediateOutputPath)$(TargetName).sign">
+    <Exec Command="signtool.exe sign /sha1 &quot;$(SigningCertificate)&quot; /fd sha256 /tr &quot;$(TimeStampServer)&quot; /td sha256 /q &quot;$(TargetPath)&quot;" />
+    <Touch Files="$(IntermediateOutputPath)$(TargetName).sign" AlwaysCreate="true"/>
+  </Target>
+  <Target Name="CleanSignTarget">
+    <Delete Files="$(IntermediateOutputPath)$(TargetName).sign"/>
+  </Target>
+</Project>

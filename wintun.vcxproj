@@ -102,50 +102,26 @@
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <PropertyGroup Label="UserMacros">
-    <WintunVersionMaj>0</WintunVersionMaj>
-    <WintunVersionMin>1</WintunVersionMin>
-    <WintunVersionStr>0.1</WintunVersionStr>
-  </PropertyGroup>
+  <Import Project="wintun.props" />
+  <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
     <_ProjectFileVersion>15.0.28127.55</_ProjectFileVersion>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <IntDir>$(WintunPlatform)\$(ConfigurationName)\</IntDir>
+    <OutDir>$(WintunPlatform)\$(ConfigurationName)\</OutDir>
     <RunCodeAnalysis>true</RunCodeAnalysis>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <CodeAnalysisRuleSet>$(WDKContentRoot)CodeAnalysis\DriverMustFixRules.ruleset</CodeAnalysisRuleSet>
-    <IntDir>x86\$(ConfigurationName)\</IntDir>
-    <OutDir>x86\$(ConfigurationName)\</OutDir>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <RunCodeAnalysis>true</RunCodeAnalysis>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
-    <IntDir>x86\$(ConfigurationName)\</IntDir>
-    <OutDir>x86\$(ConfigurationName)\</OutDir>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <RunCodeAnalysis>true</RunCodeAnalysis>
-    <CodeAnalysisRuleSet>$(WDKContentRoot)CodeAnalysis\DriverMustFixRules.ruleset</CodeAnalysisRuleSet>
-    <IntDir>amd64\$(ConfigurationName)\</IntDir>
-    <OutDir>amd64\$(ConfigurationName)\</OutDir>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
-    <RunCodeAnalysis>true</RunCodeAnalysis>
-    <CodeAnalysisRuleSet>$(WDKContentRoot)CodeAnalysis\DriverMustFixRules.ruleset</CodeAnalysisRuleSet>
-    <IntDir>arm64\$(ConfigurationName)\</IntDir>
-    <OutDir>arm64\$(ConfigurationName)\</OutDir>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <RunCodeAnalysis>true</RunCodeAnalysis>
-    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
-    <IntDir>amd64\$(ConfigurationName)\</IntDir>
-    <OutDir>amd64\$(ConfigurationName)\</OutDir>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
-    <RunCodeAnalysis>true</RunCodeAnalysis>
-    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
-    <IntDir>arm64\$(ConfigurationName)\</IntDir>
-    <OutDir>arm64\$(ConfigurationName)\</OutDir>
-  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'" />
   <ItemDefinitionGroup>
     <ClCompile>
       <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_STR="$(WintunVersionStr)";NDIS_MINIPORT_DRIVER=1;NDIS620_MINIPORT=1;NDIS630_MINIPORT=1;NDIS_WDM=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -164,7 +140,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
     <Inf>
-      <TimeStamp>$(WintunVersionMaj).$(WintunVersionMin)</TimeStamp>
+      <TimeStamp>$(WintunVersion)</TimeStamp>
     </Inf>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">

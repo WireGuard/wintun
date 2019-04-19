@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: MIT
+
+  Copyright (C) 2019 WireGuard LLC. All Rights Reserved.
+-->
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <WintunVersionMaj>0</WintunVersionMaj>
+    <WintunVersionMin>1</WintunVersionMin>
+    <WintunVersionStr>0.1</WintunVersionStr><!-- Used in filenames and ProductVersion resource string, may contain strings. -->
+    <WintunVersion>$(WintunVersionMaj).$(WintunVersionMin)</WintunVersion><!-- Used for versioning, must be n.n[.n[.n]]. -->
+
+    <!-- .vcxproj and .wixproj are using different platform names. -->
+    <WintunPlatform Condition="'$(Platform)'=='x86'">x86</WintunPlatform>
+    <WintunPlatform Condition="'$(Platform)'=='Win32'">x86</WintunPlatform>
+    <WintunPlatform Condition="'$(Platform)'=='x64'">amd64</WintunPlatform>
+    <WintunPlatform Condition="'$(Platform)'=='ARM64'">arm64</WintunPlatform>
+
+    <DistributionDir>dist\</DistributionDir>
+    <SDVDir>sdv\</SDVDir>
+  </PropertyGroup>
+</Project>

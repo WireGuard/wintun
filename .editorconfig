@@ -1,2 +1,6 @@
-[*.{c,h,inf}]
+[*.{c,h,inf,rc,wxs}]
 indent_style = tab
+
+[*.{proj,props,vcxproj,wixproj}]
+indent_style = space
+indent_size = 2
