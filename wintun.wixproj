@@ -26,9 +26,8 @@
     <OutputName>$(ProjectName)</OutputName>
     <DefineConstants>WINTUN_VERSION=$(WintunVersion);$(DefineConstants)</DefineConstants>
     <SuppressSpecificWarnings>1006;1086;$(SuppressSpecificWarnings)</SuppressSpecificWarnings>
-    <CompilerAdditionalOptions>-ext WixDifxAppExtension -ext WixIIsExtension $(CompilerAdditionalOptions)</CompilerAdditionalOptions>
     <LinkerSuppressSpecificWarnings>1103;$(LinkerSuppressSpecificWarnings)</LinkerSuppressSpecificWarnings>
-    <LinkerAdditionalOptions>-ext WixDifxAppExtension -ext WixIIsExtension -b output_dir="$(IntermediateOutputPath.TrimEnd('\'))" $(LinkerAdditionalOptions)</LinkerAdditionalOptions>
+    <LinkerAdditionalOptions>-b output_dir="$(IntermediateOutputPath.TrimEnd('\'))" $(LinkerAdditionalOptions)</LinkerAdditionalOptions>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <SuppressPdbOutput>true</SuppressPdbOutput>
@@ -40,7 +39,20 @@
     <Compile Include="wintun.wxs"/>
   </ItemGroup>
   <ItemGroup>
-    <WixLibrary Include="difxapp_$(Platform).wixlib"/>
+    <WixExtension Include="WixDifxAppExtension">
+      <HintPath>$(WixExtDir)\WixDifxAppExtension.dll</HintPath>
+      <Name>WixDifxAppExtension</Name>
+    </WixExtension>
+    <WixExtension Include="WixIIsExtension">
+      <HintPath>$(WixExtDir)\WixIIsExtension.dll</HintPath>
+      <Name>WixIIsExtension</Name>
+    </WixExtension>
+  </ItemGroup>
+  <ItemGroup>
+    <WixLibrary Include="difxapp_$(Platform).wixlib">
+      <HintPath>$(WixExtDir)\difxapp_$(Platform).wixlib</HintPath>
+      <Name>difxapp</Name>
+    </WixLibrary>
   </ItemGroup>
 
   <Import Project="$(MSBuildProjectName).user" Condition="exists('$(MSBuildProjectName).user')"/>
