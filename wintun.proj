@@ -48,7 +48,7 @@
   -->
   <Target Name="Driver"
     Outputs="$(OutputDir)wintun\wintun.sys;$(OutputDir)wintun\wintun.inf;$(OutputDir)wintun\wintun.cat"
-    Inputs="wintun.c;wintun.vcxproj">
+    Inputs="wintun.c;wintun.inf;wintun.props;wintun.rc;wintun.vcxproj">
     <MSBuild
       Projects="wintun.vcxproj"
       Targets="Build"
