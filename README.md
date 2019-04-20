@@ -34,7 +34,7 @@ If you already have `wintun.vcxproj.user` file, just add the `<PropertyGroup>` s
 
 ## Building from Command Line
 
-Open _Developer Command Prompt for VS 2017_ and use the `nmake` command:
+Open _Developer Command Prompt for VS 2017_ and use the `msbuild` command:
 
 ```
 msbuild wintun.proj [/t:<target>] [/p:Configuration=<configuration>] [/p:Platform=<platform>]
@@ -48,9 +48,9 @@ msbuild wintun.proj [/t:<target>] [/p:Configuration=<configuration>] [/p:Platfor
 
   - `Rebuild`: Alias for `Clean` followed by `Build`.
 
-  - `SDV`: Runs Static Driver Verifier, which includes a clean driver build. Release configurations only.
+  - `SDV`: Runs Static Driver Verifier, which includes a clean driver build, only for release configurations.
 
-  - `DVL`: Runs the `SDV`, and creates a Driver Verification Log in `wintun.DVL.XML` file. Release configurations only. When you are ready to test your driver using the Windows Hardware Certification Kit (HCK), you need to copy the `wintun.DVL.XML` file to the `%SystemDrive%\DVL` directory on the test computer.
+  - `DVL`: Runs the `SDV`, and creates a Driver Verification Log, only for release configurations.
 
   - `MSM`: Builds Microsoft Installer Merge Module in `<output folder>\wintun-<platform>-<version>.msm`.
 
