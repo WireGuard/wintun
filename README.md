@@ -37,24 +37,24 @@ If you already have `wintun.vcxproj.user` file, just add the `<PropertyGroup>` s
 Open _Developer Command Prompt for VS 2017_ and use the `msbuild` command:
 
 ```
-msbuild wintun.proj [/t:<target>] [/p:Configuration=<configuration>] [/p:Platform=<platform>]
+msbuild wintun.proj [/t:<target>]
 ```
 
 ### Targets
 
-  - `Build`: Builds the driver. This is the default target.
+  - `Build`: Builds the driver release configurations of all supported platforms. This is the default target.
 
   - `Clean`: Deletes all intermediate and output files.
 
   - `Rebuild`: Alias for `Clean` followed by `Build`.
 
-  - `SDV`: Runs Static Driver Verifier, which includes a clean driver build, only for release configurations.
+  - `SDV`: Runs Static Driver Verifier, which includes a clean driver build, only for AMD64 release configuration.
 
-  - `DVL`: Runs the `SDV`, and creates a Driver Verification Log, only for release configurations.
+  - `DVL`: Runs the `SDV`, and creates a Driver Verification Log, only for AMD64 release configurations.
 
-  - `MSM`: Builds Microsoft Installer Merge Module in `<output folder>\wintun-<platform>-<version>.msm`.
+  - `MSM`: Builds Microsoft Installer Merge Modules in `<output folder>\wintun-<platform>-<version>.msm`.
 
-The driver output folder is:
+The driver output folders are:
 
 Platform and Configuration | Folder
 -------------------------- | --------------------
@@ -64,14 +64,6 @@ AMD64 Debug                | `amd64\Debug\wintun`
 AMD64 Release              | `amd64\Release\wintun`
 ARM64 Debug                | `arm64\Debug\wintun`
 ARM64 Release              | `arm64\Release\wintun`
-
-### Properties
-
-Properties may be defined as environment variables, or specified on the `msbuild` command line.
-
-  - `Configuration`: Specifies configuration to build or clean. May be `Debug` or `Release` (default).
-
-  - `Platform`: Specifies driver platform to build. May be `x86` or `amd64` (default), or `arm64`.
 
 
 ## Usage
