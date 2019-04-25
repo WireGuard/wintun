@@ -23,6 +23,7 @@ If you possess an EV certificate for kernel mode code signing you should switch 
     <SignMode>ProductionSign</SignMode>
     <CrossCertificateFile>$(WDKContentRoot)CrossCertificates\DigiCert_High_Assurance_EV_Root_CA.crt</CrossCertificateFile>
     <ProductionCertificate>CN=WireGuard LLC, O=WireGuard LLC, L=Boulder, S=Colorado, C=US, SERIALNUMBER=4227913, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=Ohio, OID.1.3.6.1.4.1.311.60.2.1.3=US | DF98E075A012ED8C86FBCF14854B8F9555CB3D45</ProductionCertificate>
+    <TimestampServer>http://timestamp.digicert.com</TimestampServer>
   </PropertyGroup>
 </Project>
 ```
