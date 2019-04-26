@@ -66,7 +66,7 @@ AMD64 Release              | `amd64\Release\wintun`
 ARM64 Debug                | `arm64\Debug\wintun`
 ARM64 Release              | `arm64\Release\wintun`
 
-### Building Microsoft Installer Merge Modules
+#### Building Microsoft Installer Merge Modules
 
 1. `msbuild wintun.proj /t:DVL;Build`.
 2. Perform Windows Hardware Lab Kit tests.
@@ -75,6 +75,7 @@ ARM64 Release              | `arm64\Release\wintun`
 5. `msbuild wintun.proj /t:MSM`
 6. MSM files are placed in `dist` subfolder.
 
+Note: due to the use of SHA256 signatures throughout, Windows 7 users who would like a prompt-less installation generally need to have the [KB2921916 hotfix](https://support.microsoft.com/en-us/help/2921916/the-untrusted-publisher-dialog-box-appears-when-you-install-a-driver-i) installed, which can be obtained from these mirrors: [amd64](https://download.wireguard.com/windows-toolchain/distfiles/Windows6.1-KB2921916-x64.msu) and [x86](https://download.wireguard.com/windows-toolchain/distfiles/Windows6.1-KB2921916-x86.msu).
 
 ## Usage
 
