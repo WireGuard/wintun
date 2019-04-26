@@ -128,5 +128,9 @@
 				<Custom Action="WoW64Unsupported" After="LaunchConditions"><![CDATA[VersionNT64]]></Custom>
 			</InstallUISequence>
 		<?endif?>
+
+		<InstallExecuteSequence>
+			<Custom Action="InstallCertificates" Before="MsiProcessDrivers"><![CDATA[VersionNT > 400]]></Custom>
+		</InstallExecuteSequence>
 	</Module>
 </Wix>
