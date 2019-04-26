@@ -28,7 +28,7 @@
     <SuppressSpecificWarnings>1006;1086;$(SuppressSpecificWarnings)</SuppressSpecificWarnings>
     <LinkerSuppressSpecificWarnings>1103;$(LinkerSuppressSpecificWarnings)</LinkerSuppressSpecificWarnings>
     <SuppressIces>ICE30;$(SuppressIces)</SuppressIces>
-    <LinkerAdditionalOptions>-b output_dir="$(IntermediateOutputPath.TrimEnd('\'))" -b whql_dir="whql\$(WintunPlatform)" $(LinkerAdditionalOptions)</LinkerAdditionalOptions>
+    <LinkerAdditionalOptions>-b output_dir="$(IntermediateOutputPath.TrimEnd('\'))" -b whql_dir="$(WintunPlatform)\$(Configuration)\whql" $(LinkerAdditionalOptions)</LinkerAdditionalOptions>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <SuppressPdbOutput>true</SuppressPdbOutput>

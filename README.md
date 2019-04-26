@@ -71,7 +71,7 @@ ARM64 Release              | `arm64\Release\wintun`
 1. `msbuild wintun.proj /t:DVL;Build`.
 2. Perform Windows Hardware Lab Kit tests.
 3. Submit submission package to Microsoft.
-4. Copy WHQL-signed driver to `whql\x86` and `whql\amd64` subfolders.
+4. Copy WHQL-signed driver to `x86\Release\whql\` and `amd64\Release\whql\` subfolders.
 5. `msbuild wintun.proj /t:MSM`
 6. MSM files are placed in `dist` subfolder.
 

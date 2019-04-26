@@ -18,7 +18,3 @@
 
 # Driver Verification Log
 /wintun.DVL.XML
-
-# WHQL Driver
-/whql/x86
-/whql/amd64
