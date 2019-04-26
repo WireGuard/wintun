@@ -36,7 +36,7 @@
 					<File
 						Id="wintun.cat.whql"
 						Name="wintun.cat"
-						Source="!(bindpath.whwl_dir)wintun.cat"
+						Source="!(bindpath.whql_dir)wintun.cat"
 						DefaultVersion="$(var.WINTUN_VERSION)"
 						DefaultLanguage="0"/>
 					<diffx:Driver
@@ -77,7 +77,7 @@
 					<File
 						Id="wintun.sys.whql"
 						Name="wintun.sys"
-						Source="!(bindpath.whwl_dir)wintun.sys"
+						Source="!(bindpath.whql_dir)wintun.sys"
 						DefaultVersion="$(var.WINTUN_VERSION)"
 						DefaultLanguage="0"/>
 				</Component>

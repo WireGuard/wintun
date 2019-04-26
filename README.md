@@ -53,7 +53,7 @@ msbuild wintun.proj [/t:<target>]
 
   - `DVL`: Runs the `SDV`, and creates a Driver Verification Log, only for AMD64 release configurations.
 
-  - `MSM`: Builds Microsoft Installer Merge Modules in `<output folder>\wintun-<platform>-<version>.msm`. Requires WHLK signed driver (See: [Building Microsoft Installer Merge Modules]).
+  - `MSM`: Builds Microsoft Installer Merge Modules in `<output folder>\wintun-<platform>-<version>.msm`. Requires WHQL signed driver.
 
 The driver output folders are:
 
@@ -68,11 +68,12 @@ ARM64 Release              | `arm64\Release\wintun`
 
 ### Building Microsoft Installer Merge Modules
 
-1. `msbuild wintun.proj /t:DVL;Build`
-2. Perform Windows Hardware Lab Kit tests; Submit submission package to Microsoft; Get WHQL signed driver.
-3. Copy WHQL signed driver to `whql\x86` and `whql\amd64` subfolders.
-4. `msbuild wintun.proj /t:MSM`
-5. MSM files are placed in `dist` subfolder.
+1. `msbuild wintun.proj /t:DVL;Build`.
+2. Perform Windows Hardware Lab Kit tests.
+3. Submit submission package to Microsoft.
+4. Copy WHQL-signed driver to `whql\x86` and `whql\amd64` subfolders.
+5. `msbuild wintun.proj /t:MSM`
+6. MSM files are placed in `dist` subfolder.
 
 
 ## Usage
