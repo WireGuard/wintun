@@ -86,5 +86,18 @@
 		<InstallUISequence>
 			<Custom Action="WintunFolder" Before="CostInitialize"/>
 		</InstallUISequence>
+
+		<!--
+			Prevent WoW64 installations.
+		-->
+		<?if $(var.Platform) = x86?>
+			<CustomAction Id="WoW64Unsupported" Error="You are attempting to install the 32-bit variant of [ProductName] on a 64-bit operating system. 32-bit variant will not work with your operating system. The installation of the 64-bit variant is recommended."/>
+			<InstallExecuteSequence>
+				<Custom Action="WoW64Unsupported" After="LaunchConditions"><![CDATA[VersionNT64]]></Custom>
+			</InstallExecuteSequence>
+			<InstallUISequence>
+				<Custom Action="WoW64Unsupported" After="LaunchConditions"><![CDATA[VersionNT64]]></Custom>
+			</InstallUISequence>
+		<?endif?>
 	</Module>
 </Wix>
