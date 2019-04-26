@@ -27,7 +27,8 @@
     <DefineConstants>WINTUN_VERSION=$(WintunVersion);$(DefineConstants)</DefineConstants>
     <SuppressSpecificWarnings>1006;1086;$(SuppressSpecificWarnings)</SuppressSpecificWarnings>
     <LinkerSuppressSpecificWarnings>1103;$(LinkerSuppressSpecificWarnings)</LinkerSuppressSpecificWarnings>
-    <LinkerAdditionalOptions>-b output_dir="$(IntermediateOutputPath.TrimEnd('\'))" $(LinkerAdditionalOptions)</LinkerAdditionalOptions>
+    <SuppressIces>ICE30;$(SuppressIces)</SuppressIces>
+    <LinkerAdditionalOptions>-b output_dir="$(IntermediateOutputPath.TrimEnd('\'))" -b whwl_dir="whql\$(WintunPlatform)" $(LinkerAdditionalOptions)</LinkerAdditionalOptions>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <SuppressPdbOutput>true</SuppressPdbOutput>

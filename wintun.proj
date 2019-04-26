@@ -63,10 +63,10 @@
   <!--
     MSM Building
   -->
-  <Target Name="MSM-x86" DependsOnTargets="Build" Outputs="$(DistributionDir)wintun-x86-$(WintunVersionStr).msm">
+  <Target Name="MSM-x86" Outputs="$(DistributionDir)wintun-x86-$(WintunVersionStr).msm">
     <MSBuild Projects="wintun.wixproj" Targets="Build" Properties="Configuration=Release;Platform=x86"/>
   </Target>
-  <Target Name="MSM-amd64" DependsOnTargets="Build" Outputs="$(DistributionDir)wintun-amd64-$(WintunVersionStr).msm">
+  <Target Name="MSM-amd64" Outputs="$(DistributionDir)wintun-amd64-$(WintunVersionStr).msm">
     <MSBuild Projects="wintun.wixproj" Targets="Build" Properties="Configuration=Release;Platform=x64"/>
   </Target>
 </Project>

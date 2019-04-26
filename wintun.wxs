@@ -25,9 +25,26 @@
 
 		<Binary Id="wintun.cer" SourceFile="!(bindpath.output_dir)wintun.cer"/>
 
+		<Property Id="WINDOWS10_VER_MAJ">
+			<RegistrySearch Id="Windows10VersionMaj" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion" Name="CurrentMajorVersionNumber" Type="raw"/>
+		</Property>
+
 		<Directory Id="TARGETDIR" Name="SourceDir">
 			<Directory Id="WintunFolder">
+				<Component Id="wintun.cat.whql" Guid="2f17bc6d-0006-47c4-8ba3-f055d1852558">
+					<Condition><![CDATA[WINDOWS10_VER_MAJ]]></Condition>
+					<File
+						Id="wintun.cat.whql"
+						Name="wintun.cat"
+						Source="!(bindpath.whwl_dir)wintun.cat"
+						DefaultVersion="$(var.WINTUN_VERSION)"
+						DefaultLanguage="0"/>
+					<diffx:Driver
+						AddRemovePrograms="no"
+						PlugAndPlayPrompt="no"/>
+				</Component>
 				<Component Id="wintun.cat" Guid="41fbe711-a1af-4b83-8b5d-fc1b112969c1">
+					<Condition><![CDATA[NOT WINDOWS10_VER_MAJ]]></Condition>
 					<File
 						Id="wintun.cat"
 						Name="wintun.cat"
@@ -45,6 +62,7 @@
 						AddRemovePrograms="no"
 						PlugAndPlayPrompt="no"/>
 				</Component>
+
 				<Component Id="wintun.inf" Guid="c58122b3-c7ba-4207-b68d-a236e371f9ed">
 					<File
 						Id="wintun.inf"
@@ -53,7 +71,18 @@
 						DefaultVersion="$(var.WINTUN_VERSION)"
 						DefaultLanguage="0"/>
 				</Component>
+
+				<Component Id="wintun.sys.whql" Guid="039baa6d-b16b-4dc2-8b86-8bb500f78de0">
+					<Condition><![CDATA[WINDOWS10_VER_MAJ]]></Condition>
+					<File
+						Id="wintun.sys.whql"
+						Name="wintun.sys"
+						Source="!(bindpath.whwl_dir)wintun.sys"
+						DefaultVersion="$(var.WINTUN_VERSION)"
+						DefaultLanguage="0"/>
+				</Component>
 				<Component Id="wintun.sys" Guid="d0fde4a4-d228-4803-b57e-76bd8b16cf42">
+					<Condition><![CDATA[NOT WINDOWS10_VER_MAJ]]></Condition>
 					<File
 						Id="wintun.sys"
 						Name="wintun.sys"
