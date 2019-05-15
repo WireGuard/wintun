@@ -99,7 +99,7 @@ After loading the driver and creating a network interface the typical way using 
 |                              |
 +------------------------------+
 | padding                      |
-|   16-((4+size_0)&15) bytes,  |
+|   16-(size_0&15) bytes,      |
 |   all zero                   |
 +------------------------------+
 | size_1                       |
