@@ -53,6 +53,7 @@ typedef struct _TUN_CTX {
 	volatile TUN_STATE State;
 
 	volatile NDIS_DEVICE_POWER_STATE PowerState;
+	EX_SPIN_LOCK TransitionLock;
 
 	NDIS_HANDLE MiniportAdapterHandle;
 	NDIS_STATISTICS_INFO Statistics;
@@ -148,13 +149,15 @@ static void TunCompleteRequest(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp, _In_ ULON
 
 _IRQL_requires_same_
 _Must_inspect_result_
+_Requires_lock_held_(ctx->TransitionLock)
 static NTSTATUS TunCheckForPause(_Inout_ TUN_CTX *ctx)
 {
 	ASSERT(InterlockedGet64(&ctx->ActiveTransactionCount) < MAXLONG64);
 	InterlockedIncrement64(&ctx->ActiveTransactionCount);
 	return
-		InterlockedGet((LONG *)&ctx->State)      != TUN_STATE_RUNNING ? STATUS_NDIS_PAUSED :
-		InterlockedGet((LONG *)&ctx->PowerState) >= NdisDeviceStateD1 ? STATUS_NDIS_LOW_POWER_STATE :
+		InterlockedGet64(&ctx->Device.RefCount)    <= 0                 ? NDIS_STATUS_SEND_ABORTED :
+		InterlockedGet  ((LONG *)&ctx->State)      != TUN_STATE_RUNNING ? STATUS_NDIS_PAUSED :
+		InterlockedGet  ((LONG *)&ctx->PowerState) >= NdisDeviceStateD1 ? STATUS_NDIS_LOW_POWER_STATE :
 		STATUS_SUCCESS;
 }
 
@@ -481,13 +484,13 @@ static void TunQueuePrepend(_Inout_ TUN_CTX *ctx, _In_ NET_BUFFER *nb, _In_ NET_
 
 _Requires_lock_not_held_(ctx->PacketQueue.Lock)
 _IRQL_requires_max_(DISPATCH_LEVEL)
-static void TunQueueClear(_Inout_ TUN_CTX *ctx)
+static void TunQueueClear(_Inout_ TUN_CTX *ctx, _In_ NDIS_STATUS status)
 {
 	KLOCK_QUEUE_HANDLE lqh;
 	KeAcquireInStackQueuedSpinLock(&ctx->PacketQueue.Lock, &lqh);
 	for (NET_BUFFER_LIST *nbl = ctx->PacketQueue.FirstNbl, *nbl_next; nbl; nbl = nbl_next) {
 		nbl_next = NET_BUFFER_LIST_NEXT_NBL(nbl);
-		NET_BUFFER_LIST_STATUS(nbl) = STATUS_NDIS_PAUSED;
+		NET_BUFFER_LIST_STATUS(nbl) = status;
 		TunNBLRefDec(ctx, nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
 	}
 	ctx->PacketQueue.FirstNbl = NULL;
@@ -569,7 +572,9 @@ _IRQL_requires_max_(DISPATCH_LEVEL)
 _Must_inspect_result_
 static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 {
-	NTSTATUS status = STATUS_SUCCESS;
+	NTSTATUS status;
+
+	KIRQL irql = ExAcquireSpinLockShared(&ctx->TransitionLock);
 
 	if (!NT_SUCCESS(status = TunCheckForPause(ctx)))
 		goto cleanup_TunCompletePause;
@@ -684,6 +689,7 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 
 cleanup_TunCompletePause:
 	TunCompletePause(ctx, TRUE);
+	ExReleaseSpinLockShared(&ctx->TransitionLock, irql);
 	return status;
 }
 
@@ -692,6 +698,7 @@ _Use_decl_annotations_
 static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 {
 	NTSTATUS status;
+	KIRQL irql;
 
 	Irp->IoStatus.Information = 0;
 
@@ -727,18 +734,25 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 			!NT_SUCCESS(status = IoAcquireRemoveLock(&ctx->Device.RemoveLock, Irp)))
 			goto cleanup_complete_req;
 
+		irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
 		ASSERT(InterlockedGet64(&ctx->Device.RefCount) < MAXLONG64);
 		if (InterlockedIncrement64(&ctx->Device.RefCount) > 0)
 			TunIndicateStatus(ctx->MiniportAdapterHandle, MediaConnectStateConnected);
+		ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
 
 		IoAcquireRemoveLock(&ctx->Device.RemoveLock, stack->FileObject);
 		status = STATUS_SUCCESS;
 		goto cleanup_complete_req_and_release_remove_lock;
 
 	case IRP_MJ_CLOSE:
+		irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
 		ASSERT(InterlockedGet64(&ctx->Device.RefCount) > 0);
-		if (InterlockedDecrement64(&ctx->Device.RefCount) <= 0 && ctx->MiniportAdapterHandle)
-			TunIndicateStatus(ctx->MiniportAdapterHandle, MediaConnectStateDisconnected);
+		if (InterlockedDecrement64(&ctx->Device.RefCount) <= 0) {
+			if (ctx->MiniportAdapterHandle)
+				TunIndicateStatus(ctx->MiniportAdapterHandle, MediaConnectStateDisconnected);
+			TunQueueClear(ctx, NDIS_STATUS_SEND_ABORTED);
+		}
+		ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
 
 		IoReleaseRemoveLock(&ctx->Device.RemoveLock, stack->FileObject);
 		status = STATUS_SUCCESS;
@@ -774,9 +788,10 @@ static NDIS_STATUS TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_P
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
+	KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
 	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_PAUSING);
-
-	TunQueueClear(ctx);
+	ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
+	TunQueueClear(ctx, STATUS_NDIS_PAUSED);
 
 	return TunCompletePause(ctx, FALSE);
 }
@@ -787,11 +802,12 @@ static NDIS_STATUS TunRestart(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
+	KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
 	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_RESTARTING);
-
 	InterlockedExchange64(&ctx->ActiveTransactionCount, 1);
-
 	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_RUNNING);
+	ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
+
 	return NDIS_STATUS_SUCCESS;
 }
 
@@ -979,7 +995,7 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 		.PoolTag            = TUN_MEMORY_TAG
 	};
 	#pragma warning(suppress: 6014) /* Leaking memory 'ctx->NBLPool'. Note: 'ctx->NBLPool' is freed in TunHaltEx; or freed on failure. */
-	ctx->NBLPool = NdisAllocateNetBufferListPool(MiniportAdapterHandle, &nbl_pool_param); 
+	ctx->NBLPool = NdisAllocateNetBufferListPool(MiniportAdapterHandle, &nbl_pool_param);
 	if (!ctx->NBLPool) {
 		status = NDIS_STATUS_FAILURE;
 		goto cleanup_NdisDeregisterDeviceEx;
@@ -1158,7 +1174,13 @@ static NDIS_STATUS TunOidSet(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *Oid
 			return NDIS_STATUS_INVALID_LENGTH;
 		}
 		OidRequest->DATA.SET_INFORMATION.BytesRead = sizeof(NDIS_DEVICE_POWER_STATE);
-		InterlockedExchange((LONG *)&ctx->PowerState, *((NDIS_DEVICE_POWER_STATE *)OidRequest->DATA.SET_INFORMATION.InformationBuffer));
+
+		KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
+		NDIS_DEVICE_POWER_STATE state = *(NDIS_DEVICE_POWER_STATE *)OidRequest->DATA.SET_INFORMATION.InformationBuffer;
+		if (InterlockedExchange((LONG *)&ctx->PowerState, state) == NdisDeviceStateD0 && state >= NdisDeviceStateD1)
+			TunQueueClear(ctx, STATUS_NDIS_LOW_POWER_STATE);
+		ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
+
 		return NDIS_STATUS_SUCCESS;
 	}
 
@@ -1322,6 +1344,8 @@ static void TunSendNetBufferLists(NDIS_HANDLE MiniportAdapterContext, NET_BUFFER
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
+	KIRQL irql = ExAcquireSpinLockShared(&ctx->TransitionLock);
+
 	NDIS_STATUS status;
 	if (!NT_SUCCESS(status = TunCheckForPause(ctx))) {
 		TunSetNBLStatus(NetBufferLists, status);
@@ -1330,10 +1354,12 @@ static void TunSendNetBufferLists(NDIS_HANDLE MiniportAdapterContext, NET_BUFFER
 	}
 
 	TunQueueAppend(ctx, NetBufferLists, TUN_QUEUE_MAX_NBLS);
+
 	TunQueueProcess(ctx);
 
 cleanup_TunCompletePause:
 	TunCompletePause(ctx, TRUE);
+	ExReleaseSpinLockShared(&ctx->TransitionLock, irql);
 }
 
 DRIVER_INITIALIZE DriverEntry;
