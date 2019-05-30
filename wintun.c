@@ -6,8 +6,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <wdm.h>
+#include <wdmguid.h>
 #include <wdmsec.h>
 #include <ndis.h>
+#include <ndisguid.h>
 #include <bcrypt.h>
 #include <ntstrsafe.h>
 
@@ -51,7 +53,6 @@ typedef enum _TUN_STATE {
 
 typedef struct _TUN_CTX {
 	volatile TUN_STATE State;
-
 	volatile NDIS_DEVICE_POWER_STATE PowerState;
 	EX_SPIN_LOCK TransitionLock;
 
@@ -59,6 +60,11 @@ typedef struct _TUN_CTX {
 	NDIS_STATISTICS_INFO Statistics;
 
 	volatile LONG64 ActiveTransactionCount;
+
+	volatile struct {
+		FILE_OBJECT *FileObject;
+		PVOID Handle;
+	} PnPNotifications;
 
 	struct {
 		NDIS_HANDLE Handle;
@@ -83,7 +89,8 @@ typedef struct _TUN_CTX {
 } TUN_CTX;
 
 static UINT NdisVersion;
-static NDIS_HANDLE NdisMiniportDriverHandle = NULL;
+static PVOID TunNotifyInterfaceChangeHandle;
+static NDIS_HANDLE NdisMiniportDriverHandle;
 
 #if REG_DWORD == REG_DWORD_BIG_ENDIAN
 #define TUN_MEMORY_TAG  'wtun'
@@ -693,6 +700,11 @@ cleanup_TunCompletePause:
 	return status;
 }
 
+static void TunForceHandlesClosed(TUN_CTX *ctx)
+{
+	//TODO: implement me! Very important!
+}
+
 static DRIVER_DISPATCH TunDispatch;
 _Use_decl_annotations_
 static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
@@ -734,13 +746,15 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 			!NT_SUCCESS(status = IoAcquireRemoveLock(&ctx->Device.RemoveLock, Irp)))
 			goto cleanup_complete_req;
 
+		if (!NT_SUCCESS(status = IoAcquireRemoveLock(&ctx->Device.RemoveLock, stack->FileObject)))
+			goto cleanup_complete_req_and_release_remove_lock;
+
 		irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
 		ASSERT(InterlockedGet64(&ctx->Device.RefCount) < MAXLONG64);
 		if (InterlockedIncrement64(&ctx->Device.RefCount) > 0)
 			TunIndicateStatus(ctx->MiniportAdapterHandle, MediaConnectStateConnected);
 		ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
 
-		IoAcquireRemoveLock(&ctx->Device.RemoveLock, stack->FileObject);
 		status = STATUS_SUCCESS;
 		goto cleanup_complete_req_and_release_remove_lock;
 
@@ -753,8 +767,8 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 			TunQueueClear(ctx, NDIS_STATUS_SEND_ABORTED);
 		}
 		ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
-
 		IoReleaseRemoveLock(&ctx->Device.RemoveLock, stack->FileObject);
+
 		status = STATUS_SUCCESS;
 		goto cleanup_complete_req;
 
@@ -874,6 +888,81 @@ static void TunCancelOidRequest(NDIS_HANDLE MiniportAdapterContext, PVOID Reques
 {
 }
 
+static DRIVER_NOTIFICATION_CALLBACK_ROUTINE TunPnPNotifyDeviceChange;
+_Use_decl_annotations_
+static NTSTATUS TunPnPNotifyDeviceChange(PVOID NotificationStruct, PVOID Context)
+{
+	TARGET_DEVICE_REMOVAL_NOTIFICATION *notification = NotificationStruct;
+	TUN_CTX *ctx = Context;
+
+	if (!ctx)
+		return STATUS_SUCCESS;
+
+	if (IsEqualGUID(&notification->Event, &GUID_TARGET_DEVICE_QUERY_REMOVE)) {
+		KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
+		InterlockedExchange((LONG *)&ctx->State, TUN_STATE_PAUSING);
+		ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
+		/* The entire purpose of this PnP notification infrastructure is so that we can get here.
+		 * The idea is that if there are un-returned NBLs, TunPause&TunHalt will never be called.
+		 * So we clear them here after setting the paused state, which then frees up NDIS to do
+		 * the right thing later on in the shutdown procedure. */
+		TunQueueClear(ctx, STATUS_NDIS_REQUEST_ABORTED);
+		FILE_OBJECT *file = ctx->PnPNotifications.FileObject;
+		ctx->PnPNotifications.FileObject = NULL;
+		if (file)
+			ObDereferenceObject(file);
+	} else if (IsEqualGUID(&notification->Event, &GUID_TARGET_DEVICE_REMOVE_COMPLETE) ||
+		IsEqualGUID(&notification->Event, &GUID_TARGET_DEVICE_REMOVE_CANCELLED)) {
+		PVOID handle = ctx->PnPNotifications.Handle;
+		/* We unregister in the cancelled case too, because the initial remove request puts us
+		 * in pausing state, so we won't pile up any further NBLs. */
+		ctx->PnPNotifications.Handle = NULL;
+		if (handle)
+			IoUnregisterPlugPlayNotificationEx(handle);
+	}
+
+	return STATUS_SUCCESS;
+}
+
+static DRIVER_NOTIFICATION_CALLBACK_ROUTINE TunPnPNotifyInterfaceChange;
+_Use_decl_annotations_
+static NTSTATUS TunPnPNotifyInterfaceChange(PVOID NotificationStruct, PVOID Context)
+{
+	DEVICE_INTERFACE_CHANGE_NOTIFICATION *notification = NotificationStruct;
+	DRIVER_OBJECT *driver_object = (DRIVER_OBJECT *)Context;
+	DEVICE_OBJECT *device_object;
+	FILE_OBJECT *file_object;
+	TUN_CTX *ctx;
+
+	_Analysis_assume_(driver_object);
+
+	if (!IsEqualGUID(&notification->InterfaceClassGuid, &GUID_DEVINTERFACE_NET) ||
+		!IsEqualGUID(&notification->Event, &GUID_DEVICE_INTERFACE_ARRIVAL))
+		return STATUS_SUCCESS;
+
+	if (!NT_SUCCESS(IoGetDeviceObjectPointer(notification->SymbolicLinkName,
+		STANDARD_RIGHTS_ALL, &file_object, &device_object)))
+		return STATUS_SUCCESS;
+	if (device_object->DriverObject != driver_object) {
+		ObDereferenceObject(file_object);
+		return STATUS_SUCCESS;
+	}
+	#pragma warning(suppress: 28175)
+	ctx = device_object->Reserved;
+
+	ASSERT(!ctx->PnPNotifications.FileObject);
+	ctx->PnPNotifications.FileObject = file_object;
+	ASSERT(!ctx->PnPNotifications.Handle);
+	#pragma warning(suppress: 6014) /* Leaking memory 'ctx->PnPNotifications.Handle'. Note: 'ctx->PnPNotifications.Handle' is unregistered in TunPnPNotifyDeviceChange(GUID_TARGET_DEVICE_REMOVE_COMPLETE/GUID_TARGET_DEVICE_REMOVE_CANCELLED); or on failure. */
+	if (!NT_SUCCESS(IoRegisterPlugPlayNotification(EventCategoryTargetDeviceChange, 0,
+		ctx->PnPNotifications.FileObject, driver_object, TunPnPNotifyDeviceChange,
+		ctx, (PVOID *)&ctx->PnPNotifications.Handle))) {
+		ctx->PnPNotifications.FileObject = NULL;
+		ObDereferenceObject(file_object);
+	}
+	return STATUS_SUCCESS;
+}
+
 static MINIPORT_INITIALIZE TunInitializeEx;
 _Use_decl_annotations_
 static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDLE MiniportDriverContext, PNDIS_MINIPORT_INIT_PARAMETERS MiniportInitParameters)
@@ -930,7 +1019,7 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 	};
 	NDIS_HANDLE handle;
 	DEVICE_OBJECT *object;
-	if (!NT_SUCCESS(NdisRegisterDeviceEx(NdisMiniportDriverHandle, &t, &object, &handle)))
+	if (!NT_SUCCESS(status = NdisRegisterDeviceEx(NdisMiniportDriverHandle, &t, &object, &handle)))
 		return NDIS_STATUS_FAILURE;
 
 	object->Flags &= ~DO_BUFFERED_IO;
@@ -942,9 +1031,17 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 		goto cleanup_NdisDeregisterDeviceEx;
 	}
 
+	DEVICE_OBJECT *functional_device;
+	NdisMGetDeviceProperty(MiniportAdapterHandle, NULL, &functional_device, NULL, NULL, NULL);
+
+	#pragma warning(suppress: 28175)
+	ASSERT(!functional_device->Reserved);
+	#pragma warning(suppress: 28175)
+	functional_device->Reserved = ctx;
+
 	NdisZeroMemory(ctx, sizeof(*ctx));
-	ctx->State                 = TUN_STATE_INITIALIZING;
-	ctx->PowerState            = NdisDeviceStateD0;
+	InterlockedExchange((LONG *)&ctx->State,      TUN_STATE_INITIALIZING);
+	InterlockedExchange((LONG *)&ctx->PowerState, NdisDeviceStateD0);
 	ctx->MiniportAdapterHandle = MiniportAdapterHandle;
 
 	ctx->Statistics.Header.Type         = NDIS_OBJECT_TYPE_DEFAULT;
@@ -994,7 +1091,7 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 		.fAllocateNetBuffer = TRUE,
 		.PoolTag            = TUN_MEMORY_TAG
 	};
-	#pragma warning(suppress: 6014) /* Leaking memory 'ctx->NBLPool'. Note: 'ctx->NBLPool' is freed in TunHaltEx; or freed on failure. */
+	#pragma warning(suppress: 6014) /* Leaking memory 'ctx->NBLPool'. Note: 'ctx->NBLPool' is freed in TunHaltEx; or on failure. */
 	ctx->NBLPool = NdisAllocateNetBufferListPool(MiniportAdapterHandle, &nbl_pool_param);
 	if (!ctx->NBLPool) {
 		status = NDIS_STATUS_FAILURE;
@@ -1097,12 +1194,11 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 	 */
 	TunIndicateStatus(MiniportAdapterHandle, MediaConnectStateDisconnected);
 
-	ctx->State = TUN_STATE_PAUSED;
+	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_PAUSED);
 	return NDIS_STATUS_SUCCESS;
 
 cleanup_NdisFreeNetBufferListPool:
 	NdisFreeNetBufferListPool(ctx->NBLPool);
-	ctx->NBLPool = NULL;
 cleanup_NdisDeregisterDeviceEx:
 	NdisDeregisterDeviceEx(handle);
 	return status;
@@ -1112,6 +1208,7 @@ static MINIPORT_UNLOAD TunUnload;
 _Use_decl_annotations_
 static VOID TunUnload(PDRIVER_OBJECT DriverObject)
 {
+	IoUnregisterPlugPlayNotificationEx(TunNotifyInterfaceChangeHandle);
 	NdisMDeregisterMiniportDriver(NdisMiniportDriverHandle);
 }
 
@@ -1123,21 +1220,31 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 
 	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_HALTING);
 
-	/* Complete pending IRPs to unblock waiting clients. */
+	if (ctx->PnPNotifications.Handle) {
+		PVOID h = ctx->PnPNotifications.Handle;
+		ctx->PnPNotifications.Handle = NULL;
+		IoUnregisterPlugPlayNotificationEx(h);
+	}
+	if (ctx->PnPNotifications.FileObject) {
+		FILE_OBJECT *fo = ctx->PnPNotifications.FileObject;
+		ctx->PnPNotifications.FileObject = NULL;
+		ObDereferenceObject(fo);
+	}
+
 	for (IRP *pending_irp; (pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL)) != NULL;)
 		TunCompleteRequest(ctx, pending_irp, 0, STATUS_FILE_FORCED_CLOSED);
+	TunForceHandlesClosed(ctx);
 
-	NdisFreeNetBufferListPool(ctx->NBLPool);
-	ctx->NBLPool = NULL;
-
-	ctx->MiniportAdapterHandle = NULL;
-
-	/* Wait for all device handles to close. */
-	/* TODO: Research how to close all handles from within the driver, rather than depending on client to close them. */
+	/* Wait for processing IRP(s) to complete. */
 	IoAcquireRemoveLock(&ctx->Device.RemoveLock, NULL);
 	IoReleaseRemoveLockAndWait(&ctx->Device.RemoveLock, NULL);
+	NdisFreeNetBufferListPool(ctx->NBLPool);
 
-	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_HALTED);
+	/* MiniportAdapterHandle must not be used in TunDispatch(). After TunHaltEx() returns it is invalidated. */
+	ctx->MiniportAdapterHandle = NULL;
+
+	InterlockedExchange((LONG *)&ctx->PowerState, NdisDeviceStateUnspecified);
+	InterlockedExchange((LONG *)&ctx->State,      TUN_STATE_HALTED);
 
 	/* Deregister device _after_ we are done writing to ctx not to risk an UaF. The ctx is hosted by device extension. */
 	NdisDeregisterDeviceEx(ctx->Device.Handle);
@@ -1366,11 +1473,18 @@ DRIVER_INITIALIZE DriverEntry;
 _Use_decl_annotations_
 NTSTATUS DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
 {
+	NTSTATUS status;
+
 	NdisVersion = NdisGetVersion();
 	if (NdisVersion < NDIS_RUNTIME_VERSION_620)
 		return NDIS_STATUS_UNSUPPORTED_REVISION;
 	if (NdisVersion > NDIS_RUNTIME_VERSION_630)
 		NdisVersion = NDIS_RUNTIME_VERSION_630;
+
+	if (!NT_SUCCESS(status = IoRegisterPlugPlayNotification(EventCategoryDeviceInterfaceChange, 0,
+		(PVOID)&GUID_DEVINTERFACE_NET, DriverObject, TunPnPNotifyInterfaceChange, DriverObject,
+		&TunNotifyInterfaceChangeHandle)))
+		return status;
 
 	NDIS_MINIPORT_DRIVER_CHARACTERISTICS miniport = {
 		.Header = {
@@ -1400,5 +1514,9 @@ NTSTATUS DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
 		.DirectOidRequestHandler       = TunDirectOidRequest,
 		.CancelDirectOidRequestHandler = TunCancelDirectOidRequest
 	};
-	return NdisMRegisterMiniportDriver(DriverObject, RegistryPath, NULL, &miniport, &NdisMiniportDriverHandle);
+	if (!NT_SUCCESS(status = NdisMRegisterMiniportDriver(DriverObject, RegistryPath, NULL, &miniport, &NdisMiniportDriverHandle))) {
+		IoUnregisterPlugPlayNotificationEx(TunNotifyInterfaceChangeHandle);
+		return status;
+	}
+	return STATUS_SUCCESS;
 }
