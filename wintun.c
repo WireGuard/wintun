@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <ntifs.h>
 #include <wdm.h>
 #include <wdmguid.h>
 #include <wdmsec.h>
@@ -12,6 +13,7 @@
 #include <ndisguid.h>
 #include <bcrypt.h>
 #include <ntstrsafe.h>
+#include "undocumented.h"
 
 #pragma warning(disable : 4100) // unreferenced formal parameter
 #pragma warning(disable : 4200) // nonstandard extension used: zero-sized array in struct/union
@@ -76,6 +78,8 @@ typedef struct _TUN_CTX {
 			IO_CSQ Csq;
 			LIST_ENTRY List;
 		} ReadQueue;
+
+		DEVICE_OBJECT *Object;
 	} Device;
 
 	struct {
@@ -700,9 +704,46 @@ cleanup_TunCompletePause:
 	return status;
 }
 
-static void TunForceHandlesClosed(TUN_CTX *ctx)
+_IRQL_requires_max_(PASSIVE_LEVEL)
+static void TunForceHandlesClosed(_Inout_ TUN_CTX *ctx)
 {
-	//TODO: implement me! Very important!
+	NTSTATUS status;
+	PEPROCESS process;
+	KAPC_STATE apc_state;
+	PVOID object;
+	OBJECT_HANDLE_INFORMATION handle_info;
+	SYSTEM_HANDLE_INFORMATION_EX *table = NULL;
+
+	for (ULONG size = 0, req; (status = ZwQuerySystemInformation(SystemExtendedHandleInformation, table, size, &req)) == STATUS_INFO_LENGTH_MISMATCH; size = req) {
+		if (table)
+			ExFreePoolWithTag(table, TUN_MEMORY_TAG);
+		table = ExAllocatePoolWithTag(PagedPool, req, TUN_MEMORY_TAG);
+		if (!table)
+			return;
+	}
+	if (!NT_SUCCESS(status) || !table)
+		goto out;
+
+	for (ULONG_PTR i = 0; i < table->NumberOfHandles; ++i) {
+		FILE_OBJECT *file = table->Handles[i].Object; //XXX: We should probably first look at table->Handles[i].ObjectTypeIndex, but the value changes lots between NT versions.
+		if (!file || file->Type != 5 || file->DeviceObject != ctx->Device.Object)
+			continue;
+		status = PsLookupProcessByProcessId(table->Handles[i].UniqueProcessId, &process);
+		if (!NT_SUCCESS(status))
+			continue;
+		KeStackAttachProcess(process, &apc_state);
+		status = ObReferenceObjectByHandle(table->Handles[i].HandleValue, 0, NULL, UserMode, &object, &handle_info);
+		if (NT_SUCCESS(status)) {
+			if (object == file)
+				ObCloseHandle(table->Handles[i].HandleValue, UserMode);
+			ObfDereferenceObject(object);
+		}
+		KeUnstackDetachProcess(&apc_state);
+		ObfDereferenceObject(process);
+	}
+out:
+	if (table)
+		ExFreePoolWithTag(table, TUN_MEMORY_TAG);
 }
 
 static DRIVER_DISPATCH TunDispatch;
@@ -974,12 +1015,12 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 
 	/* Register device first.
 	 * Having only one device per adapter allows us to store adapter context inside device extension. */
-	WCHAR device_name[(sizeof(L"\\Device\\" TUN_DEVICE_NAME) + 10/*MAXULONG as string*/) / sizeof(WCHAR)];
+	WCHAR device_name[sizeof(L"\\Device\\" TUN_DEVICE_NAME) / sizeof(WCHAR) + 10/*MAXULONG as string*/] = { 0 };
 	UNICODE_STRING unicode_device_name;
 	TunInitUnicodeString(&unicode_device_name, device_name);
 	RtlUnicodeStringPrintf(&unicode_device_name, L"\\Device\\" TUN_DEVICE_NAME, (ULONG)MiniportInitParameters->NetLuid.Info.NetLuidIndex);
 
-	WCHAR symbolic_name[(sizeof(L"\\DosDevices\\" TUN_DEVICE_NAME) + 10/*MAXULONG as string*/) / sizeof(WCHAR)];
+	WCHAR symbolic_name[sizeof(L"\\DosDevices\\" TUN_DEVICE_NAME) / sizeof(WCHAR) + 10/*MAXULONG as string*/] = { 0 };
 	UNICODE_STRING unicode_symbolic_name;
 	TunInitUnicodeString(&unicode_symbolic_name, symbolic_name);
 	RtlUnicodeStringPrintf(&unicode_symbolic_name, L"\\DosDevices\\" TUN_DEVICE_NAME, (ULONG)MiniportInitParameters->NetLuid.Info.NetLuidIndex);
@@ -1068,6 +1109,7 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 		NDIS_STATISTICS_FLAGS_VALID_BROADCAST_BYTES_XMIT;
 
 	ctx->Device.Handle = handle;
+	ctx->Device.Object = object;
 	IoInitializeRemoveLock(&ctx->Device.RemoveLock, TUN_MEMORY_TAG, 0, 0);
 	KeInitializeSpinLock(&ctx->Device.ReadQueue.Lock);
 	IoCsqInitializeEx(&ctx->Device.ReadQueue.Csq,
@@ -1233,7 +1275,8 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 
 	for (IRP *pending_irp; (pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL)) != NULL;)
 		TunCompleteRequest(ctx, pending_irp, 0, STATUS_FILE_FORCED_CLOSED);
-	TunForceHandlesClosed(ctx);
+	if (InterlockedGet64(&ctx->Device.RefCount))
+		TunForceHandlesClosed(ctx);
 
 	/* Wait for processing IRP(s) to complete. */
 	IoAcquireRemoveLock(&ctx->Device.RemoveLock, NULL);
