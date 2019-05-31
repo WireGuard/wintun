@@ -594,26 +594,30 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 
 	KIRQL irql = ExAcquireSpinLockShared(&ctx->TransitionLock);
 
-	if (!NT_SUCCESS(status = TunCheckForPause(ctx)))
+	if (!NT_SUCCESS(TunCheckForPause(ctx))) {
+		status = STATUS_CANCELLED;
 		goto cleanup_TunCompletePause;
+	}
 
 	UCHAR *buffer;
 	ULONG size;
-	status = TunGetIrpBuffer(Irp, &buffer, &size);
-	if (!NT_SUCCESS(status))
+	if (!NT_SUCCESS(status = TunGetIrpBuffer(Irp, &buffer, &size)))
 		goto cleanup_TunCompletePause;
 
 	const UCHAR *b = buffer, *b_end = buffer + size;
 	ULONG nbl_count = 0;
 	NET_BUFFER_LIST *nbl_head = NULL, *nbl_tail = NULL;
-	LONG64 stat_p_err = 0;
-	while (b < b_end) {
+	while (b + sizeof(TUN_PACKET) <= b_end) {
 		TUN_PACKET *p = (TUN_PACKET *)b;
-		if (p->Size > TUN_EXCH_MAX_IP_PACKET_SIZE)
-			break;
+		if (p->Size > TUN_EXCH_MAX_IP_PACKET_SIZE) {
+			status = STATUS_INVALID_USER_BUFFER;
+			goto cleanup_nbl_head;
+		}
 		UINT p_size = TunPacketAlign(sizeof(TUN_PACKET) + p->Size);
-		if (b + p_size > b_end)
-			break;
+		if (b + p_size > b_end) {
+			status = STATUS_INVALID_USER_BUFFER;
+			goto cleanup_nbl_head;
+		}
 
 		ULONG nbl_flags;
 		USHORT nbl_proto;
@@ -624,16 +628,22 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 			nbl_flags = NDIS_NBL_FLAGS_IS_IPV6;
 			nbl_proto = NDIS_ETH_TYPE_IPV6;
 		} else {
-			goto skip_packet;
+			status = STATUS_INVALID_USER_BUFFER;
+			goto cleanup_nbl_head;
 		}
 
 		MDL *mdl = NdisAllocateMdl(ctx->MiniportAdapterHandle, p->Data, p->Size);
-		if (!mdl)
-			goto skip_packet;
+		if (!mdl) {
+			status = STATUS_INSUFFICIENT_RESOURCES;
+			goto cleanup_nbl_head;
+		}
 
 		NET_BUFFER_LIST *nbl = NdisAllocateNetBufferAndNetBufferList(ctx->NBLPool, 0, 0, mdl, 0, p->Size);
-		if (!nbl)
-			goto cleanup_NdisFreeMdl;
+		if (!nbl) {
+			NdisFreeMdl(mdl);
+			status = STATUS_INSUFFICIENT_RESOURCES;
+			goto cleanup_nbl_head;
+		}
 
 		nbl->SourceHandle = ctx->MiniportAdapterHandle;
 		NdisSetNblFlag(nbl, nbl_flags);
@@ -642,16 +652,14 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 		NET_BUFFER_LIST_IRP(nbl) = Irp;
 		TunAppendNBL(&nbl_head, &nbl_tail, nbl);
 		nbl_count++;
-		goto next_packet;
-
-	cleanup_NdisFreeMdl:
-		NdisFreeMdl(mdl);
-	skip_packet:
-		stat_p_err++;
-	next_packet:
 		b += p_size;
 	}
-	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifInErrors, stat_p_err);
+
+	if ((ULONG)(b - buffer) != size) {
+		status = STATUS_INVALID_USER_BUFFER;
+		goto cleanup_nbl_head;
+	}
+	Irp->IoStatus.Information = size;
 
 	if (!nbl_head) {
 		status = STATUS_SUCCESS;
@@ -665,6 +673,13 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 	ExReleaseSpinLockShared(&ctx->TransitionLock, irql);
 	return STATUS_PENDING;
 
+cleanup_nbl_head:
+	for (NET_BUFFER_LIST *nbl = nbl_head, *nbl_next; nbl; nbl = nbl_next) {
+		nbl_next = NET_BUFFER_LIST_NEXT_NBL(nbl);
+		NET_BUFFER_LIST_NEXT_NBL(nbl) = NULL;
+		NdisFreeMdl(NET_BUFFER_FIRST_MDL(NET_BUFFER_LIST_FIRST_NB(nbl)));
+		NdisFreeNetBufferList(nbl);
+	}
 cleanup_TunCompletePause:
 	TunCompletePause(ctx, TRUE);
 	ExReleaseSpinLockShared(&ctx->TransitionLock, irql);
@@ -858,8 +873,7 @@ static void TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUF
 		NdisFreeNetBufferList(nbl);
 
 		if (InterlockedDecrement64(IRP_REFCOUNT(irp)) <= 0) {
-			IO_STACK_LOCATION *stack = IoGetCurrentIrpStackLocation(irp);
-			TunCompleteRequest(ctx, irp, stack->Parameters.Write.Length, STATUS_SUCCESS);
+			TunCompleteRequest(ctx, irp, irp->IoStatus.Information, STATUS_SUCCESS);
 			TunCompletePause(ctx, TRUE);
 		}
 	}
