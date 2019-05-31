@@ -90,11 +90,14 @@ typedef struct _TUN_CTX {
 	} PacketQueue;
 
 	NDIS_HANDLE NBLPool;
+
+	ULONG NetLuidIndex;
 } TUN_CTX;
 
 static UINT NdisVersion;
 static PVOID TunNotifyInterfaceChangeHandle;
 static NDIS_HANDLE NdisMiniportDriverHandle;
+static volatile LONG64 AdapterCount;
 
 #if REG_DWORD == REG_DWORD_BIG_ENDIAN
 #define TUN_MEMORY_TAG  'wtun'
@@ -1088,6 +1091,7 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 	InterlockedExchange((LONG *)&ctx->State,      TUN_STATE_INITIALIZING);
 	InterlockedExchange((LONG *)&ctx->PowerState, NdisDeviceStateD0);
 	ctx->MiniportAdapterHandle = MiniportAdapterHandle;
+	ctx->NetLuidIndex = (ULONG)MiniportInitParameters->NetLuid.Info.NetLuidIndex;
 
 	ctx->Statistics.Header.Type         = NDIS_OBJECT_TYPE_DEFAULT;
 	ctx->Statistics.Header.Revision     = NDIS_STATISTICS_INFO_REVISION_1;
@@ -1239,7 +1243,7 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 	 * of the MiniportInitializeEx function.
 	 */
 	TunIndicateStatus(MiniportAdapterHandle, MediaConnectStateDisconnected);
-
+	InterlockedIncrement64(&AdapterCount);
 	InterlockedExchange((LONG *)&ctx->State, TUN_STATE_PAUSED);
 	return NDIS_STATUS_SUCCESS;
 
@@ -1256,6 +1260,28 @@ static VOID TunUnload(PDRIVER_OBJECT DriverObject)
 {
 	IoUnregisterPlugPlayNotificationEx(TunNotifyInterfaceChangeHandle);
 	NdisMDeregisterMiniportDriver(NdisMiniportDriverHandle);
+}
+
+_IRQL_requires_max_(APC_LEVEL)
+static void TunWaitForReferencesToDropToZero(_Inout_ TUN_CTX *ctx)
+{
+	/* It's a bit annoying to reconstruct this here, but it's better than storing it, and
+	 * although we could just get it from ndishandle+288, that's probably a bit dirty. */
+	WCHAR symbolic_name[sizeof(L"\\DosDevices\\" TUN_DEVICE_NAME) / sizeof(WCHAR) + 10/*MAXULONG as string*/] = { 0 };
+	UNICODE_STRING unicode_symbolic_name;
+	TunInitUnicodeString(&unicode_symbolic_name, symbolic_name);
+	RtlUnicodeStringPrintf(&unicode_symbolic_name, L"\\DosDevices\\" TUN_DEVICE_NAME, ctx->NetLuidIndex);
+
+	/* We first get rid of the symbolic link, to prevent userspace from accidently reopening
+	 * this while we're waiting for the refcount to drop to zero. It might still be possible to
+	 * open it from the real path, in which case, maybe we should consider setting a deny-all DACL. */
+	IoDeleteSymbolicLink(&unicode_symbolic_name);
+
+	/* The sleep loop isn't pretty, but we don't have a choice. This is an NDIS bug we're working around. */
+	enum { SleepTime = 50, TotalTime = 2 * 60 * 1000, MaxTries = TotalTime / SleepTime };
+	#pragma warning(suppress: 28175)
+	for (int i = 0; i < MaxTries && ctx->Device.Object->ReferenceCount; ++i)
+		NdisMSleep(SleepTime);
 }
 
 static MINIPORT_HALT TunHaltEx;
@@ -1294,6 +1320,9 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 
 	InterlockedExchange((LONG *)&ctx->PowerState, NdisDeviceStateUnspecified);
 	InterlockedExchange((LONG *)&ctx->State,      TUN_STATE_HALTED);
+
+	if (!InterlockedDecrement64(&AdapterCount))
+		TunWaitForReferencesToDropToZero(ctx);
 
 	/* Deregister device _after_ we are done writing to ctx not to risk an UaF. The ctx is hosted by device extension. */
 	NdisDeregisterDeviceEx(ctx->Device.Handle);
