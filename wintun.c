@@ -217,19 +217,19 @@ static IRP *TunCsqPeekNextIrp(IO_CSQ *Csq, IRP *Irp, _In_ PVOID PeekContext)
 
 _IRQL_raises_(DISPATCH_LEVEL)
 _IRQL_requires_max_(DISPATCH_LEVEL)
+_Requires_lock_not_held_(CONTAINING_RECORD(Csq, TUN_CTX, Device.ReadQueue.Csq)->Device.ReadQueue.Lock)
 _Acquires_lock_(CONTAINING_RECORD(Csq, TUN_CTX, Device.ReadQueue.Csq)->Device.ReadQueue.Lock)
 static VOID TunCsqAcquireLock(_In_ IO_CSQ *Csq, _Out_ _At_(*Irql, _Post_ _IRQL_saves_) KIRQL *Irql)
 {
-	TUN_CTX *ctx = CONTAINING_RECORD(Csq, TUN_CTX, Device.ReadQueue.Csq);
-	KeAcquireSpinLock(&ctx->Device.ReadQueue.Lock, Irql);
+	KeAcquireSpinLock(&CONTAINING_RECORD(Csq, TUN_CTX, Device.ReadQueue.Csq)->Device.ReadQueue.Lock, Irql);
 }
 
 _IRQL_requires_(DISPATCH_LEVEL)
+_Requires_lock_held_(CONTAINING_RECORD(Csq, TUN_CTX, Device.ReadQueue.Csq)->Device.ReadQueue.Lock)
 _Releases_lock_(CONTAINING_RECORD(Csq, TUN_CTX, Device.ReadQueue.Csq)->Device.ReadQueue.Lock)
 static VOID TunCsqReleaseLock(_In_ IO_CSQ *Csq, _In_ _IRQL_restores_ KIRQL Irql)
 {
-	TUN_CTX *ctx = CONTAINING_RECORD(Csq, TUN_CTX, Device.ReadQueue.Csq);
-	KeReleaseSpinLock(&ctx->Device.ReadQueue.Lock, Irql);
+	KeReleaseSpinLock(&CONTAINING_RECORD(Csq, TUN_CTX, Device.ReadQueue.Csq)->Device.ReadQueue.Lock, Irql);
 }
 
 static IO_CSQ_COMPLETE_CANCELED_IRP TunCsqCompleteCanceledIrp;

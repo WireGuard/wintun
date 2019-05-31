@@ -5,7 +5,7 @@ This is a layer 3 TUN driver for Windows 7, 8, 8.1, and 10. Originally created f
 
 ## Build Requirements
 
-- [Visual Studio 2017](https://visualstudio.microsoft.com/downloads/)
+- [Visual Studio 2019](https://visualstudio.microsoft.com/downloads/)
 - [Windows Driver Kit for Windows 10](https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk)
 - [WiX Toolset 3.11.1](http://wixtoolset.org/releases/)
 
@@ -35,7 +35,7 @@ If you already have `wintun.vcxproj.user` file, just add the `<PropertyGroup>` s
 
 ## Building from Command Line
 
-Open _Developer Command Prompt for VS 2017_ and use the `msbuild` command:
+Open _Developer Command Prompt for VS 2019_ and use the `msbuild` command:
 
 ```
 msbuild wintun.proj [/t:<target>]
