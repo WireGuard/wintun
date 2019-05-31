@@ -150,12 +150,11 @@ static void TunIndicateStatus(_In_ NDIS_HANDLE MiniportAdapterHandle, _In_ NDIS_
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-static void TunCompleteRequest(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp, _In_ ULONG_PTR Information, _In_ NTSTATUS Status)
+static void TunCompleteRequest(_Inout_ TUN_CTX *ctx, _Inout_ IRP *irp, _In_ NTSTATUS status, _In_ CCHAR priority_boost)
 {
-	Irp->IoStatus.Information = Information;
-	Irp->IoStatus.Status      = Status;
-	IoCompleteRequest(Irp, IO_NO_INCREMENT);
-	IoReleaseRemoveLock(&ctx->Device.RemoveLock, Irp);
+	irp->IoStatus.Status = status;
+	IoCompleteRequest(irp, priority_boost);
+	IoReleaseRemoveLock(&ctx->Device.RemoveLock, irp);
 }
 
 _IRQL_requires_same_
@@ -251,7 +250,7 @@ _Use_decl_annotations_
 static VOID TunCsqCompleteCanceledIrp(IO_CSQ *Csq, IRP *Irp)
 {
 	TUN_CTX *ctx = CONTAINING_RECORD(Csq, TUN_CTX, Device.ReadQueue.Csq);
-	TunCompleteRequest(ctx, Irp, 0, STATUS_CANCELLED);
+	TunCompleteRequest(ctx, Irp, STATUS_CANCELLED, IO_NO_INCREMENT);
 }
 
 _IRQL_requires_same_
@@ -328,9 +327,7 @@ retry:
 
 	NTSTATUS status = TunGetIrpBuffer(irp, buffer, size);
 	if (!NT_SUCCESS(status)) {
-		irp->IoStatus.Status = status;
-		IoCompleteRequest(irp, IO_NO_INCREMENT);
-		IoReleaseRemoveLock(&ctx->Device.RemoveLock, irp);
+		TunCompleteRequest(ctx, irp, status, IO_NO_INCREMENT);
 		goto retry;
 	}
 
@@ -572,9 +569,7 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 				irp = NULL;
 			}
 		} else {
-			irp->IoStatus.Status = STATUS_SUCCESS;
-			IoCompleteRequest(irp, IO_NETWORK_INCREMENT);
-			IoReleaseRemoveLock(&ctx->Device.RemoveLock, irp);
+			TunCompleteRequest(ctx, irp, STATUS_SUCCESS, IO_NETWORK_INCREMENT);
 			irp = NULL;
 		}
 
@@ -798,7 +793,7 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 
 	case IRP_MJ_CLEANUP:
 		for (IRP *pending_irp; (pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, stack->FileObject)) != NULL; )
-			TunCompleteRequest(ctx, pending_irp, 0, STATUS_CANCELLED);
+			TunCompleteRequest(ctx, pending_irp, STATUS_CANCELLED, IO_NO_INCREMENT);
 
 		status = STATUS_SUCCESS;
 		goto cleanup_complete_req;
@@ -809,9 +804,7 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 	}
 
 cleanup_complete_req_and_release_remove_lock:
-	Irp->IoStatus.Status = status;
-	IoCompleteRequest(Irp, IO_NO_INCREMENT);
-	IoReleaseRemoveLock(&ctx->Device.RemoveLock, Irp);
+	TunCompleteRequest(ctx, Irp, status, IO_NO_INCREMENT);
 	return status;
 
 cleanup_complete_req:
@@ -873,7 +866,7 @@ static void TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUF
 		NdisFreeNetBufferList(nbl);
 
 		if (InterlockedDecrement64(IRP_REFCOUNT(irp)) <= 0) {
-			TunCompleteRequest(ctx, irp, irp->IoStatus.Information, STATUS_SUCCESS);
+			TunCompleteRequest(ctx, irp, STATUS_SUCCESS, IO_NETWORK_INCREMENT);
 			TunCompletePause(ctx, TRUE);
 		}
 	}
@@ -1287,7 +1280,7 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 	}
 
 	for (IRP *pending_irp; (pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL)) != NULL;)
-		TunCompleteRequest(ctx, pending_irp, 0, STATUS_FILE_FORCED_CLOSED);
+		TunCompleteRequest(ctx, pending_irp, STATUS_FILE_FORCED_CLOSED, IO_NO_INCREMENT);
 	if (InterlockedGet64(&ctx->Device.RefCount))
 		TunForceHandlesClosed(ctx);
 
