@@ -1269,18 +1269,6 @@ static VOID TunUnload(PDRIVER_OBJECT DriverObject)
 _IRQL_requires_max_(APC_LEVEL)
 static void TunWaitForReferencesToDropToZero(_Inout_ TUN_CTX *ctx)
 {
-	/* It's a bit annoying to reconstruct this here, but it's better than storing it, and
-	 * although we could just get it from ndishandle+288, that's probably a bit dirty. */
-	WCHAR symbolic_name[sizeof(L"\\DosDevices\\" TUN_DEVICE_NAME) / sizeof(WCHAR) + 10/*MAXULONG as string*/] = { 0 };
-	UNICODE_STRING unicode_symbolic_name;
-	TunInitUnicodeString(&unicode_symbolic_name, symbolic_name);
-	RtlUnicodeStringPrintf(&unicode_symbolic_name, L"\\DosDevices\\" TUN_DEVICE_NAME, ctx->NetLuidIndex);
-
-	/* We first get rid of the symbolic link, to prevent userspace from accidently reopening
-	 * this while we're waiting for the refcount to drop to zero. It might still be possible to
-	 * open it from the real path, in which case, maybe we should consider setting a deny-all DACL. */
-	IoDeleteSymbolicLink(&unicode_symbolic_name);
-
 	/* The sleep loop isn't pretty, but we don't have a choice. This is an NDIS bug we're working around. */
 	enum { SleepTime = 50, TotalTime = 2 * 60 * 1000, MaxTries = TotalTime / SleepTime };
 	#pragma warning(suppress: 28175)
@@ -1311,6 +1299,18 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 
 	for (IRP *pending_irp; (pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL)) != NULL;)
 		TunCompleteRequest(ctx, pending_irp, STATUS_FILE_FORCED_CLOSED, IO_NO_INCREMENT);
+
+	/* It's a bit annoying to reconstruct this here, but it's better than storing it, and
+	 * although we could just get it from ndishandle+288, that's probably a bit dirty. */
+	WCHAR symbolic_name[sizeof(L"\\DosDevices\\" TUN_DEVICE_NAME) / sizeof(WCHAR) + 10/*MAXULONG as string*/] = { 0 };
+	UNICODE_STRING unicode_symbolic_name;
+	TunInitUnicodeString(&unicode_symbolic_name, symbolic_name);
+	RtlUnicodeStringPrintf(&unicode_symbolic_name, L"\\DosDevices\\" TUN_DEVICE_NAME, ctx->NetLuidIndex);
+	/* We first get rid of the symbolic link, to prevent userspace from accidently reopening
+	 * this while we're waiting for the refcount to drop to zero. It might still be possible to
+	 * open it from the real path, in which case, maybe we should consider setting a deny-all DACL. */
+	IoDeleteSymbolicLink(&unicode_symbolic_name);
+
 	if (InterlockedGet64(&ctx->Device.RefCount))
 		TunForceHandlesClosed(ctx);
 
