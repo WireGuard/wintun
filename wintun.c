@@ -56,6 +56,10 @@ typedef enum _TUN_STATE {
 typedef struct _TUN_CTX {
 	volatile TUN_STATE State;
 	volatile NDIS_DEVICE_POWER_STATE PowerState;
+
+	/* Used like RCU. When we're making use of queues, we take a shared lock. When we want to
+	 * drain the queues and toggle the state, we take an exclusive lock before toggling the
+	 * atomic and then releasing. It's similar to setting the atomic and then calling rcu_barrier(). */
 	EX_SPIN_LOCK TransitionLock;
 
 	NDIS_HANDLE MiniportAdapterHandle;
