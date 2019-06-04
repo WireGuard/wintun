@@ -1538,7 +1538,7 @@ static void TunSendNetBufferLists(NDIS_HANDLE MiniportAdapterContext, NET_BUFFER
 	NDIS_STATUS status;
 	if (!NT_SUCCESS(status = TunCheckForPause(ctx))) {
 		TunSetNBLStatus(NetBufferLists, status);
-		NdisMSendNetBufferListsComplete(ctx->MiniportAdapterHandle, NetBufferLists, SendFlags & NDIS_SEND_FLAGS_DISPATCH_LEVEL ? NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL : 0);
+		NdisMSendNetBufferListsComplete(ctx->MiniportAdapterHandle, NetBufferLists, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
 		goto cleanup_TunCompletePause;
 	}
 
