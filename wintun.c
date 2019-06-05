@@ -585,7 +585,7 @@ static void TunQueueProcess(_Inout_ TUN_CTX *ctx)
 	}
 }
 
-#define IRP_REFCOUNT(irp)        ((volatile LONG64 *)&(irp)->Tail.Overlay.DriverContext[0])
+#define IRP_REFCOUNT(irp)        ((volatile LONG *)&(irp)->Tail.Overlay.DriverContext[0])
 #define NET_BUFFER_LIST_IRP(nbl) (NET_BUFFER_LIST_MINIPORT_RESERVED(nbl)[0])
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
@@ -668,7 +668,7 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 		goto cleanup_TunCompletePause;
 	}
 
-	InterlockedExchange64(IRP_REFCOUNT(Irp), nbl_count);
+	InterlockedExchange(IRP_REFCOUNT(Irp), nbl_count);
 	IoMarkIrpPending(Irp);
 
 	NdisMIndicateReceiveNetBufferLists(ctx->MiniportAdapterHandle, nbl_head, NDIS_DEFAULT_PORT_NUMBER, nbl_count, 0);
@@ -869,7 +869,8 @@ static void TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUF
 		NdisFreeMdl(mdl);
 		NdisFreeNetBufferList(nbl);
 
-		if (InterlockedDecrement64(IRP_REFCOUNT(irp)) <= 0) {
+		ASSERT(InterlockedGet(IRP_REFCOUNT(irp)));
+		if (!InterlockedDecrement(IRP_REFCOUNT(irp))) {
 			TunCompleteRequest(ctx, irp, STATUS_SUCCESS, IO_NETWORK_INCREMENT);
 			TunCompletePause(ctx, TRUE);
 		}
