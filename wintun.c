@@ -26,7 +26,7 @@
 #define TUN_VENDOR_ID           0xFFFFFF00
 #define TUN_LINK_SPEED          100000000000ULL // 100gbps
 
-#define TUN_EXCH_MAX_PACKETS            256                                                 // Maximum number of exchange packets that can be exchanged in a single read/write
+#define TUN_EXCH_MAX_PACKETS            256                                                 // Maximum number of full-sized exchange packets that can be exchanged in a single read/write
 #define TUN_EXCH_MAX_PACKET_SIZE        0xF000                                              // Maximum exchange packet size - empirically determined by net buffer list (pool) limitations
 #define TUN_EXCH_ALIGNMENT              16                                                  // Memory alignment in exchange buffers
 #define TUN_EXCH_MAX_IP_PACKET_SIZE     (TUN_EXCH_MAX_PACKET_SIZE - sizeof(TUN_PACKET))     // Maximum IP packet size (headers + payload)
@@ -610,6 +610,11 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 	ULONG nbl_count = 0;
 	NET_BUFFER_LIST *nbl_head = NULL, *nbl_tail = NULL;
 	while (b + sizeof(TUN_PACKET) <= b_end) {
+		if (nbl_count >= MAXULONG) {
+			status = STATUS_INVALID_USER_BUFFER;
+			goto cleanup_nbl_head;
+			
+		}
 		TUN_PACKET *p = (TUN_PACKET *)b;
 		if (p->Size > TUN_EXCH_MAX_IP_PACKET_SIZE) {
 			status = STATUS_INVALID_USER_BUFFER;
