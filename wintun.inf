@@ -38,7 +38,7 @@ CopyFiles = Wintun.CopyFiles.Sys
 EnableDhcp = 0 ; Disable DHCP
 
 [Wintun.Install.Services]
-AddService = wintun, 2, Wintun.Service, Wintun.EventLog
+AddService = wintun, 2, Wintun.Service, Wintun.EventLog ; 2=SPSVCINST_ASSOCSERVICE
 
 [Wintun.Ndi]
 HKR, , DeviceVxDs, , wintun.sys
@@ -49,9 +49,9 @@ HKR, Ndi\Interfaces, LowerRange, , "nolower"
 [Wintun.Service]
 DisplayName = %Wintun.Name%
 Description = %Wintun.DeviceDesc%
-ServiceType = 1
-StartType = 3
-ErrorControl = 1
+ServiceType = 1 ; SERVICE_KERNEL_DRIVER
+StartType = 3 ; SERVICE_DEMAND_START
+ErrorControl = 1 ; SERVICE_ERROR_NORMAL
 ServiceBinary = %12%\wintun.sys
 LoadOrderGroup = NDIS
 
