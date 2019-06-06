@@ -611,89 +611,109 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 		goto cleanup_TunCompletePause;
 
 	const UCHAR *b = buffer, *b_end = buffer + size;
-	LONG nbl_count = 0;
-	NET_BUFFER_LIST *nbl_head = NULL, *nbl_tail = NULL;
+	typedef enum _ethtypeidx_t {
+		ethtypeidx_ipv4 = 0, ethtypeidx_start = 0,
+		ethtypeidx_ipv6,
+		ethtypeidx_end
+	} ethtypeidx_t;
+	static const struct {
+		ULONG nbl_flags;
+		USHORT nbl_proto;
+	} ether_const[ethtypeidx_end] = {
+		{ NDIS_NBL_FLAGS_IS_IPV4, NDIS_ETH_TYPE_IPV4 },
+		{ NDIS_NBL_FLAGS_IS_IPV6, NDIS_ETH_TYPE_IPV6 },
+	};
+	struct {
+		NET_BUFFER_LIST *head, *tail;
+		LONG count;
+	} nbl_queue[ethtypeidx_end] = {
+		{ NULL, NULL, 0 },
+		{ NULL, NULL, 0 }
+	};
 	while (b + sizeof(TUN_PACKET) <= b_end) {
-		if (nbl_count >= MAXLONG) {
+		if (nbl_queue[ethtypeidx_ipv4].count + nbl_queue[ethtypeidx_ipv6].count >= MAXLONG) {
 			status = STATUS_INVALID_USER_BUFFER;
-			goto cleanup_nbl_head;
-			
+			goto cleanup_nbl_queues;
 		}
+
 		TUN_PACKET *p = (TUN_PACKET *)b;
 		if (p->Size > TUN_EXCH_MAX_IP_PACKET_SIZE) {
 			status = STATUS_INVALID_USER_BUFFER;
-			goto cleanup_nbl_head;
+			goto cleanup_nbl_queues;
 		}
 		UINT p_size = TunPacketAlign(sizeof(TUN_PACKET) + p->Size);
 		if (b + p_size > b_end) {
 			status = STATUS_INVALID_USER_BUFFER;
-			goto cleanup_nbl_head;
+			goto cleanup_nbl_queues;
 		}
 
-		ULONG nbl_flags;
-		USHORT nbl_proto;
-		if (p->Size >= 20 && p->Data[0] >> 4 == 4) {
-			nbl_flags = NDIS_NBL_FLAGS_IS_IPV4;
-			nbl_proto = NDIS_ETH_TYPE_IPV4;
-		} else if (p->Size >= 40 && p->Data[0] >> 4 == 6) {
-			nbl_flags = NDIS_NBL_FLAGS_IS_IPV6;
-			nbl_proto = NDIS_ETH_TYPE_IPV6;
-		} else {
+		ethtypeidx_t idx;
+		if (p->Size >= 20 && p->Data[0] >> 4 == 4)
+			idx = ethtypeidx_ipv4;
+		else if (p->Size >= 40 && p->Data[0] >> 4 == 6)
+			idx = ethtypeidx_ipv6;
+		else {
 			status = STATUS_INVALID_USER_BUFFER;
-			goto cleanup_nbl_head;
+			goto cleanup_nbl_queues;
 		}
 
 		MDL *mdl = NdisAllocateMdl(ctx->MiniportAdapterHandle, p->Data, p->Size);
 		if (!mdl) {
 			status = STATUS_INSUFFICIENT_RESOURCES;
-			goto cleanup_nbl_head;
+			goto cleanup_nbl_queues;
 		}
 
 		NET_BUFFER_LIST *nbl = NdisAllocateNetBufferAndNetBufferList(ctx->NBLPool, 0, 0, mdl, 0, p->Size);
 		if (!nbl) {
 			NdisFreeMdl(mdl);
 			status = STATUS_INSUFFICIENT_RESOURCES;
-			goto cleanup_nbl_head;
+			goto cleanup_nbl_queues;
 		}
 
 		nbl->SourceHandle = ctx->MiniportAdapterHandle;
-		NdisSetNblFlag(nbl, nbl_flags);
-		NET_BUFFER_LIST_INFO(nbl, NetBufferListFrameType) = (PVOID)TunHtons(nbl_proto);
+		NdisSetNblFlag(nbl, ether_const[idx].nbl_flags);
+		NET_BUFFER_LIST_INFO(nbl, NetBufferListFrameType) = (PVOID)TunHtons(ether_const[idx].nbl_proto);
 		NET_BUFFER_LIST_STATUS(nbl) = NDIS_STATUS_SUCCESS;
 		NET_BUFFER_LIST_IRP(nbl) = Irp;
-		TunAppendNBL(&nbl_head, &nbl_tail, nbl);
-		nbl_count++;
+		TunAppendNBL(&nbl_queue[idx].head, &nbl_queue[idx].tail, nbl);
+		nbl_queue[idx].count++;
 		b += p_size;
 	}
 
 	if ((ULONG)(b - buffer) != size) {
 		status = STATUS_INVALID_USER_BUFFER;
-		goto cleanup_nbl_head;
+		goto cleanup_nbl_queues;
 	}
 	Irp->IoStatus.Information = size;
 
-	if (!nbl_head) {
+	if (!nbl_queue[ethtypeidx_ipv4].head && !nbl_queue[ethtypeidx_ipv6].head) {
 		status = STATUS_SUCCESS;
 		goto cleanup_TunCompletePause;
 	}
 
-	InterlockedExchange(IRP_REFCOUNT(Irp), nbl_count);
+	InterlockedExchange(IRP_REFCOUNT(Irp), nbl_queue[ethtypeidx_ipv4].count + nbl_queue[ethtypeidx_ipv6].count);
 	IoMarkIrpPending(Irp);
 
-	NdisMIndicateReceiveNetBufferLists(ctx->MiniportAdapterHandle, nbl_head, NDIS_DEFAULT_PORT_NUMBER, nbl_count, 0);
+	if (nbl_queue[ethtypeidx_ipv4].head)
+		NdisMIndicateReceiveNetBufferLists(ctx->MiniportAdapterHandle, nbl_queue[ethtypeidx_ipv4].head, NDIS_DEFAULT_PORT_NUMBER, nbl_queue[ethtypeidx_ipv4].count, NDIS_RECEIVE_FLAGS_SINGLE_ETHER_TYPE);
+	if (nbl_queue[ethtypeidx_ipv6].head)
+		NdisMIndicateReceiveNetBufferLists(ctx->MiniportAdapterHandle, nbl_queue[ethtypeidx_ipv6].head, NDIS_DEFAULT_PORT_NUMBER, nbl_queue[ethtypeidx_ipv6].count, NDIS_RECEIVE_FLAGS_SINGLE_ETHER_TYPE);
 	ExReleaseSpinLockShared(&ctx->TransitionLock, irql);
 	return STATUS_PENDING;
 
-cleanup_nbl_head:
-	for (NET_BUFFER_LIST *nbl = nbl_head, *nbl_next; nbl; nbl = nbl_next) {
-		nbl_next = NET_BUFFER_LIST_NEXT_NBL(nbl);
-		NET_BUFFER_LIST_NEXT_NBL(nbl) = NULL;
-		NdisFreeMdl(NET_BUFFER_FIRST_MDL(NET_BUFFER_LIST_FIRST_NB(nbl)));
-		NdisFreeNetBufferList(nbl);
+cleanup_nbl_queues:
+	for (ethtypeidx_t idx = ethtypeidx_start; idx < ethtypeidx_end; idx++) {
+		for (NET_BUFFER_LIST *nbl = nbl_queue[idx].head, *nbl_next; nbl; nbl = nbl_next) {
+			nbl_next = NET_BUFFER_LIST_NEXT_NBL(nbl);
+			NET_BUFFER_LIST_NEXT_NBL(nbl) = NULL;
+			NdisFreeMdl(NET_BUFFER_FIRST_MDL(NET_BUFFER_LIST_FIRST_NB(nbl)));
+			NdisFreeNetBufferList(nbl);
+		}
 	}
 cleanup_TunCompletePause:
 	TunCompletePause(ctx, TRUE);
 	ExReleaseSpinLockShared(&ctx->TransitionLock, irql);
+	TunCompleteRequest(ctx, Irp, status, IO_NO_INCREMENT);
 	return status;
 }
 
@@ -772,9 +792,7 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 			!NT_SUCCESS(status = IoAcquireRemoveLock(&ctx->Device.RemoveLock, Irp)))
 			goto cleanup_complete_req;
 
-		if ((status = TunWriteFromIrp(ctx, Irp)) == STATUS_PENDING)
-			return STATUS_PENDING;
-		goto cleanup_complete_req_and_release_remove_lock;
+		return TunWriteFromIrp(ctx, Irp);
 
 	case IRP_MJ_CREATE:
 		if ((status = STATUS_DELETE_PENDING, InterlockedGet((LONG *)&ctx->State) < TUN_STATE_PAUSED) ||
