@@ -66,6 +66,8 @@ AMD64 Release              | `amd64\Release\wintun`
 ARM64 Debug                | `arm64\Debug\wintun`
 ARM64 Release              | `arm64\Release\wintun`
 
+Do note that since the `Build` target builds for all supported platforms, you will need to have the toolchains installed for those platforms.
+
 #### Building Microsoft Installer Merge Modules
 
 1. `msbuild wintun.proj /t:DVL;Build`.
