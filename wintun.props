@@ -7,8 +7,8 @@
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <WintunVersionMaj>0</WintunVersionMaj>
-    <WintunVersionMin>1</WintunVersionMin>
-    <WintunVersionStr>0.1</WintunVersionStr><!-- Used in filenames and ProductVersion resource string, may contain strings. -->
+    <WintunVersionMin>2</WintunVersionMin>
+    <WintunVersionStr>0.2</WintunVersionStr><!-- Used in filenames and ProductVersion resource string, may contain strings. -->
     <WintunVersion>$(WintunVersionMaj).$(WintunVersionMin)</WintunVersion><!-- Used for versioning, must be n.n[.n[.n]]. -->
 
     <!-- .vcxproj and .wixproj are using different platform names. -->
