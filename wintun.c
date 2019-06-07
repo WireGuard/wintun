@@ -34,6 +34,7 @@
 #define TUN_EXCH_MIN_BUFFER_SIZE_READ   TUN_EXCH_MAX_PACKET_SIZE                            // Minimum size of read exchange buffer
 #define TUN_EXCH_MIN_BUFFER_SIZE_WRITE  (sizeof(TUN_PACKET))                                // Minimum size of write exchange buffer
 #define TUN_QUEUE_MAX_NBLS              1000
+#define TUN_MEMORY_TAG                  'wtun'
 
 typedef struct _TUN_PACKET {
 	ULONG Size;                     // Size of packet data (TUN_EXCH_MAX_IP_PACKET_SIZE max)
@@ -104,13 +105,11 @@ static NDIS_HANDLE NdisMiniportDriverHandle;
 static volatile LONG64 AdapterCount;
 
 #if REG_DWORD == REG_DWORD_BIG_ENDIAN
-#define TUN_MEMORY_TAG  'wtun'
-#define TunHtons(x)     ((USHORT)(x))
-#define TunHtonl(x)     ((ULONG)(x))
+#define TUN_HTONS(x)    ((USHORT)(x))
+#define TUN_HTONL(x)    ((ULONG)(x))
 #elif REG_DWORD == REG_DWORD_LITTLE_ENDIAN
-#define TUN_MEMORY_TAG  'nutw'
-#define TunHtons(x)     RtlUshortByteSwap(x)
-#define TunHtonl(x)     RtlUlongByteSwap(x)
+#define TUN_HTONS(x)    (((USHORT)(x) & 0x00ff) << 8 | ((USHORT)(x) & 0xff00) >> 8)
+#define TUN_HTONL(x)    (((ULONG)(x) & 0x000000ff) << 24 | ((ULONG)(x) & 0x0000ff00) << 8 | ((ULONG)(x) & 0x00ff0000) >> 8 | ((ULONG)(x) & 0xff000000) >> 24)
 #else
 #error "Unable to determine endianess"
 #endif
@@ -620,8 +619,8 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 		ULONG nbl_flags;
 		USHORT nbl_proto;
 	} ether_const[ethtypeidx_end] = {
-		{ NDIS_NBL_FLAGS_IS_IPV4, NDIS_ETH_TYPE_IPV4 },
-		{ NDIS_NBL_FLAGS_IS_IPV6, NDIS_ETH_TYPE_IPV6 },
+		{ NDIS_NBL_FLAGS_IS_IPV4, TUN_HTONS(NDIS_ETH_TYPE_IPV4) },
+		{ NDIS_NBL_FLAGS_IS_IPV6, TUN_HTONS(NDIS_ETH_TYPE_IPV6) },
 	};
 	struct {
 		NET_BUFFER_LIST *head, *tail;
@@ -672,7 +671,7 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 
 		nbl->SourceHandle = ctx->MiniportAdapterHandle;
 		NdisSetNblFlag(nbl, ether_const[idx].nbl_flags);
-		NET_BUFFER_LIST_INFO(nbl, NetBufferListFrameType) = (PVOID)TunHtons(ether_const[idx].nbl_proto);
+		NET_BUFFER_LIST_INFO(nbl, NetBufferListFrameType) = (PVOID)ether_const[idx].nbl_proto;
 		NET_BUFFER_LIST_STATUS(nbl) = NDIS_STATUS_SUCCESS;
 		NET_BUFFER_LIST_IRP(nbl) = Irp;
 		TunAppendNBL(&nbl_queue[idx].head, &nbl_queue[idx].tail, nbl);
@@ -729,8 +728,8 @@ static void TunForceHandlesClosed(_Inout_ TUN_CTX *ctx)
 
 	for (ULONG size = 0, req; (status = ZwQuerySystemInformation(SystemExtendedHandleInformation, table, size, &req)) == STATUS_INFO_LENGTH_MISMATCH; size = req) {
 		if (table)
-			ExFreePoolWithTag(table, TUN_MEMORY_TAG);
-		table = ExAllocatePoolWithTag(PagedPool, req, TUN_MEMORY_TAG);
+			ExFreePoolWithTag(table, TUN_HTONL(TUN_MEMORY_TAG));
+		table = ExAllocatePoolWithTag(PagedPool, req, TUN_HTONL(TUN_MEMORY_TAG));
 		if (!table)
 			return;
 	}
@@ -756,7 +755,7 @@ static void TunForceHandlesClosed(_Inout_ TUN_CTX *ctx)
 	}
 out:
 	if (table)
-		ExFreePoolWithTag(table, TUN_MEMORY_TAG);
+		ExFreePoolWithTag(table, TUN_HTONL(TUN_MEMORY_TAG));
 }
 
 static DRIVER_DISPATCH TunDispatch;
@@ -1147,7 +1146,7 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 
 	ctx->Device.Handle = handle;
 	ctx->Device.Object = object;
-	IoInitializeRemoveLock(&ctx->Device.RemoveLock, TUN_MEMORY_TAG, 0, 0);
+	IoInitializeRemoveLock(&ctx->Device.RemoveLock, TUN_HTONL(TUN_MEMORY_TAG), 0, 0);
 	KeInitializeSpinLock(&ctx->Device.ReadQueue.Lock);
 	IoCsqInitializeEx(&ctx->Device.ReadQueue.Csq,
 		TunCsqInsertIrpEx,
@@ -1168,7 +1167,7 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 		},
 		.ProtocolId         = NDIS_PROTOCOL_ID_DEFAULT,
 		.fAllocateNetBuffer = TRUE,
-		.PoolTag            = TUN_MEMORY_TAG
+		.PoolTag            = TUN_HTONL(TUN_MEMORY_TAG)
 	};
 	#pragma warning(suppress: 6014) /* Leaking memory 'ctx->NBLPool'. Note: 'ctx->NBLPool' is freed in TunHaltEx; or on failure. */
 	ctx->NBLPool = NdisAllocateNetBufferListPool(MiniportAdapterHandle, &nbl_pool_param);
@@ -1478,7 +1477,7 @@ static NDIS_STATUS TunOidQuery(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *O
 		return TunOidQueryWrite(OidRequest, TUN_EXCH_MAX_IP_PACKET_SIZE * TUN_EXCH_MAX_PACKETS);
 
 	case OID_GEN_VENDOR_ID:
-		return TunOidQueryWrite(OidRequest, TunHtonl(TUN_VENDOR_ID));
+		return TunOidQueryWrite(OidRequest, TUN_HTONL(TUN_VENDOR_ID));
 
 	case OID_GEN_VENDOR_DESCRIPTION:
 		return TunOidQueryWriteBuf(OidRequest, TUN_VENDOR_NAME, (UINT)sizeof(TUN_VENDOR_NAME));
