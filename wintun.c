@@ -1246,9 +1246,12 @@ static void TunForceHandlesClosed(_Inout_ TUN_CTX *ctx)
 	NTSTATUS status;
 	PEPROCESS process;
 	KAPC_STATE apc_state;
-	PVOID object;
+	PVOID object = NULL;
+	ULONG verifier_flags = 0;
 	OBJECT_HANDLE_INFORMATION handle_info;
 	SYSTEM_HANDLE_INFORMATION_EX *table = NULL;
+
+	MmIsVerifierEnabled(&verifier_flags);
 
 	for (ULONG size = 0, req; (status = ZwQuerySystemInformation(SystemExtendedHandleInformation, table, size, &req)) == STATUS_INFO_LENGTH_MISMATCH; size = req) {
 		if (table)
@@ -1268,11 +1271,13 @@ static void TunForceHandlesClosed(_Inout_ TUN_CTX *ctx)
 		if (!NT_SUCCESS(status))
 			continue;
 		KeStackAttachProcess(process, &apc_state);
-		status = ObReferenceObjectByHandle(table->Handles[i].HandleValue, 0, NULL, UserMode, &object, &handle_info);
+		if (!verifier_flags)
+			status = ObReferenceObjectByHandle(table->Handles[i].HandleValue, 0, NULL, UserMode, &object, &handle_info);
 		if (NT_SUCCESS(status)) {
-			if (object == file)
+			if (verifier_flags || object == file)
 				ObCloseHandle(table->Handles[i].HandleValue, UserMode);
-			ObfDereferenceObject(object);
+			if (!verifier_flags)
+				ObfDereferenceObject(object);
 		}
 		KeUnstackDetachProcess(&apc_state);
 		ObfDereferenceObject(process);
