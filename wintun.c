@@ -1283,12 +1283,12 @@ out:
 }
 
 _IRQL_requires_max_(APC_LEVEL)
-static void TunWaitForReferencesToDropToZero(_Inout_ TUN_CTX *ctx)
+static void TunWaitForReferencesToDropToZero(_In_ DEVICE_OBJECT *device_object)
 {
 	/* The sleep loop isn't pretty, but we don't have a choice. This is an NDIS bug we're working around. */
 	enum { SleepTime = 50, TotalTime = 2 * 60 * 1000, MaxTries = TotalTime / SleepTime };
 	#pragma warning(suppress: 28175)
-	for (int i = 0; i < MaxTries && ctx->Device.Object->ReferenceCount; ++i)
+	for (int i = 0; i < MaxTries && device_object->ReferenceCount; ++i)
 		NdisMSleep(SleepTime);
 }
 
@@ -1343,9 +1343,9 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 
 	ASSERT(InterlockedGet64(&AdapterCount) > 0);
 	if (InterlockedDecrement64(&AdapterCount) <= 0)
-		TunWaitForReferencesToDropToZero(ctx);
+		TunWaitForReferencesToDropToZero(ctx->Device.Object);
 
-	/* Deregister device _after_ we are done writing to ctx not to risk an UaF. The ctx is hosted by device extension. */
+	/* Deregister device _after_ we are done using ctx not to risk an UaF. The ctx is hosted by device extension. */
 	NdisDeregisterDeviceEx(ctx->Device.Handle);
 }
 
