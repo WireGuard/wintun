@@ -854,13 +854,13 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 	case IRP_MJ_CLOSE:
 		irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
 		ASSERT(InterlockedGet64(&ctx->Device.RefCount) > 0);
-		if (InterlockedDecrement64(&ctx->Device.RefCount) <= 0) {
-			ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
+		BOOLEAN last_handle = InterlockedDecrement64(&ctx->Device.RefCount) <= 0;
+		ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
+		if (last_handle) {
 			if (ctx->MiniportAdapterHandle)
 				TunIndicateStatus(ctx->MiniportAdapterHandle, MediaConnectStateDisconnected);
 			TunQueueClear(ctx, NDIS_STATUS_SEND_ABORTED);
-		} else
-			ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
+		}
 		IoReleaseRemoveLock(&ctx->Device.RemoveLock, stack->FileObject);
 
 		status = STATUS_SUCCESS;
