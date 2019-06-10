@@ -678,7 +678,7 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 		{ NULL, NULL, 0 },
 		{ NULL, NULL, 0 }
 	};
-	while (b + sizeof(TUN_PACKET) <= b_end) {
+	while (b_end - b >= sizeof(TUN_PACKET)) {
 		if (nbl_queue[ethtypeidx_ipv4].count + nbl_queue[ethtypeidx_ipv6].count >= MAXLONG) {
 			status = STATUS_INVALID_USER_BUFFER;
 			goto cleanup_nbl_queues;
@@ -689,8 +689,8 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 			status = STATUS_INVALID_USER_BUFFER;
 			goto cleanup_nbl_queues;
 		}
-		UINT p_size = TunPacketAlign(sizeof(TUN_PACKET) + p->Size);
-		if (b + p_size > b_end) {
+		ptrdiff_t p_size = TunPacketAlign(sizeof(TUN_PACKET) + p->Size);
+		if (b_end - b < p_size) {
 			status = STATUS_INVALID_USER_BUFFER;
 			goto cleanup_nbl_queues;
 		}
