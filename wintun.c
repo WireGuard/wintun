@@ -75,7 +75,6 @@ typedef struct _TUN_CTX {
 	volatile LONG64 ActiveTransactionCount;
 
 	volatile struct {
-		FILE_OBJECT *FileObject;
 		PVOID Handle;
 	} PnPNotifications;
 
@@ -921,8 +920,7 @@ static NTSTATUS TunPnPNotifyDeviceChange(PVOID NotificationStruct, PVOID Context
 	TARGET_DEVICE_REMOVAL_NOTIFICATION *notification = NotificationStruct;
 	TUN_CTX *ctx = Context;
 
-	if (!ctx)
-		return STATUS_SUCCESS;
+	_Analysis_assume_(ctx);
 
 	if (IsEqualGUID(&notification->Event, &GUID_TARGET_DEVICE_QUERY_REMOVE)) {
 		KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
@@ -933,18 +931,15 @@ static NTSTATUS TunPnPNotifyDeviceChange(PVOID NotificationStruct, PVOID Context
 		 * So we clear them here after setting the paused state, which then frees up NDIS to do
 		 * the right thing later on in the shutdown procedure. */
 		TunQueueClear(ctx, STATUS_NDIS_ADAPTER_REMOVED);
-		FILE_OBJECT *file = ctx->PnPNotifications.FileObject;
-		ctx->PnPNotifications.FileObject = NULL;
-		if (file)
-			ObDereferenceObject(file);
-	} else if (IsEqualGUID(&notification->Event, &GUID_TARGET_DEVICE_REMOVE_COMPLETE) ||
-		IsEqualGUID(&notification->Event, &GUID_TARGET_DEVICE_REMOVE_CANCELLED)) {
+		ObDereferenceObject(notification->FileObject);
+	} else if (IsEqualGUID(&notification->Event, &GUID_TARGET_DEVICE_REMOVE_COMPLETE)) {
 		PVOID handle = ctx->PnPNotifications.Handle;
-		/* We unregister in the cancelled case too, because the initial remove request puts us
-		 * in pausing state, so we won't pile up any further NBLs. */
 		ctx->PnPNotifications.Handle = NULL;
 		if (handle)
 			IoUnregisterPlugPlayNotificationEx(handle);
+	} else if (IsEqualGUID(&notification->Event, &GUID_TARGET_DEVICE_REMOVE_CANCELLED)) {
+		InterlockedOr(&ctx->Flags, TUN_FLAGS_PRESENT);
+		ObReferenceObject(notification->FileObject);
 	}
 
 	return STATUS_SUCCESS;
@@ -976,14 +971,11 @@ static NTSTATUS TunPnPNotifyInterfaceChange(PVOID NotificationStruct, PVOID Cont
 	#pragma warning(suppress: 28175)
 	ctx = device_object->Reserved;
 
-	ASSERT(!ctx->PnPNotifications.FileObject);
-	ctx->PnPNotifications.FileObject = file_object;
 	ASSERT(!ctx->PnPNotifications.Handle);
-	#pragma warning(suppress: 6014) /* Leaking memory 'ctx->PnPNotifications.Handle'. Note: 'ctx->PnPNotifications.Handle' is unregistered in TunPnPNotifyDeviceChange(GUID_TARGET_DEVICE_REMOVE_COMPLETE/GUID_TARGET_DEVICE_REMOVE_CANCELLED); or on failure. */
+	#pragma warning(suppress: 6014) /* Leaking memory 'ctx->PnPNotifications.Handle'. Note: 'ctx->PnPNotifications.Handle' is unregistered in TunPnPNotifyDeviceChange(GUID_TARGET_DEVICE_REMOVE_COMPLETE); or in TunHaltEx(). */
 	if (!NT_SUCCESS(IoRegisterPlugPlayNotification(EventCategoryTargetDeviceChange, 0,
-		ctx->PnPNotifications.FileObject, driver_object, TunPnPNotifyDeviceChange,
+		file_object, driver_object, TunPnPNotifyDeviceChange,
 		ctx, (PVOID *)&ctx->PnPNotifications.Handle))) {
-		ctx->PnPNotifications.FileObject = NULL;
 		ObDereferenceObject(file_object);
 	}
 	return STATUS_SUCCESS;
@@ -1316,20 +1308,10 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
+	ASSERT(!ctx->PnPNotifications.Handle);
 	ASSERT(!InterlockedGet64(&ctx->ActiveTransactionCount)); /* Adapter should not be halted if it wasn't fully paused first. */
 
 	InterlockedAnd(&ctx->Flags, ~TUN_FLAGS_PRESENT);
-
-	if (ctx->PnPNotifications.Handle) {
-		PVOID h = ctx->PnPNotifications.Handle;
-		ctx->PnPNotifications.Handle = NULL;
-		IoUnregisterPlugPlayNotificationEx(h);
-	}
-	if (ctx->PnPNotifications.FileObject) {
-		FILE_OBJECT *fo = ctx->PnPNotifications.FileObject;
-		ctx->PnPNotifications.FileObject = NULL;
-		ObDereferenceObject(fo);
-	}
 
 	for (IRP *pending_irp; (pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL)) != NULL;)
 		TunCompleteRequest(ctx, pending_irp, STATUS_FILE_FORCED_CLOSED, IO_NO_INCREMENT);
