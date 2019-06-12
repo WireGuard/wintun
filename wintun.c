@@ -166,7 +166,7 @@ static NTSTATUS TunCheckForPause(_Inout_ TUN_CTX *ctx)
 		!(flags & TUN_FLAGS_PRESENT)                 ? STATUS_NDIS_ADAPTER_REMOVED :
 		!(flags & TUN_FLAGS_POWERED)                 ? STATUS_NDIS_LOW_POWER_STATE :
 		!(flags & TUN_FLAGS_ENABLED)                 ? STATUS_NDIS_PAUSED :
-		InterlockedGet64(&ctx->Device.RefCount) <= 0 ? NDIS_STATUS_SEND_ABORTED :
+		InterlockedGet64(&ctx->Device.RefCount) <= 0 ? STATUS_NDIS_MEDIA_DISCONNECTED :
 		STATUS_SUCCESS;
 }
 
@@ -852,7 +852,7 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		if (last_handle) {
 			if (ctx->MiniportAdapterHandle)
 				TunIndicateStatus(ctx->MiniportAdapterHandle, MediaConnectStateDisconnected);
-			TunQueueClear(ctx, NDIS_STATUS_SEND_ABORTED);
+			TunQueueClear(ctx, STATUS_NDIS_MEDIA_DISCONNECTED);
 		}
 		IoReleaseRemoveLock(&ctx->Device.RemoveLock, stack->FileObject);
 
