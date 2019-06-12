@@ -345,9 +345,7 @@ static NTSTATUS TunWriteIntoIrp(_Inout_ IRP *Irp, _Inout_ UCHAR *buffer, _In_ NE
 _IRQL_requires_same_
 static void TunNBLRefInit(_Inout_ TUN_CTX *ctx, _Inout_ NET_BUFFER_LIST *nbl)
 {
-	ASSERT(InterlockedGet64(&ctx->ActiveTransactionCount) < MAXLONG64);
 	InterlockedIncrement64(&ctx->ActiveTransactionCount);
-	ASSERT(InterlockedGet(&ctx->PacketQueue.NumNbl) < MAXLONG);
 	InterlockedIncrement(&ctx->PacketQueue.NumNbl);
 	InterlockedExchange64(NET_BUFFER_LIST_REFCOUNT(nbl), 1);
 }
@@ -356,7 +354,6 @@ _IRQL_requires_same_
 static void TunNBLRefInc(_Inout_ NET_BUFFER_LIST *nbl)
 {
 	ASSERT(InterlockedGet64(NET_BUFFER_LIST_REFCOUNT(nbl)));
-	ASSERT(InterlockedGet64(NET_BUFFER_LIST_REFCOUNT(nbl)) < MAXLONG64);
 	InterlockedIncrement64(NET_BUFFER_LIST_REFCOUNT(nbl));
 }
 
@@ -568,7 +565,6 @@ static void TunSendNetBufferLists(NDIS_HANDLE MiniportAdapterContext, NET_BUFFER
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
-	ASSERT(InterlockedGet64(&ctx->ActiveTransactionCount) < MAXLONG64);
 	InterlockedIncrement64(&ctx->ActiveTransactionCount);
 
 	KIRQL irql = ExAcquireSpinLockShared(&ctx->TransitionLock);
@@ -649,7 +645,6 @@ static NTSTATUS TunDispatchWrite(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 {
 	NTSTATUS status;
 
-	ASSERT(InterlockedGet64(&ctx->ActiveTransactionCount) < MAXLONG64);
 	InterlockedIncrement64(&ctx->ActiveTransactionCount);
 
 	KIRQL irql = ExAcquireSpinLockShared(&ctx->TransitionLock);
@@ -825,7 +820,6 @@ static NTSTATUS TunDispatchCreate(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 	if (!NT_SUCCESS(status = IoAcquireRemoveLock(&ctx->Device.RemoveLock, stack->FileObject)))
 		goto cleanup_ExReleaseSpinLockShared;
 
-	ASSERT(InterlockedGet64(&ctx->Device.RefCount) < MAXLONG64);
 	if (InterlockedIncrement64(&ctx->Device.RefCount) > 0)
 		TunIndicateStatus(ctx->MiniportAdapterHandle, MediaConnectStateConnected);
 
@@ -1231,7 +1225,6 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 	 * of the MiniportInitializeEx function.
 	 */
 	TunIndicateStatus(MiniportAdapterHandle, MediaConnectStateDisconnected);
-	ASSERT(InterlockedGet64(&AdapterCount) < MAXLONG64);
 	InterlockedIncrement64(&AdapterCount);
 	InterlockedOr(&ctx->Flags, TUN_FLAGS_PRESENT);
 	return NDIS_STATUS_SUCCESS;
