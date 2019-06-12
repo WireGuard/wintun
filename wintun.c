@@ -639,8 +639,8 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 
 	KIRQL irql = ExAcquireSpinLockShared(&ctx->TransitionLock);
 
-	if (!NT_SUCCESS(TunCheckForPause(ctx))) {
-		status = STATUS_CANCELLED;
+	if (!NT_SUCCESS(status = TunCheckForPause(ctx))) {
+		status = status == STATUS_NDIS_ADAPTER_REMOVED ? STATUS_FILE_FORCED_CLOSED : STATUS_CANCELLED;
 		goto cleanup_TunCompletePause;
 	}
 
@@ -669,8 +669,9 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 		{ NULL, NULL, 0 },
 		{ NULL, NULL, 0 }
 	};
+	LONG nbl_count = 0;
 	while (b_end - b >= sizeof(TUN_PACKET)) {
-		if (nbl_queue[ethtypeidx_ipv4].count + nbl_queue[ethtypeidx_ipv6].count >= MAXLONG) {
+		if (nbl_count >= MAXLONG) {
 			status = STATUS_INVALID_USER_BUFFER;
 			goto cleanup_nbl_queues;
 		}
@@ -716,6 +717,7 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 		NET_BUFFER_LIST_IRP(nbl) = Irp;
 		TunAppendNBL(&nbl_queue[idx].head, &nbl_queue[idx].tail, nbl);
 		nbl_queue[idx].count++;
+		nbl_count++;
 		b += p_size;
 	}
 
@@ -725,18 +727,21 @@ static NTSTATUS TunWriteFromIrp(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 	}
 	Irp->IoStatus.Information = size;
 
-	if (!nbl_queue[ethtypeidx_ipv4].head && !nbl_queue[ethtypeidx_ipv6].head) {
+	if (!nbl_count) {
 		status = STATUS_SUCCESS;
 		goto cleanup_TunCompletePause;
 	}
 
-	InterlockedExchange(IRP_REFCOUNT(Irp), nbl_queue[ethtypeidx_ipv4].count + nbl_queue[ethtypeidx_ipv6].count);
+	InterlockedAdd64(&ctx->ActiveTransactionCount, nbl_count);
+	InterlockedExchange(IRP_REFCOUNT(Irp), nbl_count);
 	IoMarkIrpPending(Irp);
 
 	if (nbl_queue[ethtypeidx_ipv4].head)
 		NdisMIndicateReceiveNetBufferLists(ctx->MiniportAdapterHandle, nbl_queue[ethtypeidx_ipv4].head, NDIS_DEFAULT_PORT_NUMBER, nbl_queue[ethtypeidx_ipv4].count, NDIS_RECEIVE_FLAGS_SINGLE_ETHER_TYPE);
 	if (nbl_queue[ethtypeidx_ipv6].head)
 		NdisMIndicateReceiveNetBufferLists(ctx->MiniportAdapterHandle, nbl_queue[ethtypeidx_ipv6].head, NDIS_DEFAULT_PORT_NUMBER, nbl_queue[ethtypeidx_ipv6].count, NDIS_RECEIVE_FLAGS_SINGLE_ETHER_TYPE);
+
+	TunCompletePause(ctx, TRUE);
 	ExReleaseSpinLockShared(&ctx->TransitionLock, irql);
 	return STATUS_PENDING;
 
@@ -778,12 +783,11 @@ static void TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUF
 
 		NdisFreeMdl(mdl);
 		NdisFreeNetBufferList(nbl);
+		TunCompletePause(ctx, TRUE);
 
 		ASSERT(InterlockedGet(IRP_REFCOUNT(irp)) > 0);
-		if (InterlockedDecrement(IRP_REFCOUNT(irp)) <= 0) {
+		if (InterlockedDecrement(IRP_REFCOUNT(irp)) <= 0)
 			TunCompleteRequest(ctx, irp, STATUS_SUCCESS, IO_NETWORK_INCREMENT);
-			TunCompletePause(ctx, TRUE);
-		}
 	}
 
 	InterlockedAdd64((LONG64 *)&ctx->Statistics.ifHCInOctets, stat_size);
@@ -821,8 +825,7 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		return STATUS_PENDING;
 
 	case IRP_MJ_WRITE:
-		if ((status = STATUS_FILE_FORCED_CLOSED, !(InterlockedGet(&ctx->Flags) & TUN_FLAGS_PRESENT)) ||
-			!NT_SUCCESS(status = IoAcquireRemoveLock(&ctx->Device.RemoveLock, Irp)))
+		if (!NT_SUCCESS(status = IoAcquireRemoveLock(&ctx->Device.RemoveLock, Irp)))
 			goto cleanup_complete_req;
 
 		return TunWriteFromIrp(ctx, Irp);
