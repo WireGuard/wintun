@@ -1332,7 +1332,9 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 	ASSERT(!ctx->PnPNotifications.Handle);
 	ASSERT(!InterlockedGet64(&ctx->ActiveTransactionCount)); /* Adapter should not be halted if it wasn't fully paused first. */
 
+	KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
 	InterlockedAnd(&ctx->Flags, ~TUN_FLAGS_PRESENT);
+	ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
 
 	for (IRP *pending_irp; (pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL)) != NULL;)
 		TunCompleteRequest(ctx, pending_irp, STATUS_FILE_FORCED_CLOSED, IO_NO_INCREMENT);
