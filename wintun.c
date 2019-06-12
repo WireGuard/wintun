@@ -57,8 +57,7 @@ typedef struct _TUN_PACKET {
 
 typedef enum _TUN_FLAGS {
 	TUN_FLAGS_ENABLED = 1 << 0,     // Toggles between paused and running state
-	TUN_FLAGS_POWERED = 1 << 1,     // Toggles between D1-4 (powered off) and D0 (powered on)
-	TUN_FLAGS_PRESENT = 1 << 2,     // Toggles between removal pending and being present
+	TUN_FLAGS_PRESENT = 1 << 1,     // Toggles between removal pending and being present
 } TUN_FLAGS;
 
 typedef struct _TUN_CTX {
@@ -164,7 +163,6 @@ static NTSTATUS TunCheckForPause(_Inout_ TUN_CTX *ctx)
 	LONG flags = InterlockedGet(&ctx->Flags);
 	return
 		!(flags & TUN_FLAGS_PRESENT)                 ? STATUS_NDIS_ADAPTER_REMOVED :
-		!(flags & TUN_FLAGS_POWERED)                 ? STATUS_NDIS_LOW_POWER_STATE :
 		!(flags & TUN_FLAGS_ENABLED)                 ? STATUS_NDIS_PAUSED :
 		InterlockedGet64(&ctx->Device.RefCount) <= 0 ? STATUS_NDIS_MEDIA_DISCONNECTED :
 		STATUS_SUCCESS;
@@ -1212,7 +1210,7 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 	TunIndicateStatus(MiniportAdapterHandle, MediaConnectStateDisconnected);
 	ASSERT(InterlockedGet64(&AdapterCount) < MAXLONG64);
 	InterlockedIncrement64(&AdapterCount);
-	InterlockedOr(&ctx->Flags, TUN_FLAGS_POWERED | TUN_FLAGS_PRESENT);
+	InterlockedOr(&ctx->Flags, TUN_FLAGS_PRESENT);
 	return NDIS_STATUS_SUCCESS;
 
 cleanup_NdisFreeNetBufferListPool:
@@ -1493,17 +1491,6 @@ static NDIS_STATUS TunOidSet(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *Oid
 			return NDIS_STATUS_INVALID_LENGTH;
 		}
 		OidRequest->DATA.SET_INFORMATION.BytesRead = sizeof(NDIS_DEVICE_POWER_STATE);
-
-		BOOLEAN powered = *(NDIS_DEVICE_POWER_STATE *)OidRequest->DATA.SET_INFORMATION.InformationBuffer < NdisDeviceStateD1;
-		KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
-		if (powered)
-			InterlockedOr (&ctx->Flags,  TUN_FLAGS_POWERED);
-		else
-			InterlockedAnd(&ctx->Flags, ~TUN_FLAGS_POWERED);
-		ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
-		if (!powered)
-			TunQueueClear(ctx, STATUS_NDIS_LOW_POWER_STATE);
-
 		return NDIS_STATUS_SUCCESS;
 	}
 
