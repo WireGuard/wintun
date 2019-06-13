@@ -820,7 +820,7 @@ static NTSTATUS TunDispatchCreate(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 	if (!NT_SUCCESS(status = IoAcquireRemoveLock(&ctx->Device.RemoveLock, stack->FileObject)))
 		goto cleanup_ExReleaseSpinLockShared;
 
-	if (InterlockedIncrement64(&ctx->Device.RefCount) > 0)
+	if (InterlockedIncrement64(&ctx->Device.RefCount) == 1)
 		TunIndicateStatus(ctx->MiniportAdapterHandle, MediaConnectStateConnected);
 
 	status = STATUS_SUCCESS;
