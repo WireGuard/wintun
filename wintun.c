@@ -765,8 +765,8 @@ cleanup_nbl_queues:
 	}
 cleanup_ExReleaseSpinLockShared:
 	ExReleaseSpinLockShared(&ctx->TransitionLock, irql);
-	TunCompletePause(ctx, TRUE);
 	TunCompleteRequest(ctx, Irp, status, IO_NO_INCREMENT);
+	TunCompletePause(ctx, TRUE);
 	return status;
 }
 
