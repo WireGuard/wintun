@@ -92,11 +92,9 @@ After loading the driver and creating a network interface the typical way using 
 | packet_0                     |
 |   size_0 bytes               |
 |                              |
-~                              ~
-|                              |
 +------------------------------+
 | padding                      |
-|   4-(size_0&3) bytes         |
+|   (4-(size_0&3))%4 bytes     |
 +------------------------------+
 | size_1                       |
 |   4 bytes, native endian     |
@@ -105,11 +103,9 @@ After loading the driver and creating a network interface the typical way using 
 | packet_1                     |
 |   size_1 bytes               |
 |                              |
-~                              ~
-|                              |
 +------------------------------+
 | padding                      |
-|   4-(size_1&3) bytes         |
+|   (4-(size_1&3))%4 bytes     |
 +------------------------------+
 ~                              ~
 ```
