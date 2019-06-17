@@ -107,8 +107,6 @@ typedef struct _TUN_CTX {
 	} PacketQueue;
 
 	NDIS_HANDLE NBLPool;
-
-	ULONG NetLuidIndex;
 } TUN_CTX;
 
 static UINT NdisVersion;
@@ -1076,7 +1074,6 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 	InterlockedExchange((LONG *)&ctx->State,      TUN_STATE_INITIALIZING);
 	InterlockedExchange((LONG *)&ctx->PowerState, NdisDeviceStateD0);
 	ctx->MiniportAdapterHandle = MiniportAdapterHandle;
-	ctx->NetLuidIndex = (ULONG)MiniportInitParameters->NetLuid.Info.NetLuidIndex;
 
 	ctx->Statistics.Header.Type         = NDIS_OBJECT_TYPE_DEFAULT;
 	ctx->Statistics.Header.Revision     = NDIS_STATISTICS_INFO_REVISION_1;
@@ -1241,6 +1238,29 @@ cleanup_NdisDeregisterDeviceEx:
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
+static NTSTATUS TunDeviceSetDenyAllDacl(_In_ DEVICE_OBJECT *device_object)
+{
+	NTSTATUS status;
+	SECURITY_DESCRIPTOR sd;
+	ACL acl;
+	HANDLE handle;
+
+	if (!NT_SUCCESS(status = RtlCreateSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION)))
+		return status;
+	if (!NT_SUCCESS(status = RtlCreateAcl(&acl, sizeof(ACL), ACL_REVISION)))
+		return status;
+	if (!NT_SUCCESS(status = RtlSetDaclSecurityDescriptor(&sd, TRUE, &acl, FALSE)))
+		return status;
+	if (!NT_SUCCESS(status = ObOpenObjectByPointer(device_object, OBJ_KERNEL_HANDLE, NULL, WRITE_DAC, *IoDeviceObjectType, KernelMode, &handle)))
+		return status;
+
+	status = ZwSetSecurityObject(handle, DACL_SECURITY_INFORMATION, &sd);
+
+	ZwClose(handle);
+	return status;
+}
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
 static void TunForceHandlesClosed(_Inout_ TUN_CTX *ctx)
 {
 	NTSTATUS status;
@@ -1321,16 +1341,8 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 	for (IRP *pending_irp; (pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL)) != NULL;)
 		TunCompleteRequest(ctx, pending_irp, STATUS_FILE_FORCED_CLOSED, IO_NO_INCREMENT);
 
-	/* It's a bit annoying to reconstruct this here, but it's better than storing it, and
-	 * although we could just get it from ndishandle+288, that's probably a bit dirty. */
-	WCHAR symbolic_name[sizeof(L"\\DosDevices\\" TUN_DEVICE_NAME) / sizeof(WCHAR) + 10/*MAXULONG as string*/] = { 0 };
-	UNICODE_STRING unicode_symbolic_name;
-	TunInitUnicodeString(&unicode_symbolic_name, symbolic_name);
-	RtlUnicodeStringPrintf(&unicode_symbolic_name, L"\\DosDevices\\" TUN_DEVICE_NAME, ctx->NetLuidIndex);
-	/* We first get rid of the symbolic link, to prevent userspace from accidently reopening
-	 * this while we're waiting for the refcount to drop to zero. It might still be possible to
-	 * open it from the real path, in which case, maybe we should consider setting a deny-all DACL. */
-	IoDeleteSymbolicLink(&unicode_symbolic_name);
+	/* Setting a deny-all DACL we prevent userspace to open the device by symlink after TunForceHandlesClosed(). */
+	TunDeviceSetDenyAllDacl(ctx->Device.Object);
 
 	if (InterlockedGet64(&ctx->Device.RefCount))
 		TunForceHandlesClosed(ctx);
