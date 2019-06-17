@@ -71,7 +71,7 @@ typedef struct _TUN_CTX {
 	NDIS_HANDLE MiniportAdapterHandle;
 	NDIS_STATISTICS_INFO Statistics;
 
-	volatile LONG64 ActiveTransactionCount;
+	volatile LONG64 ActiveNBLCount;
 
 	volatile struct {
 		PVOID Handle;
@@ -155,8 +155,8 @@ static void TunCompleteRequest(_Inout_ TUN_CTX *ctx, _Inout_ IRP *irp, _In_ NTST
 _IRQL_requires_max_(DISPATCH_LEVEL)
 static NDIS_STATUS TunCompletePause(_Inout_ TUN_CTX *ctx, _In_ BOOLEAN async_completion)
 {
-	ASSERT(InterlockedGet64(&ctx->ActiveTransactionCount) > 0);
-	if (InterlockedDecrement64(&ctx->ActiveTransactionCount) <= 0) {
+	ASSERT(InterlockedGet64(&ctx->ActiveNBLCount) > 0);
+	if (InterlockedDecrement64(&ctx->ActiveNBLCount) <= 0) {
 		if (async_completion)
 			NdisMPauseComplete(ctx->MiniportAdapterHandle);
 		return NDIS_STATUS_SUCCESS;
@@ -345,7 +345,7 @@ static NTSTATUS TunWriteIntoIrp(_Inout_ IRP *Irp, _Inout_ UCHAR *buffer, _In_ NE
 _IRQL_requires_same_
 static void TunNBLRefInit(_Inout_ TUN_CTX *ctx, _Inout_ NET_BUFFER_LIST *nbl)
 {
-	InterlockedIncrement64(&ctx->ActiveTransactionCount);
+	InterlockedIncrement64(&ctx->ActiveNBLCount);
 	InterlockedIncrement(&ctx->PacketQueue.NumNbl);
 	InterlockedExchange64(NET_BUFFER_LIST_REFCOUNT(nbl), 1);
 }
@@ -565,7 +565,7 @@ static void TunSendNetBufferLists(NDIS_HANDLE MiniportAdapterContext, NET_BUFFER
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
-	InterlockedIncrement64(&ctx->ActiveTransactionCount);
+	InterlockedIncrement64(&ctx->ActiveNBLCount);
 
 	KIRQL irql = ExAcquireSpinLockShared(&ctx->TransitionLock);
 	LONG flags = InterlockedGet(&ctx->Flags);
@@ -645,7 +645,7 @@ static NTSTATUS TunDispatchWrite(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 {
 	NTSTATUS status;
 
-	InterlockedIncrement64(&ctx->ActiveTransactionCount);
+	InterlockedIncrement64(&ctx->ActiveNBLCount);
 
 	KIRQL irql = ExAcquireSpinLockShared(&ctx->TransitionLock);
 	LONG flags = InterlockedGet(&ctx->Flags);
@@ -741,7 +741,7 @@ static NTSTATUS TunDispatchWrite(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 		goto cleanup_ExReleaseSpinLockShared;
 	}
 
-	InterlockedAdd64(&ctx->ActiveTransactionCount, nbl_count);
+	InterlockedAdd64(&ctx->ActiveNBLCount, nbl_count);
 	InterlockedExchange(IRP_REFCOUNT(Irp), nbl_count);
 	IoMarkIrpPending(Irp);
 
@@ -902,7 +902,7 @@ static NDIS_STATUS TunRestart(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
-	InterlockedExchange64(&ctx->ActiveTransactionCount, 1);
+	InterlockedExchange64(&ctx->ActiveNBLCount, 1);
 	InterlockedOr(&ctx->Flags, TUN_FLAGS_RUNNING);
 
 	return NDIS_STATUS_SUCCESS;
@@ -1323,7 +1323,7 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
 	ASSERT(!ctx->PnPNotifications.Handle);
-	ASSERT(!InterlockedGet64(&ctx->ActiveTransactionCount)); /* Adapter should not be halted if it wasn't fully paused first. */
+	ASSERT(!InterlockedGet64(&ctx->ActiveNBLCount)); /* Adapter should not be halted if there are (potential) active NBLs present. */
 
 	KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
 	InterlockedAnd(&ctx->Flags, ~TUN_FLAGS_PRESENT);
