@@ -37,6 +37,7 @@
 #define TUN_MEMORY_TAG                  'wtun'
 #define TUN_CSQ_INSERT_HEAD             ((PVOID)TRUE)
 #define TUN_CSQ_INSERT_TAIL             ((PVOID)FALSE)
+#define TUN_DEVICE_SYMBOLIC_NAME_MAX    (64*sizeof(WCHAR))                                  // Device symbolic link name (max. 57 wide chars incl. terminator + some reserve)
 
 #if REG_DWORD == REG_DWORD_BIG_ENDIAN
 #define TUN_HTONS(x)    ((USHORT)(x))
@@ -73,7 +74,8 @@ typedef struct _TUN_CTX {
 
 	volatile LONG64 ActiveNBLCount;
 
-	volatile struct {
+	struct {
+		UNICODE_STRING SymbolicLinkName;
 		PVOID Handle;
 	} PnPNotifications;
 
@@ -102,6 +104,7 @@ typedef struct _TUN_CTX {
 } TUN_CTX;
 
 static UINT NdisVersion;
+static DRIVER_OBJECT *TunDriverObject;
 static PVOID TunNotifyInterfaceChangeHandle;
 static NDIS_HANDLE NdisMiniportDriverHandle;
 static volatile LONG64 AdapterCount;
@@ -928,16 +931,36 @@ static void TunDevicePnPEventNotify(NDIS_HANDLE MiniportAdapterContext, PNET_DEV
 {
 }
 
-static DRIVER_NOTIFICATION_CALLBACK_ROUTINE TunPnPNotifyDeviceChange;
+static DRIVER_NOTIFICATION_CALLBACK_ROUTINE TunPnPNotifyChange;
 _Use_decl_annotations_
-static NTSTATUS TunPnPNotifyDeviceChange(PVOID NotificationStruct, PVOID Context)
+static NTSTATUS TunPnPNotifyChange(PVOID NotificationStruct, PVOID Context)
 {
-	TARGET_DEVICE_REMOVAL_NOTIFICATION *notification = NotificationStruct;
+	union {
+		PLUGPLAY_NOTIFICATION_HEADER Header;
+		DEVICE_INTERFACE_CHANGE_NOTIFICATION InterfaceChange;
+		TARGET_DEVICE_REMOVAL_NOTIFICATION DeviceRemoval;
+	} *notification = NotificationStruct;
+	DEVICE_OBJECT *device_object;
+	FILE_OBJECT *file_object;
 	TUN_CTX *ctx = Context;
 
-	_Analysis_assume_(ctx);
+	if (IsEqualGUID(&notification->Header.Event, &GUID_DEVICE_INTERFACE_ARRIVAL) &&
+		IsEqualGUID(&notification->InterfaceChange.InterfaceClassGuid, &GUID_DEVINTERFACE_NET)) {
+		if (!NT_SUCCESS(IoGetDeviceObjectPointer(notification->InterfaceChange.SymbolicLinkName,
+			STANDARD_RIGHTS_ALL, &file_object, &device_object)))
+			return STATUS_SUCCESS;
+		if (device_object->DriverObject != TunDriverObject)
+			goto cleanup_ObDereferenceObject;
+		#pragma warning(suppress: 28175)
+		ctx = device_object->Reserved;
 
-	if (IsEqualGUID(&notification->Event, &GUID_TARGET_DEVICE_QUERY_REMOVE)) {
+		if (notification->InterfaceChange.SymbolicLinkName->Length >= ctx->PnPNotifications.SymbolicLinkName.MaximumLength)
+			goto cleanup_ObDereferenceObject;
+		ctx->PnPNotifications.SymbolicLinkName.Length = notification->InterfaceChange.SymbolicLinkName->Length;
+		RtlCopyUnicodeString(&ctx->PnPNotifications.SymbolicLinkName, notification->InterfaceChange.SymbolicLinkName);
+
+		goto register_EventCategoryTargetDeviceChange;
+	} else if (IsEqualGUID(&notification->Header.Event, &GUID_TARGET_DEVICE_QUERY_REMOVE) && ctx) {
 		KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
 		InterlockedAnd(&ctx->Flags, ~TUN_FLAGS_PRESENT);
 		ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
@@ -946,53 +969,32 @@ static NTSTATUS TunPnPNotifyDeviceChange(PVOID NotificationStruct, PVOID Context
 		 * So we clear them here after setting the paused state, which then frees up NDIS to do
 		 * the right thing later on in the shutdown procedure. */
 		TunQueueClear(ctx, STATUS_NDIS_ADAPTER_REMOVED);
-		ObDereferenceObject(notification->FileObject);
-	} else if (IsEqualGUID(&notification->Event, &GUID_TARGET_DEVICE_REMOVE_COMPLETE)) {
-		PVOID handle = ctx->PnPNotifications.Handle;
-		ctx->PnPNotifications.Handle = NULL;
-		if (handle)
-			IoUnregisterPlugPlayNotificationEx(handle);
-	} else if (IsEqualGUID(&notification->Event, &GUID_TARGET_DEVICE_REMOVE_CANCELLED)) {
+		ObDereferenceObject(notification->DeviceRemoval.FileObject);
+	} else if (IsEqualGUID(&notification->Header.Event, &GUID_TARGET_DEVICE_REMOVE_COMPLETE) && ctx) {
+		IoUnregisterPlugPlayNotificationEx(ctx->PnPNotifications.Handle);
+	} else if (IsEqualGUID(&notification->Header.Event, &GUID_TARGET_DEVICE_REMOVE_CANCELLED) && ctx) {
+		IoUnregisterPlugPlayNotificationEx(ctx->PnPNotifications.Handle);
 		InterlockedOr(&ctx->Flags, TUN_FLAGS_PRESENT);
-		ObReferenceObject(notification->FileObject);
+
+		if (!NT_SUCCESS(IoGetDeviceObjectPointer(&ctx->PnPNotifications.SymbolicLinkName,
+			STANDARD_RIGHTS_ALL, &file_object, &device_object)))
+			return STATUS_SUCCESS;
+
+		goto register_EventCategoryTargetDeviceChange;
 	}
 
 	return STATUS_SUCCESS;
-}
 
-static DRIVER_NOTIFICATION_CALLBACK_ROUTINE TunPnPNotifyInterfaceChange;
-_Use_decl_annotations_
-static NTSTATUS TunPnPNotifyInterfaceChange(PVOID NotificationStruct, PVOID Context)
-{
-	DEVICE_INTERFACE_CHANGE_NOTIFICATION *notification = NotificationStruct;
-	DRIVER_OBJECT *driver_object = (DRIVER_OBJECT *)Context;
-	DEVICE_OBJECT *device_object;
-	FILE_OBJECT *file_object;
-	TUN_CTX *ctx;
-
-	_Analysis_assume_(driver_object);
-
-	if (!IsEqualGUID(&notification->InterfaceClassGuid, &GUID_DEVINTERFACE_NET) ||
-		!IsEqualGUID(&notification->Event, &GUID_DEVICE_INTERFACE_ARRIVAL))
-		return STATUS_SUCCESS;
-
-	if (!NT_SUCCESS(IoGetDeviceObjectPointer(notification->SymbolicLinkName,
-		STANDARD_RIGHTS_ALL, &file_object, &device_object)))
-		return STATUS_SUCCESS;
-	if (device_object->DriverObject != driver_object) {
-		ObDereferenceObject(file_object);
-		return STATUS_SUCCESS;
-	}
-	#pragma warning(suppress: 28175)
-	ctx = device_object->Reserved;
-
-	ASSERT(!ctx->PnPNotifications.Handle);
-	#pragma warning(suppress: 6014) /* Leaking memory 'ctx->PnPNotifications.Handle'. Note: 'ctx->PnPNotifications.Handle' is unregistered in TunPnPNotifyDeviceChange(GUID_TARGET_DEVICE_REMOVE_COMPLETE); or in TunHaltEx(). */
+register_EventCategoryTargetDeviceChange:
+	#pragma warning(suppress: 6014) /* Leaking memory 'ctx->PnPNotifications.Handle'. Note: 'ctx->PnPNotifications.Handle' is unregistered in TunPnPNotifyChange(GUID_TARGET_DEVICE_REMOVE_COMPLETE/CANCELLED). */
 	if (!NT_SUCCESS(IoRegisterPlugPlayNotification(EventCategoryTargetDeviceChange, 0,
-		file_object, driver_object, TunPnPNotifyDeviceChange,
-		ctx, (PVOID *)&ctx->PnPNotifications.Handle))) {
-		ObDereferenceObject(file_object);
-	}
+		file_object, TunDriverObject, TunPnPNotifyChange,
+		ctx, (PVOID *)&ctx->PnPNotifications.Handle)))
+		goto cleanup_ObDereferenceObject;
+	return STATUS_SUCCESS;
+
+cleanup_ObDereferenceObject:
+	ObDereferenceObject(file_object);
 	return STATUS_SUCCESS;
 }
 
@@ -1047,7 +1049,7 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 		.DeviceName        = &unicode_device_name,
 		.SymbolicName      = &unicode_symbolic_name,
 		.MajorFunctions    = dispatch_table,
-		.ExtensionSize     = sizeof(TUN_CTX),
+		.ExtensionSize     = TunPacketAlign(sizeof(TUN_CTX)) + TUN_DEVICE_SYMBOLIC_NAME_MAX,
 		.DefaultSDDLString = &SDDL_DEVOBJ_SYS_ALL /* Kernel, and SYSTEM: full control. Others: none */
 	};
 	NDIS_HANDLE handle;
@@ -1074,6 +1076,9 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 
 	NdisZeroMemory(ctx, sizeof(*ctx));
 	ctx->MiniportAdapterHandle = MiniportAdapterHandle;
+
+	ctx->PnPNotifications.SymbolicLinkName.MaximumLength = TUN_DEVICE_SYMBOLIC_NAME_MAX;
+	ctx->PnPNotifications.SymbolicLinkName.Buffer        = (PWCH)((UCHAR *)ctx + TunPacketAlign(sizeof(TUN_CTX)));
 
 	ctx->Statistics.Header.Type         = NDIS_OBJECT_TYPE_DEFAULT;
 	ctx->Statistics.Header.Revision     = NDIS_STATISTICS_INFO_REVISION_1;
@@ -1322,7 +1327,6 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 {
 	TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
-	ASSERT(!ctx->PnPNotifications.Handle);
 	ASSERT(!InterlockedGet64(&ctx->ActiveNBLCount)); /* Adapter should not be halted if there are (potential) active NBLs present. */
 
 	KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
@@ -1579,8 +1583,10 @@ NTSTATUS DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
 	if (NdisVersion > NDIS_RUNTIME_VERSION_630)
 		NdisVersion = NDIS_RUNTIME_VERSION_630;
 
+	TunDriverObject = DriverObject;
+
 	if (!NT_SUCCESS(status = IoRegisterPlugPlayNotification(EventCategoryDeviceInterfaceChange, 0,
-		(PVOID)&GUID_DEVINTERFACE_NET, DriverObject, TunPnPNotifyInterfaceChange, DriverObject,
+		(PVOID)&GUID_DEVINTERFACE_NET, DriverObject, TunPnPNotifyChange, NULL,
 		&TunNotifyInterfaceChangeHandle)))
 		return status;
 
