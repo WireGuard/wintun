@@ -902,6 +902,7 @@ static NTSTATUS TunDispatchPnP(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 
 		switch (stack->MinorFunction) {
 		case IRP_MN_QUERY_REMOVE_DEVICE:
+		case IRP_MN_SURPRISE_REMOVAL:
 			KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
 			InterlockedAnd(&ctx->Flags, ~TUN_FLAGS_PRESENT);
 			ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
@@ -1089,7 +1090,7 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 			.Revision       = NdisVersion < NDIS_RUNTIME_VERSION_630 ? NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_1        : NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_2,
 			.Size           = NdisVersion < NDIS_RUNTIME_VERSION_630 ? NDIS_SIZEOF_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_1 : NDIS_SIZEOF_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_2
 		},
-		.AttributeFlags         = NDIS_MINIPORT_ATTRIBUTES_NO_HALT_ON_SUSPEND,
+		.AttributeFlags         = NDIS_MINIPORT_ATTRIBUTES_NO_HALT_ON_SUSPEND | NDIS_MINIPORT_ATTRIBUTES_SURPRISE_REMOVE_OK,
 		.InterfaceType          = NdisInterfaceInternal,
 		.MiniportAdapterContext = ctx
 	};
