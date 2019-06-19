@@ -643,8 +643,7 @@ static NTSTATUS TunDispatchWrite(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 
 	KIRQL irql = ExAcquireSpinLockShared(&ctx->TransitionLock);
 	LONG flags = InterlockedGet(&ctx->Flags);
-	if ((status = STATUS_FILE_FORCED_CLOSED, !(flags & TUN_FLAGS_PRESENT)) ||
-	    (status = STATUS_CANCELLED         , !(flags & TUN_FLAGS_RUNNING)))
+	if (status = STATUS_FILE_FORCED_CLOSED, !(flags & TUN_FLAGS_PRESENT))
 		goto cleanup_ExReleaseSpinLockShared;
 
 	UCHAR *buffer;
@@ -733,6 +732,12 @@ static NTSTATUS TunDispatchWrite(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 	if (!nbl_count) {
 		status = STATUS_SUCCESS;
 		goto cleanup_ExReleaseSpinLockShared;
+	}
+	if (!(flags & TUN_FLAGS_RUNNING)) {
+		InterlockedAdd64((LONG64 *)&ctx->Statistics.ifInDiscards, nbl_count);
+		InterlockedAdd64((LONG64 *)&ctx->Statistics.ifInErrors, nbl_count);
+		status = STATUS_SUCCESS;
+		goto cleanup_nbl_queues;
 	}
 
 	InterlockedAdd64(&ctx->ActiveNBLCount, nbl_count);
