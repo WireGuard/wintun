@@ -685,8 +685,8 @@ static NTSTATUS TunDispatchWrite(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 			status = STATUS_INVALID_USER_BUFFER;
 			goto cleanup_nbl_queues;
 		}
-		ptrdiff_t p_size = TunPacketAlign(sizeof(TUN_PACKET) + p->Size);
-		if (b_end - b < p_size) {
+		ULONG p_size = TunPacketAlign(sizeof(TUN_PACKET) + p->Size);
+		if (b_end - b < (ptrdiff_t)p_size) {
 			status = STATUS_INVALID_USER_BUFFER;
 			goto cleanup_nbl_queues;
 		}
