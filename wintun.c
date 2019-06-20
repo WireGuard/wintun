@@ -870,8 +870,9 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		BOOLEAN last_handle = InterlockedDecrement64(&ctx->Device.RefCount) <= 0;
 		ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
 		if (last_handle) {
-			if (ctx->MiniportAdapterHandle)
-				TunIndicateStatus(ctx->MiniportAdapterHandle, MediaConnectStateDisconnected);
+			NDIS_HANDLE handle = InterlockedGetPointer(&ctx->MiniportAdapterHandle);
+			if (handle)
+				TunIndicateStatus(handle, MediaConnectStateDisconnected);
 			TunQueueClear(ctx, NDIS_STATUS_MEDIA_DISCONNECTED);
 		}
 		IoReleaseRemoveLock(&ctx->Device.RemoveLock, stack->FileObject);
@@ -1306,7 +1307,7 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 	NdisFreeNetBufferListPool(ctx->NBLPool);
 
 	/* MiniportAdapterHandle must not be used in TunDispatch(). After TunHaltEx() returns it is invalidated. */
-	ctx->MiniportAdapterHandle = NULL;
+	InterlockedExchangePointer(&ctx->MiniportAdapterHandle, NULL);
 
 	ASSERT(InterlockedGet64(&TunAdapterCount) > 0);
 	if (InterlockedDecrement64(&TunAdapterCount) <= 0)
