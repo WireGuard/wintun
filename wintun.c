@@ -258,8 +258,9 @@ static NTSTATUS TunGetIrpBuffer(_In_ IRP *Irp, _Out_ UCHAR **buffer, _Out_ ULONG
 	if (!Irp->MdlAddress)
 		return STATUS_INVALID_PARAMETER;
 	ULONG size_mdl;
+	*buffer = NULL;
 	NdisQueryMdl(Irp->MdlAddress, buffer, &size_mdl, priority);
-	if (!buffer)
+	if (!*buffer)
 		return STATUS_INSUFFICIENT_RESOURCES;
 	if (size_mdl < *size)
 		*size = size_mdl;
