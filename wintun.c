@@ -66,6 +66,7 @@ typedef struct _TUN_CTX {
 	 * atomic and then releasing. It's similar to setting the atomic and then calling rcu_barrier(). */
 	EX_SPIN_LOCK TransitionLock;
 
+	/* This is actually a pointer to NDIS_MINIPORT_BLOCK struct. */
 	NDIS_HANDLE MiniportAdapterHandle;
 	NDIS_STATISTICS_INFO Statistics;
 
@@ -1023,6 +1024,8 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 		goto cleanup_NdisDeregisterDeviceEx;
 	}
 
+	/* Jason reverse engineered and found NdisWdfGetAdapterContextFromAdapterHandle.
+	 * Switch from device object's "Reserved" to this when we drop support for Windows 8.1. */
 	DEVICE_OBJECT *functional_device;
 	NdisMGetDeviceProperty(MiniportAdapterHandle, NULL, &functional_device, NULL, NULL, NULL);
 

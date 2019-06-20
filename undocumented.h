@@ -29,5 +29,6 @@ typedef struct _SYSTEM_HANDLE_INFORMATION_EX
 } SYSTEM_HANDLE_INFORMATION_EX, *PSYSTEM_HANDLE_INFORMATION_EX;
 
 extern NTSTATUS ZwQuerySystemInformation(SYSTEM_INFORMATION_CLASS SystemInformationClass, PVOID SystemInformation, ULONG SystemInformationLength, ULONG *ReturnLength);
+extern NDIS_HANDLE NdisWdfGetAdapterContextFromAdapterHandle(PVOID DeviceExtension);
 
 extern POBJECT_TYPE *IoDeviceObjectType;
