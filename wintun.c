@@ -573,9 +573,9 @@ static void TunSendNetBufferLists(NDIS_HANDLE MiniportAdapterContext, NET_BUFFER
 	KIRQL irql = ExAcquireSpinLockShared(&ctx->TransitionLock);
 	LONG flags = InterlockedGet(&ctx->Flags);
 	NDIS_STATUS status;
-	if ((status = STATUS_NDIS_ADAPTER_REMOVED   , !(flags & TUN_FLAGS_PRESENT)) ||
-	    (status = STATUS_NDIS_PAUSED            , !(flags & TUN_FLAGS_RUNNING)) ||
-	    (status = STATUS_NDIS_MEDIA_DISCONNECTED, InterlockedGet64(&ctx->Device.RefCount) <= 0))
+	if ((status = NDIS_STATUS_ADAPTER_REMOVED   , !(flags & TUN_FLAGS_PRESENT)) ||
+	    (status = NDIS_STATUS_PAUSED            , !(flags & TUN_FLAGS_RUNNING)) ||
+	    (status = NDIS_STATUS_MEDIA_DISCONNECTED, InterlockedGet64(&ctx->Device.RefCount) <= 0))
 	{
 		TunSetNBLStatus(NetBufferLists, status);
 		NdisMSendNetBufferListsComplete(ctx->MiniportAdapterHandle, NetBufferLists, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
@@ -874,7 +874,7 @@ static NTSTATUS TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 		if (last_handle) {
 			if (ctx->MiniportAdapterHandle)
 				TunIndicateStatus(ctx->MiniportAdapterHandle, MediaConnectStateDisconnected);
-			TunQueueClear(ctx, STATUS_NDIS_MEDIA_DISCONNECTED);
+			TunQueueClear(ctx, NDIS_STATUS_MEDIA_DISCONNECTED);
 		}
 		IoReleaseRemoveLock(&ctx->Device.RemoveLock, stack->FileObject);
 
@@ -920,7 +920,7 @@ static NDIS_STATUS TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_P
 	KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
 	InterlockedAnd(&ctx->Flags, ~TUN_FLAGS_RUNNING);
 	ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
-	TunQueueClear(ctx, STATUS_NDIS_PAUSED);
+	TunQueueClear(ctx, NDIS_STATUS_PAUSED);
 
 	return TunCompletePause(ctx, FALSE);
 }
