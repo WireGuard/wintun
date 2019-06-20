@@ -99,7 +99,7 @@ typedef struct _TUN_CTX {
 static UINT NdisVersion;
 static NDIS_HANDLE NdisMiniportDriverHandle;
 static DRIVER_DISPATCH *NdisDispatchPnP;
-static volatile LONG64 AdapterCount;
+static volatile LONG64 TunAdapterCount;
 
 #define InterlockedGet(val)             (InterlockedAdd((val), 0))
 #define InterlockedGet64(val)           (InterlockedAdd64((val), 0))
@@ -1188,7 +1188,7 @@ static NDIS_STATUS TunInitializeEx(NDIS_HANDLE MiniportAdapterHandle, NDIS_HANDL
 	 * of the MiniportInitializeEx function.
 	 */
 	TunIndicateStatus(MiniportAdapterHandle, MediaConnectStateDisconnected);
-	InterlockedIncrement64(&AdapterCount);
+	InterlockedIncrement64(&TunAdapterCount);
 	InterlockedOr(&ctx->Flags, TUN_FLAGS_PRESENT);
 	return NDIS_STATUS_SUCCESS;
 
@@ -1308,8 +1308,8 @@ static void TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltA
 	/* MiniportAdapterHandle must not be used in TunDispatch(). After TunHaltEx() returns it is invalidated. */
 	ctx->MiniportAdapterHandle = NULL;
 
-	ASSERT(InterlockedGet64(&AdapterCount) > 0);
-	if (InterlockedDecrement64(&AdapterCount) <= 0)
+	ASSERT(InterlockedGet64(&TunAdapterCount) > 0);
+	if (InterlockedDecrement64(&TunAdapterCount) <= 0)
 		TunWaitForReferencesToDropToZero(ctx->Device.Object);
 
 	/* Deregister device _after_ we are done using ctx not to risk an UaF. The ctx is hosted by device extension. */
