@@ -6,7 +6,7 @@ This is a layer 3 TUN driver for Windows 7, 8, 8.1, and 10. Originally created f
 ## Build Requirements
 
 - [Visual Studio 2019](https://visualstudio.microsoft.com/downloads/)
-- [Windows Driver Kit for Windows 10](https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk)
+- [Windows Driver Kit for Windows 10, version 1903](https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk)
 - [WiX Toolset 3.11.1](http://wixtoolset.org/releases/)
 
 

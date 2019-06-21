@@ -124,12 +124,12 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'" />
   <ItemDefinitionGroup>
     <ClCompile>
-      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_STR="$(WintunVersionStr)";NDIS_MINIPORT_DRIVER=1;NDIS620_MINIPORT=1;NDIS680_MINIPORT=1;NDIS_WDM=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_STR="$(WintunVersionStr)";NDIS_MINIPORT_DRIVER=1;NDIS620_MINIPORT=1;NDIS683_MINIPORT=1;NDIS_WDM=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
       <EnablePREfast>true</EnablePREfast>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_STR="$(WintunVersionStr)";NDIS_MINIPORT_DRIVER=1;NDIS620_MINIPORT=1;NDIS680_MINIPORT=1;NDIS_WDM=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_STR="$(WintunVersionStr)";NDIS_MINIPORT_DRIVER=1;NDIS620_MINIPORT=1;NDIS683_MINIPORT=1;NDIS_WDM=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
       <AdditionalDependencies>ndis.lib;wdmsec.lib;%(AdditionalDependencies)</AdditionalDependencies>
