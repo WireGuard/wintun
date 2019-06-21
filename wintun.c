@@ -18,6 +18,9 @@
 #pragma warning(disable : 4204) // nonstandard extension used: non-constant aggregate initializer
 #pragma warning(disable : 4221) // nonstandard extension used: <member>: cannot be initialized using address of automatic variable <variable>
 
+#define NDIS_MINIPORT_VERSION_MIN       ((NDIS_MINIPORT_MINIMUM_MAJOR_VERSION << 16) | NDIS_MINIPORT_MINIMUM_MINOR_VERSION)
+#define NDIS_MINIPORT_VERSION_MAX       ((NDIS_MINIPORT_MAJOR_VERSION         << 16) | NDIS_MINIPORT_MINOR_VERSION        )
+
 #define TUN_DEVICE_NAME         L"WINTUN%u"
 
 #define TUN_VENDOR_NAME         "Wintun Tunnel"
@@ -1536,10 +1539,10 @@ NTSTATUS DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
 	NTSTATUS status;
 
 	NdisVersion = NdisGetVersion();
-	if (NdisVersion < NDIS_RUNTIME_VERSION_620)
+	if (NdisVersion < NDIS_MINIPORT_VERSION_MIN)
 		return NDIS_STATUS_UNSUPPORTED_REVISION;
-	if (NdisVersion > NDIS_RUNTIME_VERSION_630)
-		NdisVersion = NDIS_RUNTIME_VERSION_630;
+	if (NdisVersion > NDIS_MINIPORT_VERSION_MAX)
+		NdisVersion = NDIS_MINIPORT_VERSION_MAX;
 
 	NDIS_MINIPORT_DRIVER_CHARACTERISTICS miniport = {
 		.Header = {
