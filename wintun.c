@@ -1525,6 +1525,21 @@ static void TunCancelDirectOidRequest(NDIS_HANDLE MiniportAdapterContext, PVOID 
 {
 }
 
+static MINIPORT_SYNCHRONOUS_OID_REQUEST TunSynchronousOidRequest;
+_Use_decl_annotations_
+static NDIS_STATUS TunSynchronousOidRequest(NDIS_HANDLE MiniportAdapterContext, PNDIS_OID_REQUEST OidRequest)
+{
+	switch (OidRequest->RequestType) {
+	case NdisRequestQueryInformation:
+	case NdisRequestQueryStatistics:
+	case NdisRequestSetInformation:
+		return NDIS_STATUS_NOT_SUPPORTED;
+
+	default:
+		return NDIS_STATUS_INVALID_OID;
+	}
+}
+
 static MINIPORT_UNLOAD TunUnload;
 _Use_decl_annotations_
 static VOID TunUnload(PDRIVER_OBJECT DriverObject)
@@ -1546,9 +1561,9 @@ NTSTATUS DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
 
 	NDIS_MINIPORT_DRIVER_CHARACTERISTICS miniport = {
 		.Header = {
-			.Type                  = NDIS_OBJECT_TYPE_MINIPORT_DRIVER_CHARACTERISTICS,
-			.Revision              = NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2,
-			.Size                  = NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2
+			.Type     = NDIS_OBJECT_TYPE_MINIPORT_DRIVER_CHARACTERISTICS,
+			.Revision = NdisVersion < NDIS_RUNTIME_VERSION_680 ? NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2        : NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3,
+			.Size     = NdisVersion < NDIS_RUNTIME_VERSION_680 ? NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2 : NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3
 		},
 
 		.MajorNdisVersion              = (UCHAR)((NdisVersion & 0x00ff0000) >> 16),
@@ -1570,7 +1585,8 @@ NTSTATUS DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
 		.ShutdownHandlerEx             = TunShutdownEx,
 		.CancelOidRequestHandler       = TunCancelOidRequest,
 		.DirectOidRequestHandler       = TunDirectOidRequest,
-		.CancelDirectOidRequestHandler = TunCancelDirectOidRequest
+		.CancelDirectOidRequestHandler = TunCancelDirectOidRequest,
+		.SynchronousOidRequestHandler  = TunSynchronousOidRequest
 	};
 	if (!NT_SUCCESS(status = NdisMRegisterMiniportDriver(DriverObject, RegistryPath, NULL, &miniport, &NdisMiniportDriverHandle)))
 		return status;
