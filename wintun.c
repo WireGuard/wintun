@@ -246,11 +246,7 @@ static NTSTATUS TunGetIrpBuffer(_In_ IRP *Irp, _Out_ UCHAR **buffer, _Out_ ULONG
 
 	case IRP_MJ_WRITE:
 		*size = stack->Parameters.Write.Length;
-
-		/* If we use MdlMappingNoWrite flag and call NdisMIndicateReceiveNetBufferLists without
-		 * NDIS_RECEIVE_FLAGS_RESOURCES flag we've got a ATTEMPTED_WRITE_TO_READONLY_MEMORY page
-		 * fault. */
-		priority = NormalPagePriority /*| MdlMappingNoWrite*/;
+		priority = NormalPagePriority | MdlMappingNoWrite;
 		break;
 
 	default:
@@ -712,6 +708,7 @@ static NTSTATUS TunDispatchWrite(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 
 		nbl->SourceHandle = ctx->MiniportAdapterHandle;
 		NdisSetNblFlag(nbl, ether_const[idx].nbl_flags);
+		NdisSetNblFlag(nbl, NDIS_NBL_FLAGS_RECV_READ_ONLY);
 		NET_BUFFER_LIST_INFO(nbl, NetBufferListFrameType) = (PVOID)ether_const[idx].nbl_proto;
 		NET_BUFFER_LIST_STATUS(nbl) = NDIS_STATUS_SUCCESS;
 		NET_BUFFER_LIST_IRP(nbl) = Irp;
