@@ -704,15 +704,8 @@ static NTSTATUS TunDispatchWrite(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
 			goto cleanup_nbl_queues;
 		}
 
-		MDL *mdl = NdisAllocateMdl(ctx->MiniportAdapterHandle, p->Data, p->Size);
-		if (!mdl) {
-			status = STATUS_INSUFFICIENT_RESOURCES;
-			goto cleanup_nbl_queues;
-		}
-
-		NET_BUFFER_LIST *nbl = NdisAllocateNetBufferAndNetBufferList(ctx->NBLPool, 0, 0, mdl, 0, p->Size);
+		NET_BUFFER_LIST *nbl = NdisAllocateNetBufferAndNetBufferList(ctx->NBLPool, 0, 0, Irp->MdlAddress, (ULONG)(p->Data - buffer), p->Size);
 		if (!nbl) {
-			NdisFreeMdl(mdl);
 			status = STATUS_INSUFFICIENT_RESOURCES;
 			goto cleanup_nbl_queues;
 		}
@@ -763,7 +756,6 @@ cleanup_nbl_queues:
 		for (NET_BUFFER_LIST *nbl = nbl_queue[idx].head, *nbl_next; nbl; nbl = nbl_next) {
 			nbl_next = NET_BUFFER_LIST_NEXT_NBL(nbl);
 			NET_BUFFER_LIST_NEXT_NBL(nbl) = NULL;
-			NdisFreeMdl(NET_BUFFER_FIRST_MDL(NET_BUFFER_LIST_FIRST_NB(nbl)));
 			NdisFreeNetBufferList(nbl);
 		}
 	}
@@ -786,15 +778,13 @@ static void TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUF
 		NET_BUFFER_LIST_NEXT_NBL(nbl) = NULL;
 
 		IRP *irp = NET_BUFFER_LIST_IRP(nbl);
-		MDL *mdl = NET_BUFFER_FIRST_MDL(NET_BUFFER_LIST_FIRST_NB(nbl));
 		if (NT_SUCCESS(NET_BUFFER_LIST_STATUS(nbl))) {
-			ULONG p_size = MmGetMdlByteCount(mdl);
+			ULONG p_size = NET_BUFFER_LIST_FIRST_NB(nbl)->DataLength;
 			stat_size += p_size;
 			stat_p_ok++;
 		} else
 			stat_p_err++;
 
-		NdisFreeMdl(mdl);
 		NdisFreeNetBufferList(nbl);
 		TunCompletePause(ctx, TRUE);
 
