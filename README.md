@@ -119,6 +119,6 @@ After loading the driver and creating a network interface the typical way using 
 ~                              ~
 ```
 
-Each packet segment should contain a layer 3 IPv4 or IPv6 packet. Up to 15728640 bytes may be read or written during each call to `ReadFile` or `WriteFile`.
+Each packet segment should contain a layer 3 IPv4 or IPv6 packet. Up to 15728640 bytes may be read or written during each call to `ReadFile` or `WriteFile`. All calls to `ReadFile` must be called with the same virtual address, and all calls to `WriteFile` must be called with the same virtual address. These virtual addresses must reference pages that are readable and writable for the same length as passed to the first calls of `ReadFile` and `WriteFile`.
 
 It is advisable to use [overlapped I/O](https://docs.microsoft.com/en-us/windows/desktop/sync/synchronization-and-overlapped-input-and-output) for this. If using blocking I/O instead, it may be desirable to open separate handles for reading and writing.
