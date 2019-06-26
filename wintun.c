@@ -968,7 +968,7 @@ TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUFFER_LIST Net
     InterlockedAdd64((LONG64 *)&ctx->Statistics.ifInErrors, stat_p_err);
 }
 
-_IRQL_requires_max_(DISPATCH_LEVEL)
+_IRQL_requires_max_(APC_LEVEL)
 _Must_inspect_result_
 static NTSTATUS
 TunDispatchCreate(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
@@ -1002,16 +1002,37 @@ cleanup_ExReleaseSpinLockShared:
     return status;
 }
 
+_IRQL_requires_max_(DISPATCH_LEVEL)
+static void
+TunDispatchClose(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
+{
+    IO_STACK_LOCATION *stack = IoGetCurrentIrpStackLocation(Irp);
+    KIRQL irql = ExAcquireSpinLockExclusive(&Ctx->TransitionLock);
+    ASSERT(InterlockedGet64(&Ctx->Device.RefCount) > 0);
+    BOOLEAN last_handle = InterlockedDecrement64(&Ctx->Device.RefCount) <= 0;
+    ExReleaseSpinLockExclusive(&Ctx->TransitionLock, irql);
+    if (last_handle)
+    {
+        NDIS_HANDLE handle = InterlockedGetPointer(&Ctx->MiniportAdapterHandle);
+        if (handle)
+            TunIndicateStatus(handle, MediaConnectStateDisconnected);
+        TunQueueClear(Ctx, NDIS_STATUS_MEDIA_DISCONNECTED);
+    }
+    TUN_FILE_CTX *file_ctx = (TUN_FILE_CTX *)stack->FileObject->FsContext;
+    TunUnmapUbuffer(&file_ctx->ReadBuffer);
+    TunUnmapUbuffer(&file_ctx->WriteBuffer);
+    ExFreePoolWithTag(file_ctx, TUN_HTONL(TUN_MEMORY_TAG));
+    IoReleaseRemoveLock(&Ctx->Device.RemoveLock, stack->FileObject);
+}
+
 static DRIVER_DISPATCH TunDispatch;
 _Use_decl_annotations_
 static NTSTATUS
 TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 {
-    NTSTATUS status;
-    KIRQL irql;
+    NTSTATUS status = STATUS_SUCCESS;
 
     Irp->IoStatus.Information = 0;
-
     TUN_CTX *ctx = NdisGetDeviceReservedExtension(DeviceObject);
     if (!ctx)
     {
@@ -1038,37 +1059,18 @@ TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
         return TunDispatchCreate(ctx, Irp);
 
     case IRP_MJ_CLOSE:
-        irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
-        ASSERT(InterlockedGet64(&ctx->Device.RefCount) > 0);
-        BOOLEAN last_handle = InterlockedDecrement64(&ctx->Device.RefCount) <= 0;
-        ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
-        if (last_handle)
-        {
-            NDIS_HANDLE handle = InterlockedGetPointer(&ctx->MiniportAdapterHandle);
-            if (handle)
-                TunIndicateStatus(handle, MediaConnectStateDisconnected);
-            TunQueueClear(ctx, NDIS_STATUS_MEDIA_DISCONNECTED);
-        }
-        TUN_FILE_CTX *file_ctx = (TUN_FILE_CTX *)stack->FileObject->FsContext;
-        TunUnmapUbuffer(&file_ctx->ReadBuffer);
-        TunUnmapUbuffer(&file_ctx->WriteBuffer);
-        ExFreePoolWithTag(file_ctx, TUN_HTONL(TUN_MEMORY_TAG));
-        IoReleaseRemoveLock(&ctx->Device.RemoveLock, stack->FileObject);
-
-        status = STATUS_SUCCESS;
-        goto cleanup_complete_req;
+        TunDispatchClose(ctx, Irp);
+        break;
 
     case IRP_MJ_CLEANUP:
         for (IRP *pending_irp;
              (pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, stack->FileObject)) != NULL;)
             TunCompleteRequest(ctx, pending_irp, STATUS_CANCELLED, IO_NO_INCREMENT);
-
-        status = STATUS_SUCCESS;
-        goto cleanup_complete_req;
+        break;
 
     default:
         status = STATUS_INVALID_PARAMETER;
-        goto cleanup_complete_req;
+        break;
     }
 
 cleanup_complete_req:
