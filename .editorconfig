@@ -1,5 +1,6 @@
 [*.{c,h,inf,rc,wxs}]
-indent_style = tab
+indent_style = space
+indent_style = 4
 
 [*.{proj,props,vcxproj,wixproj}]
 indent_style = space
