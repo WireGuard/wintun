@@ -301,35 +301,31 @@ TunMapUbuffer(_Inout_ TUN_MAPPED_UBUFFER *MappedBuffer, _In_ VOID *UserAddress, 
             return STATUS_SUCCESS;
         return STATUS_ALREADY_INITIALIZED;
     }
+
+    MappedBuffer->Mdl = IoAllocateMdl(UserAddress, Size, FALSE, FALSE, NULL);
+    if (!MappedBuffer->Mdl)
+        return STATUS_INSUFFICIENT_RESOURCES;
     try
     {
-        ProbeForWrite(UserAddress, Size, 1);
-        ProbeForRead(UserAddress, Size, 1);
-
-        MappedBuffer->Mdl = IoAllocateMdl(UserAddress, Size, FALSE, FALSE, NULL);
-        if (!MappedBuffer->Mdl)
-            return STATUS_INSUFFICIENT_RESOURCES;
-        MmProbeAndLockPages(MappedBuffer->Mdl, KernelMode, IoWriteAccess);
-        MappedBuffer->KernelAddress =
-            MmGetSystemAddressForMdlSafe(MappedBuffer->Mdl, NormalPagePriority | MdlMappingNoExecute);
-        if (!MappedBuffer->KernelAddress)
-        {
-            IoFreeMdl(MappedBuffer->Mdl);
-            MappedBuffer->Mdl = NULL;
-            return STATUS_INSUFFICIENT_RESOURCES;
-        }
-        MappedBuffer->UserAddress = UserAddress;
-        MappedBuffer->Size = Size;
+        MmProbeAndLockPages(MappedBuffer->Mdl, UserMode, IoWriteAccess);
     }
     except(EXCEPTION_EXECUTE_HANDLER)
     {
-        if (MappedBuffer->Mdl)
-        {
-            IoFreeMdl(MappedBuffer->Mdl);
-            MappedBuffer->Mdl = NULL;
-        }
+        IoFreeMdl(MappedBuffer->Mdl);
+        MappedBuffer->Mdl = NULL;
         return STATUS_INVALID_USER_BUFFER;
     }
+    MappedBuffer->KernelAddress =
+        MmGetSystemAddressForMdlSafe(MappedBuffer->Mdl, NormalPagePriority | MdlMappingNoExecute);
+    if (!MappedBuffer->KernelAddress)
+    {
+        MmUnlockPages(MappedBuffer->Mdl);
+        IoFreeMdl(MappedBuffer->Mdl);
+        MappedBuffer->Mdl = NULL;
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    MappedBuffer->UserAddress = UserAddress;
+    MappedBuffer->Size = Size;
     return STATUS_SUCCESS;
 }
 
