@@ -144,22 +144,22 @@ _IRQL_requires_max_(DISPATCH_LEVEL)
 _IRQL_requires_same_ static void
 TunIndicateStatus(_In_ NDIS_HANDLE MiniportAdapterHandle, _In_ NDIS_MEDIA_CONNECT_STATE MediaConnectState)
 {
-    NDIS_LINK_STATE state = {.Header = {.Type = NDIS_OBJECT_TYPE_DEFAULT,
-                                        .Revision = NDIS_LINK_STATE_REVISION_1,
-                                        .Size = NDIS_SIZEOF_LINK_STATE_REVISION_1},
-                             .MediaConnectState = MediaConnectState,
-                             .MediaDuplexState = MediaDuplexStateFull,
-                             .XmitLinkSpeed = TUN_LINK_SPEED,
-                             .RcvLinkSpeed = TUN_LINK_SPEED,
-                             .PauseFunctions = NdisPauseFunctionsUnsupported};
+    NDIS_LINK_STATE state = { .Header = { .Type = NDIS_OBJECT_TYPE_DEFAULT,
+                                          .Revision = NDIS_LINK_STATE_REVISION_1,
+                                          .Size = NDIS_SIZEOF_LINK_STATE_REVISION_1 },
+                              .MediaConnectState = MediaConnectState,
+                              .MediaDuplexState = MediaDuplexStateFull,
+                              .XmitLinkSpeed = TUN_LINK_SPEED,
+                              .RcvLinkSpeed = TUN_LINK_SPEED,
+                              .PauseFunctions = NdisPauseFunctionsUnsupported };
 
-    NDIS_STATUS_INDICATION t = {.Header = {.Type = NDIS_OBJECT_TYPE_STATUS_INDICATION,
-                                           .Revision = NDIS_STATUS_INDICATION_REVISION_1,
-                                           .Size = NDIS_SIZEOF_STATUS_INDICATION_REVISION_1},
-                                .SourceHandle = MiniportAdapterHandle,
-                                .StatusCode = NDIS_STATUS_LINK_STATE,
-                                .StatusBuffer = &state,
-                                .StatusBufferSize = sizeof(state)};
+    NDIS_STATUS_INDICATION t = { .Header = { .Type = NDIS_OBJECT_TYPE_STATUS_INDICATION,
+                                             .Revision = NDIS_STATUS_INDICATION_REVISION_1,
+                                             .Size = NDIS_SIZEOF_STATUS_INDICATION_REVISION_1 },
+                                 .SourceHandle = MiniportAdapterHandle,
+                                 .StatusCode = NDIS_STATUS_LINK_STATE,
+                                 .StatusBuffer = &state,
+                                 .StatusBufferSize = sizeof(state) };
 
     NdisMIndicateStatusEx(MiniportAdapterHandle, &t);
 }
@@ -808,14 +808,14 @@ TunDispatchWrite(_Inout_ TUN_CTX *ctx, _Inout_ IRP *Irp)
         ULONG nbl_flags;
         USHORT nbl_proto;
     } ether_const[ethtypeidx_end] = {
-        {NDIS_NBL_FLAGS_IS_IPV4, TUN_HTONS(NDIS_ETH_TYPE_IPV4)},
-        {NDIS_NBL_FLAGS_IS_IPV6, TUN_HTONS(NDIS_ETH_TYPE_IPV6)},
+        { NDIS_NBL_FLAGS_IS_IPV4, TUN_HTONS(NDIS_ETH_TYPE_IPV4) },
+        { NDIS_NBL_FLAGS_IS_IPV6, TUN_HTONS(NDIS_ETH_TYPE_IPV6) },
     };
     struct
     {
         NET_BUFFER_LIST *head, *tail;
         LONG count;
-    } nbl_queue[ethtypeidx_end] = {{NULL, NULL, 0}, {NULL, NULL, 0}};
+    } nbl_queue[ethtypeidx_end] = { { NULL, NULL, 0 }, { NULL, NULL, 0 } };
     LONG nbl_count = 0;
     while (b_end - b >= sizeof(TUN_PACKET))
     {
@@ -1155,13 +1155,13 @@ TunInitializeEx(
 
     /* Register device first.
      * Having only one device per adapter allows us to store adapter context inside device extension. */
-    WCHAR device_name[sizeof(L"\\Device\\" TUN_DEVICE_NAME) / sizeof(WCHAR) + 10 /*MAXULONG as string*/] = {0};
+    WCHAR device_name[sizeof(L"\\Device\\" TUN_DEVICE_NAME) / sizeof(WCHAR) + 10 /*MAXULONG as string*/] = { 0 };
     UNICODE_STRING unicode_device_name;
     TunInitUnicodeString(&unicode_device_name, device_name);
     RtlUnicodeStringPrintf(
         &unicode_device_name, L"\\Device\\" TUN_DEVICE_NAME, (ULONG)MiniportInitParameters->NetLuid.Info.NetLuidIndex);
 
-    WCHAR symbolic_name[sizeof(L"\\DosDevices\\" TUN_DEVICE_NAME) / sizeof(WCHAR) + 10 /*MAXULONG as string*/] = {0};
+    WCHAR symbolic_name[sizeof(L"\\DosDevices\\" TUN_DEVICE_NAME) / sizeof(WCHAR) + 10 /*MAXULONG as string*/] = { 0 };
     UNICODE_STRING unicode_symbolic_name;
     TunInitUnicodeString(&unicode_symbolic_name, symbolic_name);
     RtlUnicodeStringPrintf(
@@ -1191,9 +1191,9 @@ TunInitializeEx(
         TunDispatch, /* IRP_MJ_CLEANUP                  */
     };
     NDIS_DEVICE_OBJECT_ATTRIBUTES t = {
-        .Header = {.Type = NDIS_OBJECT_TYPE_DEVICE_OBJECT_ATTRIBUTES,
-                   .Revision = NDIS_DEVICE_OBJECT_ATTRIBUTES_REVISION_1,
-                   .Size = NDIS_SIZEOF_DEVICE_OBJECT_ATTRIBUTES_REVISION_1},
+        .Header = { .Type = NDIS_OBJECT_TYPE_DEVICE_OBJECT_ATTRIBUTES,
+                    .Revision = NDIS_DEVICE_OBJECT_ATTRIBUTES_REVISION_1,
+                    .Size = NDIS_SIZEOF_DEVICE_OBJECT_ATTRIBUTES_REVISION_1 },
         .DeviceName = &unicode_device_name,
         .SymbolicName = &unicode_symbolic_name,
         .MajorFunctions = dispatch_table,
@@ -1258,12 +1258,13 @@ TunInitializeEx(
     KeInitializeSpinLock(&ctx->PacketQueue.Lock);
 
     NET_BUFFER_LIST_POOL_PARAMETERS nbl_pool_param = {
-        .Header = {.Type = NDIS_OBJECT_TYPE_DEFAULT,
-                   .Revision = NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1,
-                   .Size = NDIS_SIZEOF_NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1},
+        .Header = { .Type = NDIS_OBJECT_TYPE_DEFAULT,
+                    .Revision = NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1,
+                    .Size = NDIS_SIZEOF_NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1 },
         .ProtocolId = NDIS_PROTOCOL_ID_DEFAULT,
         .fAllocateNetBuffer = TRUE,
-        .PoolTag = TUN_HTONL(TUN_MEMORY_TAG)};
+        .PoolTag = TUN_HTONL(TUN_MEMORY_TAG)
+    };
 #pragma warning( \
     suppress : 6014) /* Leaking memory 'ctx->NBLPool'. Note: 'ctx->NBLPool' is freed in TunHaltEx; or on failure. */
     ctx->NBLPool = NdisAllocateNetBufferListPool(MiniportAdapterHandle, &nbl_pool_param);
@@ -1274,16 +1275,17 @@ TunInitializeEx(
     }
 
     NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES attr = {
-        .Header = {.Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES,
-                   .Revision = NdisVersion < NDIS_RUNTIME_VERSION_630
-                                   ? NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_1
-                                   : NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_2,
-                   .Size = NdisVersion < NDIS_RUNTIME_VERSION_630
-                               ? NDIS_SIZEOF_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_1
-                               : NDIS_SIZEOF_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_2},
+        .Header = { .Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES,
+                    .Revision = NdisVersion < NDIS_RUNTIME_VERSION_630
+                                    ? NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_1
+                                    : NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_2,
+                    .Size = NdisVersion < NDIS_RUNTIME_VERSION_630
+                                ? NDIS_SIZEOF_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_1
+                                : NDIS_SIZEOF_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES_REVISION_2 },
         .AttributeFlags = NDIS_MINIPORT_ATTRIBUTES_NO_HALT_ON_SUSPEND | NDIS_MINIPORT_ATTRIBUTES_SURPRISE_REMOVE_OK,
         .InterfaceType = NdisInterfaceInternal,
-        .MiniportAdapterContext = ctx};
+        .MiniportAdapterContext = ctx
+    };
     if (!NT_SUCCESS(
             status = NdisMSetMiniportAttributes(MiniportAdapterHandle, (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&attr)))
     {
@@ -1292,35 +1294,36 @@ TunInitializeEx(
     }
 
     NDIS_PM_CAPABILITIES pmcap = {
-        .Header = {.Type = NDIS_OBJECT_TYPE_DEFAULT,
-                   .Revision = NdisVersion < NDIS_RUNTIME_VERSION_630 ? NDIS_PM_CAPABILITIES_REVISION_1
-                                                                      : NDIS_PM_CAPABILITIES_REVISION_2,
-                   .Size = NdisVersion < NDIS_RUNTIME_VERSION_630 ? NDIS_SIZEOF_NDIS_PM_CAPABILITIES_REVISION_1
-                                                                  : NDIS_SIZEOF_NDIS_PM_CAPABILITIES_REVISION_2},
+        .Header = { .Type = NDIS_OBJECT_TYPE_DEFAULT,
+                    .Revision = NdisVersion < NDIS_RUNTIME_VERSION_630 ? NDIS_PM_CAPABILITIES_REVISION_1
+                                                                       : NDIS_PM_CAPABILITIES_REVISION_2,
+                    .Size = NdisVersion < NDIS_RUNTIME_VERSION_630 ? NDIS_SIZEOF_NDIS_PM_CAPABILITIES_REVISION_1
+                                                                   : NDIS_SIZEOF_NDIS_PM_CAPABILITIES_REVISION_2 },
         .MinMagicPacketWakeUp = NdisDeviceStateUnspecified,
         .MinPatternWakeUp = NdisDeviceStateUnspecified,
-        .MinLinkChangeWakeUp = NdisDeviceStateUnspecified};
-    static NDIS_OID suported_oids[] = {OID_GEN_MAXIMUM_TOTAL_SIZE,
-                                       OID_GEN_CURRENT_LOOKAHEAD,
-                                       OID_GEN_TRANSMIT_BUFFER_SPACE,
-                                       OID_GEN_RECEIVE_BUFFER_SPACE,
-                                       OID_GEN_TRANSMIT_BLOCK_SIZE,
-                                       OID_GEN_RECEIVE_BLOCK_SIZE,
-                                       OID_GEN_VENDOR_DESCRIPTION,
-                                       OID_GEN_VENDOR_ID,
-                                       OID_GEN_VENDOR_DRIVER_VERSION,
-                                       OID_GEN_XMIT_OK,
-                                       OID_GEN_RCV_OK,
-                                       OID_GEN_CURRENT_PACKET_FILTER,
-                                       OID_GEN_STATISTICS,
-                                       OID_GEN_INTERRUPT_MODERATION,
-                                       OID_GEN_LINK_PARAMETERS,
-                                       OID_PNP_SET_POWER,
-                                       OID_PNP_QUERY_POWER};
+        .MinLinkChangeWakeUp = NdisDeviceStateUnspecified
+    };
+    static NDIS_OID suported_oids[] = { OID_GEN_MAXIMUM_TOTAL_SIZE,
+                                        OID_GEN_CURRENT_LOOKAHEAD,
+                                        OID_GEN_TRANSMIT_BUFFER_SPACE,
+                                        OID_GEN_RECEIVE_BUFFER_SPACE,
+                                        OID_GEN_TRANSMIT_BLOCK_SIZE,
+                                        OID_GEN_RECEIVE_BLOCK_SIZE,
+                                        OID_GEN_VENDOR_DESCRIPTION,
+                                        OID_GEN_VENDOR_ID,
+                                        OID_GEN_VENDOR_DRIVER_VERSION,
+                                        OID_GEN_XMIT_OK,
+                                        OID_GEN_RCV_OK,
+                                        OID_GEN_CURRENT_PACKET_FILTER,
+                                        OID_GEN_STATISTICS,
+                                        OID_GEN_INTERRUPT_MODERATION,
+                                        OID_GEN_LINK_PARAMETERS,
+                                        OID_PNP_SET_POWER,
+                                        OID_PNP_QUERY_POWER };
     NDIS_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES gen = {
-        .Header = {.Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES,
-                   .Revision = NDIS_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES_REVISION_2,
-                   .Size = NDIS_SIZEOF_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES_REVISION_2},
+        .Header = { .Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES,
+                    .Revision = NDIS_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES_REVISION_2,
+                    .Size = NDIS_SIZEOF_MINIPORT_ADAPTER_GENERAL_ATTRIBUTES_REVISION_2 },
         .MediaType = NdisMediumIP,
         .PhysicalMediumType = NdisPhysicalMediumUnspecified,
         .MtuSize = TUN_EXCH_MAX_IP_PACKET_SIZE,
@@ -1347,7 +1350,8 @@ TunInitializeEx(
             NDIS_LINK_STATE_DUPLEX_AUTO_NEGOTIATED | NDIS_LINK_STATE_PAUSE_FUNCTIONS_AUTO_NEGOTIATED,
         .SupportedOidList = suported_oids,
         .SupportedOidListLength = sizeof(suported_oids),
-        .PowerManagementCapabilitiesEx = &pmcap};
+        .PowerManagementCapabilitiesEx = &pmcap
+    };
     if (!NT_SUCCESS(
             status = NdisMSetMiniportAttributes(MiniportAdapterHandle, (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&gen)))
     {
@@ -1623,10 +1627,11 @@ TunOidQuery(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *OidRequest)
 
     case OID_GEN_INTERRUPT_MODERATION: {
         static const NDIS_INTERRUPT_MODERATION_PARAMETERS intp = {
-            .Header = {.Type = NDIS_OBJECT_TYPE_DEFAULT,
-                       .Revision = NDIS_INTERRUPT_MODERATION_PARAMETERS_REVISION_1,
-                       .Size = NDIS_SIZEOF_INTERRUPT_MODERATION_PARAMETERS_REVISION_1},
-            .InterruptModeration = NdisInterruptModerationNotSupported};
+            .Header = { .Type = NDIS_OBJECT_TYPE_DEFAULT,
+                        .Revision = NDIS_INTERRUPT_MODERATION_PARAMETERS_REVISION_1,
+                        .Size = NDIS_SIZEOF_INTERRUPT_MODERATION_PARAMETERS_REVISION_1 },
+            .InterruptModeration = NdisInterruptModerationNotSupported
+        };
         return TunOidQueryWriteBuf(OidRequest, &intp, (UINT)sizeof(intp));
     }
 
@@ -1768,12 +1773,13 @@ DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
         NdisVersion = NDIS_MINIPORT_VERSION_MAX;
 
     NDIS_MINIPORT_DRIVER_CHARACTERISTICS miniport = {
-        .Header = {.Type = NDIS_OBJECT_TYPE_MINIPORT_DRIVER_CHARACTERISTICS,
-                   .Revision = NdisVersion < NDIS_RUNTIME_VERSION_680 ? NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2
-                                                                      : NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3,
-                   .Size = NdisVersion < NDIS_RUNTIME_VERSION_680
-                               ? NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2
-                               : NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3},
+        .Header = { .Type = NDIS_OBJECT_TYPE_MINIPORT_DRIVER_CHARACTERISTICS,
+                    .Revision = NdisVersion < NDIS_RUNTIME_VERSION_680
+                                    ? NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2
+                                    : NDIS_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3,
+                    .Size = NdisVersion < NDIS_RUNTIME_VERSION_680
+                                ? NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_2
+                                : NDIS_SIZEOF_MINIPORT_DRIVER_CHARACTERISTICS_REVISION_3 },
 
         .MajorNdisVersion = (UCHAR)((NdisVersion & 0x00ff0000) >> 16),
         .MinorNdisVersion = (UCHAR)(NdisVersion & 0x000000ff),
@@ -1795,7 +1801,8 @@ DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
         .CancelOidRequestHandler = TunCancelOidRequest,
         .DirectOidRequestHandler = TunDirectOidRequest,
         .CancelDirectOidRequestHandler = TunCancelDirectOidRequest,
-        .SynchronousOidRequestHandler = TunSynchronousOidRequest};
+        .SynchronousOidRequestHandler = TunSynchronousOidRequest
+    };
     if (!NT_SUCCESS(
             status =
                 NdisMRegisterMiniportDriver(DriverObject, RegistryPath, NULL, &miniport, &NdisMiniportDriverHandle)))
