@@ -37,6 +37,7 @@ ZwQuerySystemInformation(
     PVOID SystemInformation,
     ULONG SystemInformationLength,
     ULONG *ReturnLength);
+
 extern NDIS_HANDLE
 NdisWdfGetAdapterContextFromAdapterHandle(PVOID DeviceExtension);
 

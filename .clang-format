@@ -91,6 +91,7 @@ StatementMacros: [
     '_Acquires_shared_lock_',
     '_Releases_shared_lock_',
     '_Requires_lock_held_',
+    '_Requires_lock_not_held_',
     '_Use_decl_annotations_',
     '_Guarded_by_',
     '__drv_preferredFunction',
