@@ -1069,6 +1069,8 @@ TunDispatchPnP(DEVICE_OBJECT *DeviceObject, IRP *Irp)
     {
 #pragma warning(suppress : 28175)
         TUN_CTX *ctx = DeviceObject->Reserved;
+        if (!ctx)
+            return NdisDispatchPnP(DeviceObject, Irp);
 
         switch (stack->MinorFunction)
         {
