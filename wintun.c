@@ -263,35 +263,6 @@ TunCsqCompleteCanceledIrp(IO_CSQ *Csq, IRP *Irp)
     TunCompleteRequest(ctx, Irp, STATUS_CANCELLED, IO_NO_INCREMENT);
 }
 
-_IRQL_requires_max_(DISPATCH_LEVEL)
-_Must_inspect_result_
-static NTSTATUS
-TunGetIrpBuffer(_In_ IRP *Irp, _Out_ UCHAR **buffer, _Out_ ULONG *Size)
-{
-    TUN_MAPPED_UBUFFER *ubuffer;
-    IO_STACK_LOCATION *stack = IoGetCurrentIrpStackLocation(Irp);
-    TUN_FILE_CTX *file_ctx = (TUN_FILE_CTX *)stack->FileObject->FsContext;
-
-    switch (stack->MajorFunction)
-    {
-    case IRP_MJ_READ:
-        *Size = stack->Parameters.Read.Length;
-        ubuffer = &file_ctx->ReadBuffer;
-        break;
-    case IRP_MJ_WRITE:
-        *Size = stack->Parameters.Write.Length;
-        ubuffer = &file_ctx->WriteBuffer;
-        break;
-    default:
-        return STATUS_INVALID_PARAMETER;
-    }
-    if (*Size > ubuffer->Size)
-        return STATUS_INVALID_USER_BUFFER;
-    ASSERT(ubuffer->KernelAddress != NULL);
-    *buffer = ubuffer->KernelAddress;
-    return STATUS_SUCCESS;
-}
-
 _IRQL_requires_max_(APC_LEVEL)
 _Must_inspect_result_
 static NTSTATUS
@@ -300,9 +271,9 @@ TunMapUbuffer(_Inout_ TUN_MAPPED_UBUFFER *MappedBuffer, _In_ VOID *UserAddress, 
     VOID *current_uaddr = InterlockedGetPointer(&MappedBuffer->UserAddress);
     if (current_uaddr)
     {
-        if (UserAddress == current_uaddr) // TODO: Check ThreadID
-            return STATUS_SUCCESS;
-        return STATUS_ALREADY_INITIALIZED;
+        if (UserAddress != current_uaddr || Size > MappedBuffer->Size) // TODO: Check ThreadID
+            return STATUS_ALREADY_INITIALIZED;
+        return STATUS_SUCCESS;
     }
 
     NTSTATUS status = STATUS_SUCCESS;
@@ -312,7 +283,7 @@ TunMapUbuffer(_Inout_ TUN_MAPPED_UBUFFER *MappedBuffer, _In_ VOID *UserAddress, 
     current_uaddr = InterlockedGetPointer(&MappedBuffer->UserAddress);
     if (current_uaddr)
     {
-        if (UserAddress != current_uaddr) // TODO: Check ThreadID
+        if (UserAddress != current_uaddr || Size > MappedBuffer->Size) // TODO: Check ThreadID
             status = STATUS_ALREADY_INITIALIZED;
         goto err_releasemutex;
     }
@@ -398,22 +369,13 @@ _Must_inspect_result_
 static _Return_type_success_(
     return != NULL) IRP *TunRemoveNextIrp(_Inout_ TUN_CTX *Ctx, _Out_ UCHAR **Buffer, _Out_ ULONG *Size)
 {
-    IRP *irp;
-
-retry:
-    irp = IoCsqRemoveNextIrp(&Ctx->Device.ReadQueue.Csq, NULL);
+    IRP *irp = IoCsqRemoveNextIrp(&Ctx->Device.ReadQueue.Csq, NULL);
     if (!irp)
         return NULL;
-
-    NTSTATUS status = TunGetIrpBuffer(irp, Buffer, Size);
-    if (!NT_SUCCESS(status))
-    {
-        TunCompleteRequest(Ctx, irp, status, IO_NO_INCREMENT);
-        goto retry;
-    }
-
+    IO_STACK_LOCATION *stack = IoGetCurrentIrpStackLocation(irp);
+    *Size = stack->Parameters.Read.Length;
     ASSERT(irp->IoStatus.Information <= (ULONG_PTR)*Size);
-
+    *Buffer = ((TUN_FILE_CTX *)stack->FileObject->FsContext)->ReadBuffer.KernelAddress;
     return irp;
 }
 
@@ -807,12 +769,11 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     if (status = STATUS_FILE_FORCED_CLOSED, !(flags & TUN_FLAGS_PRESENT))
         goto cleanup_ExReleaseSpinLockShared;
 
-    UCHAR *buffer;
-    ULONG size;
-    if (!NT_SUCCESS(status = TunGetIrpBuffer(Irp, &buffer, &size)))
-        goto cleanup_ExReleaseSpinLockShared;
     IO_STACK_LOCATION *stack = IoGetCurrentIrpStackLocation(Irp);
-    MDL *mdl = ((TUN_FILE_CTX *)stack->FileObject->FsContext)->WriteBuffer.Mdl;
+    TUN_MAPPED_UBUFFER *ubuffer = &((TUN_FILE_CTX *)stack->FileObject->FsContext)->WriteBuffer;
+    UCHAR *buffer = ubuffer->KernelAddress;
+    ULONG size = stack->Parameters.Write.Length;
+
     const UCHAR *b = buffer, *b_end = buffer + size;
     typedef enum _ethtypeidx_t
     {
@@ -868,7 +829,7 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         }
 
         NET_BUFFER_LIST *nbl =
-            NdisAllocateNetBufferAndNetBufferList(Ctx->NBLPool, 0, 0, mdl, (ULONG)(p->Data - buffer), p->Size);
+            NdisAllocateNetBufferAndNetBufferList(Ctx->NBLPool, 0, 0, ubuffer->Mdl, (ULONG)(p->Data - buffer), p->Size);
         if (!nbl)
         {
             status = STATUS_INSUFFICIENT_RESOURCES;
