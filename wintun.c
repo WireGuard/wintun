@@ -13,12 +13,11 @@
 #include <ntstrsafe.h>
 #include "undocumented.h"
 
-#pragma warning(disable : 4100) // unreferenced formal parameter
-#pragma warning(disable : 4200) // nonstandard extension used: zero-sized array in struct/union
-#pragma warning(disable : 4204) // nonstandard extension used: non-constant aggregate initializer
-#pragma warning(disable : 4221) // nonstandard extension used: <member>: cannot be initialized using address of
-                                // automatic variable <variable>
-#pragma warning(disable : 6320) // exception-filter expression is the constant EXCEPTION_EXECUTE_HANDLER
+#pragma warning(disable : 4100) /* unreferenced formal parameter */
+#pragma warning(disable : 4200) /* nonstandard: zero-sized array in struct/union */
+#pragma warning(disable : 4204) /* nonstandard: non-constant aggregate initializer */
+#pragma warning(disable : 4221) /* nonstandard: cannot be initialized using address of automatic variable */
+#pragma warning(disable : 6320) /* exception-filter expression is the constant EXCEPTION_EXECUTE_HANDLER */
 
 #define NDIS_MINIPORT_VERSION_MIN ((NDIS_MINIPORT_MINIMUM_MAJOR_VERSION << 16) | NDIS_MINIPORT_MINIMUM_MINOR_VERSION)
 #define NDIS_MINIPORT_VERSION_MAX ((NDIS_MINIPORT_MAJOR_VERSION << 16) | NDIS_MINIPORT_MINOR_VERSION)
@@ -27,19 +26,19 @@
 
 #define TUN_VENDOR_NAME "Wintun Tunnel"
 #define TUN_VENDOR_ID 0xFFFFFF00
-#define TUN_LINK_SPEED 100000000000ULL // 100gbps
+#define TUN_LINK_SPEED 100000000000ULL /* 100gbps */
 
-// Maximum number of full-sized exchange packets that can be exchanged in a single read/write.
+/* Maximum number of full-sized exchange packets that can be exchanged in a single read/write. */
 #define TUN_EXCH_MAX_PACKETS 256
-// Maximum exchange packet size - empirically determined by net buffer list (pool) limitations
+/* Maximum exchange packet size - empirically determined by net buffer list (pool) limitations */
 #define TUN_EXCH_MAX_PACKET_SIZE 0xF000
-#define TUN_EXCH_ALIGNMENT 16 // Memory alignment in exchange buffers
-// Maximum IP packet size (headers + payload)
+#define TUN_EXCH_ALIGNMENT 16 /* Memory alignment in exchange buffers */
+/* Maximum IP packet size (headers + payload) */
 #define TUN_EXCH_MAX_IP_PACKET_SIZE (TUN_EXCH_MAX_PACKET_SIZE - sizeof(TUN_PACKET))
-// Maximum size of read/write exchange buffer
+/* Maximum size of read/write exchange buffer */
 #define TUN_EXCH_MAX_BUFFER_SIZE (TUN_EXCH_MAX_PACKETS * TUN_EXCH_MAX_PACKET_SIZE)
-#define TUN_EXCH_MIN_BUFFER_SIZE_READ TUN_EXCH_MAX_PACKET_SIZE // Minimum size of read exchange buffer
-#define TUN_EXCH_MIN_BUFFER_SIZE_WRITE (sizeof(TUN_PACKET))    // Minimum size of write exchange buffer
+#define TUN_EXCH_MIN_BUFFER_SIZE_READ TUN_EXCH_MAX_PACKET_SIZE /* Minimum size of read exchange buffer */
+#define TUN_EXCH_MIN_BUFFER_SIZE_WRITE (sizeof(TUN_PACKET))    /* Minimum size of write exchange buffer */
 #define TUN_QUEUE_MAX_NBLS 1000
 #define TUN_MEMORY_TAG 'wtun'
 #define TUN_CSQ_INSERT_HEAD ((PVOID)TRUE)
@@ -59,14 +58,14 @@
 
 typedef struct _TUN_PACKET
 {
-    ULONG Size; // Size of packet data (TUN_EXCH_MAX_IP_PACKET_SIZE max)
-    _Field_size_bytes_(Size) __declspec(align(TUN_EXCH_ALIGNMENT)) UCHAR Data[]; // Packet data
+    ULONG Size; /* Size of packet data (TUN_EXCH_MAX_IP_PACKET_SIZE max) */
+    _Field_size_bytes_(Size) __declspec(align(TUN_EXCH_ALIGNMENT)) UCHAR Data[]; /* Packet data */
 } TUN_PACKET;
 
 typedef enum _TUN_FLAGS
 {
-    TUN_FLAGS_RUNNING = 1 << 0, // Toggles between paused and running state
-    TUN_FLAGS_PRESENT = 1 << 1, // Toggles between removal pending and being present
+    TUN_FLAGS_RUNNING = 1 << 0, /* Toggles between paused and running state */
+    TUN_FLAGS_PRESENT = 1 << 1, /* Toggles between removal pending and being present */
 } TUN_FLAGS;
 
 typedef struct _TUN_CTX
@@ -78,7 +77,7 @@ typedef struct _TUN_CTX
      * atomic and then releasing. It's similar to setting the atomic and then calling rcu_barrier(). */
     EX_SPIN_LOCK TransitionLock;
 
-    NDIS_HANDLE MiniportAdapterHandle; // This is actually a pointer to NDIS_MINIPORT_BLOCK struct.
+    NDIS_HANDLE MiniportAdapterHandle; /* This is actually a pointer to NDIS_MINIPORT_BLOCK struct. */
     NDIS_STATISTICS_INFO Statistics;
 
     volatile LONG64 ActiveNBLCount;
@@ -117,7 +116,7 @@ typedef struct _TUN_MAPPED_UBUFFER
     MDL *Mdl;
     ULONG Size;
     FAST_MUTEX InitializationComplete;
-    // TODO: ThreadID for checking
+    /* TODO: ThreadID for checking */
 } TUN_MAPPED_UBUFFER;
 
 typedef struct _TUN_FILE_CTX
@@ -271,7 +270,7 @@ TunMapUbuffer(_Inout_ TUN_MAPPED_UBUFFER *MappedBuffer, _In_ VOID *UserAddress, 
     VOID *current_uaddr = InterlockedGetPointer(&MappedBuffer->UserAddress);
     if (current_uaddr)
     {
-        if (UserAddress != current_uaddr || Size > MappedBuffer->Size) // TODO: Check ThreadID
+        if (UserAddress != current_uaddr || Size > MappedBuffer->Size) /* TODO: Check ThreadID */
             return STATUS_ALREADY_INITIALIZED;
         return STATUS_SUCCESS;
     }
@@ -279,11 +278,11 @@ TunMapUbuffer(_Inout_ TUN_MAPPED_UBUFFER *MappedBuffer, _In_ VOID *UserAddress, 
     NTSTATUS status = STATUS_SUCCESS;
     ExAcquireFastMutex(&MappedBuffer->InitializationComplete);
 
-    // Recheck the same thing as above, but locked this time.
+    /* Recheck the same thing as above, but locked this time. */
     current_uaddr = InterlockedGetPointer(&MappedBuffer->UserAddress);
     if (current_uaddr)
     {
-        if (UserAddress != current_uaddr || Size > MappedBuffer->Size) // TODO: Check ThreadID
+        if (UserAddress != current_uaddr || Size > MappedBuffer->Size) /* TODO: Check ThreadID */
             status = STATUS_ALREADY_INITIALIZED;
         goto err_releasemutex;
     }
@@ -532,7 +531,7 @@ retry:
     return ret;
 }
 
-// Note: Must be called immediately after TunQueueRemove without dropping ctx->PacketQueue.Lock.
+/* Note: Must be called immediately after TunQueueRemove without dropping ctx->PacketQueue.Lock. */
 _Requires_lock_held_(Ctx->PacketQueue.Lock)
 _IRQL_requires_(DISPATCH_LEVEL)
 static void
@@ -990,7 +989,7 @@ TunDispatchClose(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     BOOLEAN last_handle = InterlockedDecrement64(&Ctx->Device.RefCount) <= 0;
     ExReleaseSpinLockExclusive(
         &Ctx->TransitionLock,
-        ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); // Ensure above change is visible to all readers.
+        ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
     if (last_handle)
     {
         NDIS_HANDLE handle = InterlockedGetPointer(&Ctx->MiniportAdapterHandle);
@@ -1079,7 +1078,7 @@ TunDispatchPnP(DEVICE_OBJECT *DeviceObject, IRP *Irp)
             InterlockedAnd(&ctx->Flags, ~TUN_FLAGS_PRESENT);
             ExReleaseSpinLockExclusive(
                 &ctx->TransitionLock,
-                ExAcquireSpinLockExclusive(&ctx->TransitionLock)); // Ensure above change is visible to all readers.
+                ExAcquireSpinLockExclusive(&ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
             TunQueueClear(ctx, NDIS_STATUS_ADAPTER_REMOVED);
             break;
         }
@@ -1116,7 +1115,7 @@ TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_PAUSE_PARAMETERS Min
     InterlockedAnd(&ctx->Flags, ~TUN_FLAGS_RUNNING);
     ExReleaseSpinLockExclusive(
         &ctx->TransitionLock,
-        ExAcquireSpinLockExclusive(&ctx->TransitionLock)); // Ensure above change is visible to all readers.
+        ExAcquireSpinLockExclusive(&ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
     TunQueueClear(ctx, NDIS_STATUS_PAUSED);
 
     return TunCompletePause(ctx, FALSE);
@@ -1142,15 +1141,15 @@ TunInitializeEx(
     if (!MiniportAdapterHandle)
         return NDIS_STATUS_FAILURE;
 
-    /* Register device first.
-     * Having only one device per adapter allows us to store adapter context inside device extension. */
-    WCHAR device_name[sizeof(L"\\Device\\" TUN_DEVICE_NAME) / sizeof(WCHAR) + 10 /*MAXULONG as string*/] = { 0 };
+    /* Register device first. Having only one device per adapter allows us to store
+     * adapter context inside device extension. */
+    WCHAR device_name[sizeof(L"\\Device\\" TUN_DEVICE_NAME "4294967295") / sizeof(WCHAR) + 1] = { 0 };
     UNICODE_STRING unicode_device_name;
     TunInitUnicodeString(&unicode_device_name, device_name);
     RtlUnicodeStringPrintf(
         &unicode_device_name, L"\\Device\\" TUN_DEVICE_NAME, (ULONG)MiniportInitParameters->NetLuid.Info.NetLuidIndex);
 
-    WCHAR symbolic_name[sizeof(L"\\DosDevices\\" TUN_DEVICE_NAME) / sizeof(WCHAR) + 10 /*MAXULONG as string*/] = { 0 };
+    WCHAR symbolic_name[sizeof(L"\\DosDevices\\" TUN_DEVICE_NAME "4294967295") / sizeof(WCHAR) + 1] = { 0 };
     UNICODE_STRING unicode_symbolic_name;
     TunInitUnicodeString(&unicode_symbolic_name, symbolic_name);
     RtlUnicodeStringPrintf(
@@ -1421,9 +1420,9 @@ TunForceHandlesClosed(_Inout_ TUN_CTX *Ctx)
 
     for (ULONG_PTR i = 0; i < table->NumberOfHandles; ++i)
     {
-        FILE_OBJECT *file =
-            table->Handles[i].Object; // XXX: We should perhaps first look at table->Handles[i].ObjectTypeIndex, but
-                                      // the value changes lots between NT versions, and it should be implicit anyway.
+        /* XXX: We should perhaps first look at table->Handles[i].ObjectTypeIndex, but
+         * the value changes lots between NT versions, and it should be implicit anyway. */
+        FILE_OBJECT *file = table->Handles[i].Object;
         if (!file || file->Type != 5 || file->DeviceObject != Ctx->Device.Object)
             continue;
         status = PsLookupProcessByProcessId(table->Handles[i].UniqueProcessId, &process);
@@ -1470,13 +1469,13 @@ TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltAction)
 {
     TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
-    ASSERT(!InterlockedGet64(&ctx->ActiveNBLCount)); // Adapter should not be halted if there are (potential)
-                                                     // active NBLs present.
+    ASSERT(!InterlockedGet64(&ctx->ActiveNBLCount)); /* Adapter should not be halted if there are (potential)
+                                                      * active NBLs present. */
 
     InterlockedAnd(&ctx->Flags, ~TUN_FLAGS_PRESENT);
     ExReleaseSpinLockExclusive(
         &ctx->TransitionLock,
-        ExAcquireSpinLockExclusive(&ctx->TransitionLock)); // Ensure above change is visible to all readers.
+        ExAcquireSpinLockExclusive(&ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
 
     for (IRP *pending_irp; (pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL)) != NULL;)
         TunCompleteRequest(ctx, pending_irp, STATUS_FILE_FORCED_CLOSED, IO_NO_INCREMENT);
