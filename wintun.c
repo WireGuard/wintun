@@ -986,10 +986,11 @@ static void
 TunDispatchClose(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
 {
     IO_STACK_LOCATION *stack = IoGetCurrentIrpStackLocation(Irp);
-    KIRQL irql = ExAcquireSpinLockExclusive(&Ctx->TransitionLock);
     ASSERT(InterlockedGet64(&Ctx->Device.RefCount) > 0);
     BOOLEAN last_handle = InterlockedDecrement64(&Ctx->Device.RefCount) <= 0;
-    ExReleaseSpinLockExclusive(&Ctx->TransitionLock, irql);
+    ExReleaseSpinLockExclusive(
+        &Ctx->TransitionLock,
+        ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); // Ensure above change is visible to all readers.
     if (last_handle)
     {
         NDIS_HANDLE handle = InterlockedGetPointer(&Ctx->MiniportAdapterHandle);
@@ -1073,9 +1074,10 @@ TunDispatchPnP(DEVICE_OBJECT *DeviceObject, IRP *Irp)
         {
         case IRP_MN_QUERY_REMOVE_DEVICE:
         case IRP_MN_SURPRISE_REMOVAL: {
-            KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
             InterlockedAnd(&ctx->Flags, ~TUN_FLAGS_PRESENT);
-            ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
+            ExReleaseSpinLockExclusive(
+                &ctx->TransitionLock,
+                ExAcquireSpinLockExclusive(&ctx->TransitionLock)); // Ensure above change is visible to all readers.
             TunQueueClear(ctx, NDIS_STATUS_ADAPTER_REMOVED);
             break;
         }
@@ -1109,9 +1111,10 @@ TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_PAUSE_PARAMETERS Min
 {
     TUN_CTX *ctx = (TUN_CTX *)MiniportAdapterContext;
 
-    KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
     InterlockedAnd(&ctx->Flags, ~TUN_FLAGS_RUNNING);
-    ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
+    ExReleaseSpinLockExclusive(
+        &ctx->TransitionLock,
+        ExAcquireSpinLockExclusive(&ctx->TransitionLock)); // Ensure above change is visible to all readers.
     TunQueueClear(ctx, NDIS_STATUS_PAUSED);
 
     return TunCompletePause(ctx, FALSE);
@@ -1468,9 +1471,10 @@ TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltAction)
     ASSERT(!InterlockedGet64(&ctx->ActiveNBLCount)); // Adapter should not be halted if there are (potential)
                                                      // active NBLs present.
 
-    KIRQL irql = ExAcquireSpinLockExclusive(&ctx->TransitionLock);
     InterlockedAnd(&ctx->Flags, ~TUN_FLAGS_PRESENT);
-    ExReleaseSpinLockExclusive(&ctx->TransitionLock, irql);
+    ExReleaseSpinLockExclusive(
+        &ctx->TransitionLock,
+        ExAcquireSpinLockExclusive(&ctx->TransitionLock)); // Ensure above change is visible to all readers.
 
     for (IRP *pending_irp; (pending_irp = IoCsqRemoveNextIrp(&ctx->Device.ReadQueue.Csq, NULL)) != NULL;)
         TunCompleteRequest(ctx, pending_irp, STATUS_FILE_FORCED_CLOSED, IO_NO_INCREMENT);
