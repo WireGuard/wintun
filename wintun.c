@@ -1197,12 +1197,15 @@ TunInitializeEx(
         status = NDIS_STATUS_FAILURE;
         goto cleanup_NdisDeregisterDeviceEx;
     }
-
-    /* Jason reverse engineered and found NdisWdfGetAdapterContextFromAdapterHandle.
-     * Switch from device object's "Reserved" to this when we drop support for Windows 8.1. */
     DEVICE_OBJECT *functional_device;
     NdisMGetDeviceProperty(MiniportAdapterHandle, NULL, &functional_device, NULL, NULL, NULL);
 
+    /* Reverse engineering indicates that we'd be better off calling
+     * NdisWdfGetAdapterContextFromAdapterHandle(functional_device),
+     * which points to our TUN_CTX object directly, but this isn't
+     * available before Windows 10, so for now we just stick it into
+     * this reserved field. Revisit this when we drop support for old
+     * Windows versions. */
 #pragma warning(suppress : 28175)
     ASSERT(!functional_device->Reserved);
 #pragma warning(suppress : 28175)
