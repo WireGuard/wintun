@@ -395,7 +395,7 @@ TunWriteIntoIrp(_Inout_ IRP *Irp, _Inout_ UCHAR *Buffer, _In_ NET_BUFFER *Nb, _I
     ULONG PacketSize = NET_BUFFER_DATA_LENGTH(Nb);
     TUN_PACKET *Packet = (TUN_PACKET *)(Buffer + Irp->IoStatus.Information);
 
-    Packet->Size = PacketSize; /* We shouldn't trust Packet->Size directly for reading, because the usre controls it. */
+    Packet->Size = PacketSize; /* We shouldn't trust Packet->Size directly for reading, because the user controls it. */
     void *NbData = NdisGetDataBuffer(Nb, PacketSize, Packet->Data, 1, 0);
     if (!NbData)
     {
@@ -806,22 +806,24 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         }
 
         TUN_PACKET *Packet = (TUN_PACKET *)BufferPos;
-        if (Packet->Size > TUN_EXCH_MAX_IP_PACKET_SIZE)
+        ULONG PacketSize = *(volatile ULONG *)&Packet->Size; /* Packet->Size is controlled by userspace, so don't trust it. */
+
+        if (PacketSize > TUN_EXCH_MAX_IP_PACKET_SIZE)
         {
             Status = STATUS_INVALID_USER_BUFFER;
             goto cleanup_nbl_queues;
         }
-        ULONG PacketSize = TunPacketAlign(sizeof(TUN_PACKET) + Packet->Size);
-        if (BufferEnd - BufferPos < (ptrdiff_t)PacketSize)
+        ULONG AlignedPacketSize = TunPacketAlign(sizeof(TUN_PACKET) + PacketSize);
+        if (BufferEnd - BufferPos < (ptrdiff_t)AlignedPacketSize)
         {
             Status = STATUS_INVALID_USER_BUFFER;
             goto cleanup_nbl_queues;
         }
 
         EtherTypeIndex Index;
-        if (Packet->Size >= 20 && Packet->Data[0] >> 4 == 4)
+        if (PacketSize >= 20 && Packet->Data[0] >> 4 == 4)
             Index = EtherTypeIndexIPv4;
-        else if (Packet->Size >= 40 && Packet->Data[0] >> 4 == 6)
+        else if (PacketSize >= 40 && Packet->Data[0] >> 4 == 6)
             Index = EtherTypeIndexIPv6;
         else
         {
@@ -830,7 +832,7 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         }
 
         NET_BUFFER_LIST *Nbl = NdisAllocateNetBufferAndNetBufferList(
-            Ctx->NBLPool, 0, 0, UserBuffer->Mdl, (ULONG)(Packet->Data - BufferStart), Packet->Size);
+            Ctx->NBLPool, 0, 0, UserBuffer->Mdl, (ULONG)(Packet->Data - BufferStart), PacketSize);
         if (!Nbl)
         {
             Status = STATUS_INSUFFICIENT_RESOURCES;
@@ -845,7 +847,7 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         TunAppendNBL(&NblQueue[Index].Head, &NblQueue[Index].Tail, Nbl);
         NblQueue[Index].Count++;
         NblCount++;
-        BufferPos += PacketSize;
+        BufferPos += AlignedPacketSize;
     }
 
     if ((ULONG)(BufferPos - BufferStart) != Size)
