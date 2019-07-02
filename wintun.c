@@ -806,7 +806,8 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         }
 
         TUN_PACKET *Packet = (TUN_PACKET *)BufferPos;
-        ULONG PacketSize = *(volatile ULONG *)&Packet->Size; /* Packet->Size is controlled by userspace, so don't trust it. */
+        /* Packet->Size is controlled by userspace, so don't trust it. */
+        ULONG PacketSize = *(volatile ULONG *)&Packet->Size;
 
         if (PacketSize > TUN_EXCH_MAX_IP_PACKET_SIZE)
         {
@@ -874,20 +875,17 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     InterlockedExchange(IRP_REFCOUNT(Irp), NblCount);
     IoMarkIrpPending(Irp);
 
-    if (NblQueue[EtherTypeIndexIPv4].Head)
+    for (EtherTypeIndex Index = EtherTypeIndexStart; Index < EtherTypeIndexEnd; Index++)
+    {
+        if (!NblQueue[Index].Head)
+            continue;
         NdisMIndicateReceiveNetBufferLists(
             Ctx->MiniportAdapterHandle,
-            NblQueue[EtherTypeIndexIPv4].Head,
+            NblQueue[Index].Head,
             NDIS_DEFAULT_PORT_NUMBER,
-            NblQueue[EtherTypeIndexIPv4].Count,
-            NDIS_RECEIVE_FLAGS_SINGLE_ETHER_TYPE);
-    if (NblQueue[EtherTypeIndexIPv6].Head)
-        NdisMIndicateReceiveNetBufferLists(
-            Ctx->MiniportAdapterHandle,
-            NblQueue[EtherTypeIndexIPv6].Head,
-            NDIS_DEFAULT_PORT_NUMBER,
-            NblQueue[EtherTypeIndexIPv6].Count,
-            NDIS_RECEIVE_FLAGS_SINGLE_ETHER_TYPE);
+            NblQueue[Index].Count,
+            NDIS_RECEIVE_FLAGS_SINGLE_ETHER_TYPE | NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL);
+    }
 
     ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
     TunCompletePause(Ctx, TRUE);
