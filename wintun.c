@@ -123,7 +123,6 @@ typedef struct _TUN_MAPPED_UBUFFER
 typedef struct _TUN_FILE_CTX
 {
     TUN_MAPPED_UBUFFER ReadBuffer;
-    TUN_MAPPED_UBUFFER WriteBuffer;
 } TUN_FILE_CTX;
 
 static UINT NdisVersion;
@@ -352,12 +351,6 @@ TunMapIrp(_In_ IRP *Irp)
         if (Size < TUN_EXCH_MIN_BUFFER_SIZE_READ)
             return STATUS_INVALID_USER_BUFFER;
         UserBuffer = &FileCtx->ReadBuffer;
-        break;
-    case IRP_MJ_WRITE:
-        Size = Stack->Parameters.Write.Length;
-        if (Size < TUN_EXCH_MIN_BUFFER_SIZE_WRITE)
-            return STATUS_INVALID_USER_BUFFER;
-        UserBuffer = &FileCtx->WriteBuffer;
         break;
     default:
         return STATUS_INVALID_PARAMETER;
@@ -757,8 +750,7 @@ cleanup_CompleteRequest:
     return Status;
 }
 
-#define IRP_REFCOUNT(irp) ((volatile LONG *)&(irp)->Tail.Overlay.DriverContext[0])
-#define NET_BUFFER_LIST_IRP(nbl) (NET_BUFFER_LIST_MINIPORT_RESERVED(nbl)[0])
+#define NET_BUFFER_LIST_MDL_REFCOUNT(Nbl) (NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[0])
 
 static MINIPORT_RETURN_NET_BUFFER_LISTS TunReturnNetBufferLists;
 _Use_decl_annotations_
@@ -773,7 +765,6 @@ TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUFFER_LIST Net
         NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
         NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
 
-        IRP *Irp = NET_BUFFER_LIST_IRP(Nbl);
         if (NT_SUCCESS(NET_BUFFER_LIST_STATUS(Nbl)))
         {
             StatSize += NET_BUFFER_LIST_FIRST_NB(Nbl)->DataLength;
@@ -782,12 +773,17 @@ TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUFFER_LIST Net
         else
             StatPacketsError++;
 
-        NdisFreeNetBufferList(Nbl);
         TunCompletePause(Ctx, TRUE);
 
-        ASSERT(InterlockedGet(IRP_REFCOUNT(Irp)) > 0);
-        if (InterlockedDecrement(IRP_REFCOUNT(Irp)) <= 0)
-            TunCompleteRequest(Ctx, Irp, STATUS_SUCCESS, IO_NETWORK_INCREMENT);
+        volatile LONG *MdlRefcount = NET_BUFFER_LIST_MDL_REFCOUNT(Nbl);
+        ASSERT(InterlockedGet(MdlRefcount) > 0);
+        if (InterlockedDecrement(MdlRefcount) <= 0)
+        {
+            /* MdlRefcount is also the first pointer in the allocation. */
+            ExFreePoolWithTag((PVOID)MdlRefcount, TUN_MEMORY_TAG);
+            NdisFreeMdl(NET_BUFFER_LIST_FIRST_NB(Nbl)->MdlChain);
+        }
+        NdisFreeNetBufferList(Nbl);
     }
 
     InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCInOctets, StatSize);
@@ -805,18 +801,31 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
 
     InterlockedIncrement64(&Ctx->ActiveNBLCount);
 
-    if (!NT_SUCCESS(Status = TunMapIrp(Irp)))
+    IO_STACK_LOCATION *Stack = IoGetCurrentIrpStackLocation(Irp);
+    ULONG Size = Stack->Parameters.Write.Length;
+    if (Status = STATUS_INVALID_USER_BUFFER, (Size < TUN_EXCH_MIN_BUFFER_SIZE_WRITE || Size > TUN_EXCH_MAX_BUFFER_SIZE))
         goto cleanup_CompleteRequest;
+    UCHAR *BufferStart = ExAllocatePoolWithTag(NonPagedPoolNx, Size, TUN_MEMORY_TAG);
+    if (Status = STATUS_INSUFFICIENT_RESOURCES, !BufferStart)
+        goto cleanup_CompleteRequest;
+    /* We don't write to this until we're totally finished using Packet->Size. */
+    LONG *MdlRefcount = (LONG *)BufferStart;
+    try
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        ProbeForRead(Irp->UserBuffer, Size, 1);
+        NdisMoveMemory(BufferStart, Irp->UserBuffer, Size);
+    }
+    except(EXCEPTION_EXECUTE_HANDLER) { goto cleanup_ExFreePoolWithTag; }
+
+    MDL *Mdl = NdisAllocateMdl(Ctx->MiniportAdapterHandle, BufferStart, Size);
+    if (Status = STATUS_INSUFFICIENT_RESOURCES, !Mdl)
+        goto cleanup_ExFreePoolWithTag;
 
     KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
     LONG Flags = InterlockedGet(&Ctx->Flags);
     if (Status = STATUS_FILE_FORCED_CLOSED, !(Flags & TUN_FLAGS_PRESENT))
         goto cleanup_ExReleaseSpinLockShared;
-
-    IO_STACK_LOCATION *Stack = IoGetCurrentIrpStackLocation(Irp);
-    TUN_MAPPED_UBUFFER *UserBuffer = &((TUN_FILE_CTX *)Stack->FileObject->FsContext)->WriteBuffer;
-    UCHAR *BufferStart = UserBuffer->KernelAddress;
-    ULONG Size = Stack->Parameters.Write.Length;
 
     const UCHAR *BufferPos = BufferStart, *BufferEnd = BufferStart + Size;
     typedef enum
@@ -849,15 +858,12 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         }
 
         TUN_PACKET *Packet = (TUN_PACKET *)BufferPos;
-        /* Packet->Size is controlled by userspace, so don't trust it. */
-        ULONG PacketSize = *(volatile ULONG *)&Packet->Size;
-
-        if (PacketSize > TUN_EXCH_MAX_IP_PACKET_SIZE)
+        if (Packet->Size > TUN_EXCH_MAX_IP_PACKET_SIZE)
         {
             Status = STATUS_INVALID_USER_BUFFER;
             goto cleanup_nbl_queues;
         }
-        ULONG AlignedPacketSize = TunPacketAlign(sizeof(TUN_PACKET) + PacketSize);
+        ULONG AlignedPacketSize = TunPacketAlign(sizeof(TUN_PACKET) + Packet->Size);
         if (BufferEnd - BufferPos < (ptrdiff_t)AlignedPacketSize)
         {
             Status = STATUS_INVALID_USER_BUFFER;
@@ -865,9 +871,9 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         }
 
         EtherTypeIndex Index;
-        if (PacketSize >= 20 && Packet->Data[0] >> 4 == 4)
+        if (Packet->Size >= 20 && Packet->Data[0] >> 4 == 4)
             Index = EtherTypeIndexIPv4;
-        else if (PacketSize >= 40 && Packet->Data[0] >> 4 == 6)
+        else if (Packet->Size >= 40 && Packet->Data[0] >> 4 == 6)
             Index = EtherTypeIndexIPv6;
         else
         {
@@ -876,7 +882,7 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         }
 
         NET_BUFFER_LIST *Nbl = NdisAllocateNetBufferAndNetBufferList(
-            Ctx->NBLPool, 0, 0, UserBuffer->Mdl, (ULONG)(Packet->Data - BufferStart), PacketSize);
+            Ctx->NBLPool, 0, 0, Mdl, (ULONG)(Packet->Data - BufferStart), Packet->Size);
         if (!Nbl)
         {
             Status = STATUS_INSUFFICIENT_RESOURCES;
@@ -887,7 +893,7 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         NdisSetNblFlag(Nbl, EtherTypeConstants[Index].NblFlags);
         NET_BUFFER_LIST_INFO(Nbl, NetBufferListFrameType) = (PVOID)EtherTypeConstants[Index].NblProto;
         NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SUCCESS;
-        NET_BUFFER_LIST_IRP(Nbl) = Irp;
+        NET_BUFFER_LIST_MDL_REFCOUNT(Nbl) = MdlRefcount;
         TunAppendNBL(&NblQueue[Index].Head, &NblQueue[Index].Tail, Nbl);
         NblQueue[Index].Count++;
         NblCount++;
@@ -915,7 +921,7 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     }
 
     InterlockedAdd64(&Ctx->ActiveNBLCount, NblCount);
-    InterlockedExchange(IRP_REFCOUNT(Irp), NblCount);
+    *MdlRefcount = NblCount;
 
     for (EtherTypeIndex Index = EtherTypeIndexStart; Index < EtherTypeIndexEnd; Index++)
     {
@@ -926,11 +932,11 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
             NblQueue[Index].Head,
             NDIS_DEFAULT_PORT_NUMBER,
             NblQueue[Index].Count,
-            NDIS_RECEIVE_FLAGS_SINGLE_ETHER_TYPE | NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL | NDIS_RECEIVE_FLAGS_RESOURCES);
-        TunReturnNetBufferLists((NDIS_HANDLE)Ctx, NblQueue[Index].Head, 0);
+            NDIS_RECEIVE_FLAGS_SINGLE_ETHER_TYPE | NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL);
     }
 
     ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
+    TunCompleteRequest(Ctx, Irp, STATUS_SUCCESS, IO_NETWORK_INCREMENT);
     TunCompletePause(Ctx, TRUE);
     return STATUS_SUCCESS;
 
@@ -946,6 +952,9 @@ cleanup_nbl_queues:
     }
 cleanup_ExReleaseSpinLockShared:
     ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
+    NdisFreeMdl(Mdl);
+cleanup_ExFreePoolWithTag:
+    ExFreePoolWithTag(BufferStart, TUN_MEMORY_TAG);
 cleanup_CompleteRequest:
     TunCompleteRequest(Ctx, Irp, Status, IO_NO_INCREMENT);
     TunCompletePause(Ctx, TRUE);
@@ -963,7 +972,6 @@ TunDispatchCreate(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         return STATUS_INSUFFICIENT_RESOURCES;
     RtlZeroMemory(FileCtx, sizeof(*FileCtx));
     ExInitializeFastMutex(&FileCtx->ReadBuffer.InitializationComplete);
-    ExInitializeFastMutex(&FileCtx->WriteBuffer.InitializationComplete);
 
     KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
     LONG Flags = InterlockedGet(&Ctx->Flags);
@@ -1007,7 +1015,6 @@ TunDispatchClose(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     }
     TUN_FILE_CTX *FileCtx = (TUN_FILE_CTX *)Stack->FileObject->FsContext;
     TunUnmapUbuffer(&FileCtx->ReadBuffer);
-    TunUnmapUbuffer(&FileCtx->WriteBuffer);
     ExFreePoolWithTag(FileCtx, TUN_MEMORY_TAG);
     IoReleaseRemoveLock(&Ctx->Device.RemoveLock, Stack->FileObject);
 }
