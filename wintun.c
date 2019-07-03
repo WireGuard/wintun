@@ -909,7 +909,6 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
 
     InterlockedAdd64(&Ctx->ActiveNBLCount, NblCount);
     InterlockedExchange(IRP_REFCOUNT(Irp), NblCount);
-    IoMarkIrpPending(Irp);
 
     for (EtherTypeIndex Index = EtherTypeIndexStart; Index < EtherTypeIndexEnd; Index++)
     {
@@ -920,12 +919,13 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
             NblQueue[Index].Head,
             NDIS_DEFAULT_PORT_NUMBER,
             NblQueue[Index].Count,
-            NDIS_RECEIVE_FLAGS_SINGLE_ETHER_TYPE | NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL);
+            NDIS_RECEIVE_FLAGS_SINGLE_ETHER_TYPE | NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL | NDIS_RECEIVE_FLAGS_RESOURCES);
+        TunReturnNetBufferLists((NDIS_HANDLE)Ctx, NblQueue[Index].Head, 0);
     }
 
     ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
     TunCompletePause(Ctx, TRUE);
-    return STATUS_PENDING;
+    return STATUS_SUCCESS;
 
 cleanup_nbl_queues:
     for (EtherTypeIndex Index = EtherTypeIndexStart; Index < EtherTypeIndexEnd; Index++)
