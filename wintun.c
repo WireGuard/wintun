@@ -753,6 +753,42 @@ cleanup_CompleteRequest:
 #define IRP_REFCOUNT(irp) ((volatile LONG *)&(irp)->Tail.Overlay.DriverContext[0])
 #define NET_BUFFER_LIST_IRP(nbl) (NET_BUFFER_LIST_MINIPORT_RESERVED(nbl)[0])
 
+static MINIPORT_RETURN_NET_BUFFER_LISTS TunReturnNetBufferLists;
+_Use_decl_annotations_
+static void
+TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUFFER_LIST NetBufferLists, ULONG ReturnFlags)
+{
+    TUN_CTX *Ctx = (TUN_CTX *)MiniportAdapterContext;
+
+    LONG64 StatSize = 0, StatPacketsOk = 0, StatPacketsError = 0;
+    for (NET_BUFFER_LIST *Nbl = NetBufferLists, *NextNbl; Nbl; Nbl = NextNbl)
+    {
+        NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+        NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
+
+        IRP *Irp = NET_BUFFER_LIST_IRP(Nbl);
+        if (NT_SUCCESS(NET_BUFFER_LIST_STATUS(Nbl)))
+        {
+            StatSize += NET_BUFFER_LIST_FIRST_NB(Nbl)->DataLength;
+            StatPacketsOk++;
+        }
+        else
+            StatPacketsError++;
+
+        NdisFreeNetBufferList(Nbl);
+        TunCompletePause(Ctx, TRUE);
+
+        ASSERT(InterlockedGet(IRP_REFCOUNT(Irp)) > 0);
+        if (InterlockedDecrement(IRP_REFCOUNT(Irp)) <= 0)
+            TunCompleteRequest(Ctx, Irp, STATUS_SUCCESS, IO_NETWORK_INCREMENT);
+    }
+
+    InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCInOctets, StatSize);
+    InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCInUcastOctets, StatSize);
+    InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCInUcastPkts, StatPacketsOk);
+    InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifInErrors, StatPacketsError);
+}
+
 _IRQL_requires_max_(APC_LEVEL)
 _Must_inspect_result_
 static NTSTATUS
@@ -907,42 +943,6 @@ cleanup_CompleteRequest:
     TunCompleteRequest(Ctx, Irp, Status, IO_NO_INCREMENT);
     TunCompletePause(Ctx, TRUE);
     return Status;
-}
-
-static MINIPORT_RETURN_NET_BUFFER_LISTS TunReturnNetBufferLists;
-_Use_decl_annotations_
-static void
-TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUFFER_LIST NetBufferLists, ULONG ReturnFlags)
-{
-    TUN_CTX *Ctx = (TUN_CTX *)MiniportAdapterContext;
-
-    LONG64 StatSize = 0, StatPacketsOk = 0, StatPacketsError = 0;
-    for (NET_BUFFER_LIST *Nbl = NetBufferLists, *NextNbl; Nbl; Nbl = NextNbl)
-    {
-        NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
-        NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
-
-        IRP *Irp = NET_BUFFER_LIST_IRP(Nbl);
-        if (NT_SUCCESS(NET_BUFFER_LIST_STATUS(Nbl)))
-        {
-            StatSize += NET_BUFFER_LIST_FIRST_NB(Nbl)->DataLength;
-            StatPacketsOk++;
-        }
-        else
-            StatPacketsError++;
-
-        NdisFreeNetBufferList(Nbl);
-        TunCompletePause(Ctx, TRUE);
-
-        ASSERT(InterlockedGet(IRP_REFCOUNT(Irp)) > 0);
-        if (InterlockedDecrement(IRP_REFCOUNT(Irp)) <= 0)
-            TunCompleteRequest(Ctx, Irp, STATUS_SUCCESS, IO_NETWORK_INCREMENT);
-    }
-
-    InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCInOctets, StatSize);
-    InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCInUcastOctets, StatSize);
-    InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCInUcastPkts, StatPacketsOk);
-    InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifInErrors, StatPacketsError);
 }
 
 _IRQL_requires_max_(APC_LEVEL)
