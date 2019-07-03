@@ -1074,14 +1074,13 @@ TunDispatchPnP(DEVICE_OBJECT *DeviceObject, IRP *Irp)
         switch (Stack->MinorFunction)
         {
         case IRP_MN_QUERY_REMOVE_DEVICE:
-        case IRP_MN_SURPRISE_REMOVAL: {
+        case IRP_MN_SURPRISE_REMOVAL:
             InterlockedAnd(&Ctx->Flags, ~TUN_FLAGS_PRESENT);
             ExReleaseSpinLockExclusive(
                 &Ctx->TransitionLock,
                 ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
             TunQueueClear(Ctx, NDIS_STATUS_ADAPTER_REMOVED);
             break;
-        }
 
         case IRP_MN_CANCEL_REMOVE_DEVICE:
             InterlockedOr(&Ctx->Flags, TUN_FLAGS_PRESENT);
@@ -1143,13 +1142,13 @@ TunInitializeEx(
 
     /* Register device first. Having only one device per adapter allows us to store
      * adapter context inside device extension. */
-    WCHAR DeviceName[sizeof(L"\\Device\\" TUN_DEVICE_NAME "4294967295") / sizeof(WCHAR) + 1] = { 0 };
+    WCHAR DeviceName[sizeof(L"\\Device\\" TUN_DEVICE_NAME L"4294967295") / sizeof(WCHAR) + 1] = { 0 };
     UNICODE_STRING UnicodeDeviceName;
     TunInitUnicodeString(&UnicodeDeviceName, DeviceName);
     RtlUnicodeStringPrintf(
         &UnicodeDeviceName, L"\\Device\\" TUN_DEVICE_NAME, (ULONG)MiniportInitParameters->NetLuid.Info.NetLuidIndex);
 
-    WCHAR SymbolicName[sizeof(L"\\DosDevices\\" TUN_DEVICE_NAME "4294967295") / sizeof(WCHAR) + 1] = { 0 };
+    WCHAR SymbolicName[sizeof(L"\\DosDevices\\" TUN_DEVICE_NAME L"4294967295") / sizeof(WCHAR) + 1] = { 0 };
     UNICODE_STRING UnicodeSymbolicName;
     TunInitUnicodeString(&UnicodeSymbolicName, SymbolicName);
     RtlUnicodeStringPrintf(
