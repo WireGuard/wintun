@@ -143,7 +143,8 @@ static volatile LONG64 TunAdapterCount;
     }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-_IRQL_requires_same_ static void
+_IRQL_requires_same_
+static void
 TunIndicateStatus(_In_ NDIS_HANDLE MiniportAdapterHandle, _In_ NDIS_MEDIA_CONNECT_STATE MediaConnectState)
 {
     NDIS_LINK_STATE State = { .Header = { .Type = NDIS_OBJECT_TYPE_DEFAULT,
@@ -381,7 +382,8 @@ static _Return_type_success_(
     return Irp;
 }
 
-_IRQL_requires_same_ static BOOLEAN
+_IRQL_requires_same_
+static BOOLEAN
 TunWontFitIntoIrp(_In_ IRP *Irp, _In_ ULONG Size, _In_ NET_BUFFER *Nb)
 {
     return (ULONG_PTR)Size <
@@ -417,7 +419,8 @@ TunWriteIntoIrp(_Inout_ IRP *Irp, _Inout_ UCHAR *Buffer, _In_ NET_BUFFER *Nb, _I
 
 #define NET_BUFFER_LIST_REFCOUNT(nbl) ((volatile LONG64 *)NET_BUFFER_LIST_MINIPORT_RESERVED(nbl))
 
-_IRQL_requires_same_ static void
+_IRQL_requires_same_
+static void
 TunNBLRefInit(_Inout_ TUN_CTX *Ctx, _Inout_ NET_BUFFER_LIST *Nbl)
 {
     InterlockedIncrement64(&Ctx->ActiveNBLCount);
@@ -425,7 +428,8 @@ TunNBLRefInit(_Inout_ TUN_CTX *Ctx, _Inout_ NET_BUFFER_LIST *Nbl)
     InterlockedExchange64(NET_BUFFER_LIST_REFCOUNT(Nbl), 1);
 }
 
-_IRQL_requires_same_ static void
+_IRQL_requires_same_
+static void
 TunNBLRefInc(_Inout_ NET_BUFFER_LIST *Nbl)
 {
     ASSERT(InterlockedGet64(NET_BUFFER_LIST_REFCOUNT(Nbl)));
@@ -450,7 +454,8 @@ TunNBLRefDec(_Inout_ TUN_CTX *Ctx, _Inout_ NET_BUFFER_LIST *Nbl, _In_ ULONG Send
     return FALSE;
 }
 
-_IRQL_requires_same_ static void
+_IRQL_requires_same_
+static void
 TunAppendNBL(_Inout_ NET_BUFFER_LIST **Head, _Inout_ NET_BUFFER_LIST **Tail, __drv_aliasesMem _In_ NET_BUFFER_LIST *Nbl)
 {
     *(*Tail ? &NET_BUFFER_LIST_NEXT_NBL(*Tail) : Head) = Nbl;
@@ -652,7 +657,8 @@ TunQueueProcess(_Inout_ TUN_CTX *Ctx)
     }
 }
 
-_IRQL_requires_same_ static void
+_IRQL_requires_same_
+static void
 TunSetNBLStatus(_Inout_opt_ NET_BUFFER_LIST *Nbl, _In_ NDIS_STATUS Status)
 {
     for (; Nbl; Nbl = NET_BUFFER_LIST_NEXT_NBL(Nbl))
