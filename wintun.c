@@ -40,7 +40,6 @@
 #define TUN_EXCH_MIN_BUFFER_SIZE_READ TUN_EXCH_MAX_PACKET_SIZE /* Minimum size of read exchange buffer */
 #define TUN_EXCH_MIN_BUFFER_SIZE_WRITE (sizeof(TUN_PACKET))    /* Minimum size of write exchange buffer */
 #define TUN_QUEUE_MAX_NBLS 1000
-#define TUN_MEMORY_TAG 'wtun'
 #define TUN_CSQ_INSERT_HEAD ((PVOID)TRUE)
 #define TUN_CSQ_INSERT_TAIL ((PVOID)FALSE)
 
@@ -55,6 +54,8 @@
 #else
 #    error "Unable to determine endianess"
 #endif
+
+#define TUN_MEMORY_TAG TUN_HTONL('wtun')
 
 typedef struct _TUN_PACKET
 {
@@ -951,7 +952,7 @@ static NTSTATUS
 TunDispatchCreate(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
 {
     NTSTATUS Status;
-    TUN_FILE_CTX *FileCtx = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(*FileCtx), TUN_HTONL(TUN_MEMORY_TAG));
+    TUN_FILE_CTX *FileCtx = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(*FileCtx), TUN_MEMORY_TAG);
     if (!FileCtx)
         return STATUS_INSUFFICIENT_RESOURCES;
     RtlZeroMemory(FileCtx, sizeof(*FileCtx));
@@ -977,7 +978,7 @@ cleanup_ExReleaseSpinLockShared:
     ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
     TunCompleteRequest(Ctx, Irp, Status, IO_NO_INCREMENT);
     if (!NT_SUCCESS(Status))
-        ExFreePoolWithTag(FileCtx, TUN_HTONL(TUN_MEMORY_TAG));
+        ExFreePoolWithTag(FileCtx, TUN_MEMORY_TAG);
     return Status;
 }
 
@@ -1001,7 +1002,7 @@ TunDispatchClose(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     TUN_FILE_CTX *FileCtx = (TUN_FILE_CTX *)Stack->FileObject->FsContext;
     TunUnmapUbuffer(&FileCtx->ReadBuffer);
     TunUnmapUbuffer(&FileCtx->WriteBuffer);
-    ExFreePoolWithTag(FileCtx, TUN_HTONL(TUN_MEMORY_TAG));
+    ExFreePoolWithTag(FileCtx, TUN_MEMORY_TAG);
     IoReleaseRemoveLock(&Ctx->Device.RemoveLock, Stack->FileObject);
 }
 
@@ -1235,7 +1236,7 @@ TunInitializeEx(
 
     Ctx->Device.Handle = DeviceObjectHandle;
     Ctx->Device.Object = DeviceObject;
-    IoInitializeRemoveLock(&Ctx->Device.RemoveLock, TUN_HTONL(TUN_MEMORY_TAG), 0, 0);
+    IoInitializeRemoveLock(&Ctx->Device.RemoveLock, TUN_MEMORY_TAG, 0, 0);
     KeInitializeSpinLock(&Ctx->Device.ReadQueue.Lock);
     IoCsqInitializeEx(
         &Ctx->Device.ReadQueue.Csq,
@@ -1255,7 +1256,7 @@ TunInitializeEx(
                     .Size = NDIS_SIZEOF_NET_BUFFER_LIST_POOL_PARAMETERS_REVISION_1 },
         .ProtocolId = NDIS_PROTOCOL_ID_DEFAULT,
         .fAllocateNetBuffer = TRUE,
-        .PoolTag = TUN_HTONL(TUN_MEMORY_TAG)
+        .PoolTag = TUN_MEMORY_TAG
     };
 #pragma warning( \
     suppress : 6014) /* Leaking memory 'ctx->NBLPool'. Note: 'ctx->NBLPool' is freed in TunHaltEx; or on failure. */
@@ -1414,8 +1415,8 @@ TunForceHandlesClosed(_Inout_ TUN_CTX *Ctx)
          Size = RequestedSize)
     {
         if (HandleTable)
-            ExFreePoolWithTag(HandleTable, TUN_HTONL(TUN_MEMORY_TAG));
-        HandleTable = ExAllocatePoolWithTag(PagedPool, RequestedSize, TUN_HTONL(TUN_MEMORY_TAG));
+            ExFreePoolWithTag(HandleTable, TUN_MEMORY_TAG);
+        HandleTable = ExAllocatePoolWithTag(PagedPool, RequestedSize, TUN_MEMORY_TAG);
         if (!HandleTable)
             return;
     }
@@ -1448,7 +1449,7 @@ TunForceHandlesClosed(_Inout_ TUN_CTX *Ctx)
     }
 out:
     if (HandleTable)
-        ExFreePoolWithTag(HandleTable, TUN_HTONL(TUN_MEMORY_TAG));
+        ExFreePoolWithTag(HandleTable, TUN_MEMORY_TAG);
 }
 
 _IRQL_requires_max_(APC_LEVEL)
