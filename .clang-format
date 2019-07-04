@@ -98,6 +98,7 @@ StatementMacros: [
     '__drv_preferredFunction',
     '__drv_allocatesMem',
     '__drv_freesMem',
+	'_Field_size_bytes_',
     ]
 TabWidth: '4'
 UseTab: Never

@@ -32,7 +32,7 @@
 #define TUN_EXCH_MAX_PACKETS 256
 /* Maximum exchange packet size - empirically determined by net buffer list (pool) limitations */
 #define TUN_EXCH_MAX_PACKET_SIZE 0xF000
-#define TUN_EXCH_ALIGNMENT 16 /* Memory alignment in exchange buffers */
+#define TUN_EXCH_ALIGNMENT sizeof(ULONG) /* Memory alignment in exchange buffers */
 /* Maximum IP packet size (headers + payload) */
 #define TUN_EXCH_MAX_IP_PACKET_SIZE (TUN_EXCH_MAX_PACKET_SIZE - sizeof(TUN_PACKET))
 /* Maximum size of read/write exchange buffer */
@@ -60,7 +60,8 @@
 typedef struct _TUN_PACKET
 {
     ULONG Size; /* Size of packet data (TUN_EXCH_MAX_IP_PACKET_SIZE max) */
-    _Field_size_bytes_(Size) __declspec(align(TUN_EXCH_ALIGNMENT)) UCHAR Data[]; /* Packet data */
+    _Field_size_bytes_(Size)
+    UCHAR Data[]; /* Packet data */
 } TUN_PACKET;
 
 typedef enum _TUN_FLAGS
