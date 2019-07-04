@@ -311,21 +311,19 @@ TunMapUbuffer(_Inout_ TUN_MAPPED_UBUFFER *MappedBuffer, _In_ VOID *UserAddress, 
     }
 
     MappedBuffer->Mdl = IoAllocateMdl(UserAddress, Size, FALSE, FALSE, NULL);
-    Status = STATUS_INSUFFICIENT_RESOURCES;
-    if (!MappedBuffer->Mdl)
+    if (Status = STATUS_INSUFFICIENT_RESOURCES, !MappedBuffer->Mdl)
         goto err_releasemutex;
 
-    Status = STATUS_INVALID_USER_BUFFER;
     try
     {
+        Status = STATUS_INVALID_USER_BUFFER;
         MmProbeAndLockPages(MappedBuffer->Mdl, UserMode, IoWriteAccess);
     }
     except(EXCEPTION_EXECUTE_HANDLER) { goto err_freemdl; }
 
     MappedBuffer->KernelAddress =
         MmGetSystemAddressForMdlSafe(MappedBuffer->Mdl, NormalPagePriority | MdlMappingNoExecute);
-    Status = STATUS_INSUFFICIENT_RESOURCES;
-    if (!MappedBuffer->KernelAddress)
+    if (Status = STATUS_INSUFFICIENT_RESOURCES, !MappedBuffer->KernelAddress)
         goto err_unlockmdl;
     MappedBuffer->Size = Size;
     InterlockedExchangePointer(&MappedBuffer->UserAddress, UserAddress);
@@ -863,10 +861,11 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         if (Status = STATUS_INVALID_USER_BUFFER, NblCount >= MAXLONG)
             goto cleanup_nbl_queues;
         TUN_PACKET *Packet = (TUN_PACKET *)BufferPos;
+
         if (Status = STATUS_INVALID_USER_BUFFER, Packet->Size > TUN_EXCH_MAX_IP_PACKET_SIZE)
             goto cleanup_nbl_queues;
         ULONG AlignedPacketSize = TunPacketAlign(sizeof(TUN_PACKET) + Packet->Size);
-        if (Status = STATUS_INVALID_USER_BUFFER, (BufferEnd - BufferPos < (ptrdiff_t)AlignedPacketSize))
+        if (Status = STATUS_INVALID_USER_BUFFER, BufferEnd - BufferPos < (ptrdiff_t)AlignedPacketSize)
             goto cleanup_nbl_queues;
 
         EtherTypeIndex Index;
@@ -1014,15 +1013,12 @@ _Use_decl_annotations_
 static NTSTATUS
 TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 {
-    NTSTATUS Status = STATUS_SUCCESS;
+    NTSTATUS Status;
 
     Irp->IoStatus.Information = 0;
     TUN_CTX *Ctx = NdisGetDeviceReservedExtension(DeviceObject);
-    if (!Ctx)
-    {
-        Status = STATUS_INVALID_HANDLE;
+    if (Status = STATUS_INVALID_HANDLE, !Ctx)
         goto cleanup_complete_req;
-    }
 
     IO_STACK_LOCATION *Stack = IoGetCurrentIrpStackLocation(Irp);
     switch (Stack->MajorFunction)
@@ -1043,10 +1039,12 @@ TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
         return TunDispatchCreate(Ctx, Irp);
 
     case IRP_MJ_CLOSE:
+        Status = STATUS_SUCCESS;
         TunDispatchClose(Ctx, Irp);
         break;
 
     case IRP_MJ_CLEANUP:
+        Status = STATUS_SUCCESS;
         for (IRP *PendingIrp; (PendingIrp = IoCsqRemoveNextIrp(&Ctx->Device.ReadQueue.Csq, Stack->FileObject)) != NULL;)
             TunCompleteRequest(Ctx, PendingIrp, STATUS_CANCELLED, IO_NO_INCREMENT);
         break;
@@ -1201,11 +1199,8 @@ TunInitializeEx(
     DeviceObject->Flags &= ~(DO_BUFFERED_IO | DO_DIRECT_IO);
 
     TUN_CTX *Ctx = NdisGetDeviceReservedExtension(DeviceObject);
-    if (!Ctx)
-    {
-        Status = NDIS_STATUS_FAILURE;
+    if (Status = NDIS_STATUS_FAILURE, !Ctx)
         goto cleanup_NdisDeregisterDeviceEx;
-    }
     DEVICE_OBJECT *FunctionalDeviceObject;
     NdisMGetDeviceProperty(MiniportAdapterHandle, NULL, &FunctionalDeviceObject, NULL, NULL, NULL);
 
@@ -1264,11 +1259,8 @@ TunInitializeEx(
 #pragma warning( \
     suppress : 6014) /* Leaking memory 'ctx->NBLPool'. Note: 'ctx->NBLPool' is freed in TunHaltEx; or on failure. */
     Ctx->NBLPool = NdisAllocateNetBufferListPool(MiniportAdapterHandle, &NblPoolParameters);
-    if (!Ctx->NBLPool)
-    {
-        Status = NDIS_STATUS_FAILURE;
+    if (Status = NDIS_STATUS_FAILURE, !Ctx->NBLPool)
         goto cleanup_NdisDeregisterDeviceEx;
-    }
 
     NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES AdapterRegistrationAttributes = {
         .Header = { .Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES,
@@ -1282,13 +1274,10 @@ TunInitializeEx(
         .InterfaceType = NdisInterfaceInternal,
         .MiniportAdapterContext = Ctx
     };
-    if (!NT_SUCCESS(
-            Status = NdisMSetMiniportAttributes(
-                MiniportAdapterHandle, (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&AdapterRegistrationAttributes)))
-    {
-        Status = NDIS_STATUS_FAILURE;
+    if (Status = NDIS_STATUS_FAILURE,
+        !NT_SUCCESS(NdisMSetMiniportAttributes(
+            MiniportAdapterHandle, (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&AdapterRegistrationAttributes)))
         goto cleanup_NdisFreeNetBufferListPool;
-    }
 
     NDIS_PM_CAPABILITIES PmCapabilities = {
         .Header = { .Type = NDIS_OBJECT_TYPE_DEFAULT,
@@ -1349,13 +1338,10 @@ TunInitializeEx(
         .SupportedOidListLength = sizeof(SupportedOids),
         .PowerManagementCapabilitiesEx = &PmCapabilities
     };
-    if (!NT_SUCCESS(
-            Status = NdisMSetMiniportAttributes(
-                MiniportAdapterHandle, (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&AdapterGeneralAttributes)))
-    {
-        Status = NDIS_STATUS_FAILURE;
+    if (Status = NDIS_STATUS_FAILURE,
+        !NT_SUCCESS(NdisMSetMiniportAttributes(
+            MiniportAdapterHandle, (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&AdapterGeneralAttributes)))
         goto cleanup_NdisFreeNetBufferListPool;
-    }
 
     /* A miniport driver can call NdisMIndicateStatusEx after setting its
      * registration attributes even if the driver is still in the context
@@ -1381,19 +1367,21 @@ TunDeviceSetDenyAllDacl(_In_ DEVICE_OBJECT *DeviceObject)
     ACL Acl;
     HANDLE DeviceObjectHandle;
 
-    if (!NT_SUCCESS(Status = RtlCreateSecurityDescriptor(&Sd, SECURITY_DESCRIPTOR_REVISION)))
-        return Status;
-    if (!NT_SUCCESS(Status = RtlCreateAcl(&Acl, sizeof(ACL), ACL_REVISION)))
-        return Status;
-    if (!NT_SUCCESS(Status = RtlSetDaclSecurityDescriptor(&Sd, TRUE, &Acl, FALSE)))
-        return Status;
-    Status = ObOpenObjectByPointer(
-        DeviceObject, OBJ_KERNEL_HANDLE, NULL, WRITE_DAC, *IoDeviceObjectType, KernelMode, &DeviceObjectHandle);
-    if (!NT_SUCCESS(Status))
+    if (!NT_SUCCESS(Status = RtlCreateSecurityDescriptor(&Sd, SECURITY_DESCRIPTOR_REVISION)) ||
+        !NT_SUCCESS(Status = RtlCreateAcl(&Acl, sizeof(ACL), ACL_REVISION)) ||
+        !NT_SUCCESS(Status = RtlSetDaclSecurityDescriptor(&Sd, TRUE, &Acl, FALSE)) ||
+        !NT_SUCCESS(
+            Status = ObOpenObjectByPointer(
+                DeviceObject,
+                OBJ_KERNEL_HANDLE,
+                NULL,
+                WRITE_DAC,
+                *IoDeviceObjectType,
+                KernelMode,
+                &DeviceObjectHandle)))
         return Status;
 
     Status = ZwSetSecurityObject(DeviceObjectHandle, DACL_SECURITY_INFORMATION, &Sd);
-
     ZwClose(DeviceObjectHandle);
     return Status;
 }
