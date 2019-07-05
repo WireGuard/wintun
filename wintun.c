@@ -670,8 +670,6 @@ TunSendNetBufferLists(
 {
     TUN_CTX *Ctx = (TUN_CTX *)MiniportAdapterContext;
 
-    InterlockedIncrement64(&Ctx->ActiveNBLCount);
-
     KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
     LONG Flags = InterlockedGet(&Ctx->Flags);
     NDIS_STATUS Status;
@@ -691,7 +689,6 @@ TunSendNetBufferLists(
 
 cleanup_ExReleaseSpinLockShared:
     ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
-    TunCompletePause(Ctx, TRUE);
 }
 
 static MINIPORT_CANCEL_SEND TunCancelSend;
@@ -897,7 +894,7 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         goto cleanup_ExReleaseSpinLockShared;
     }
 
-    InterlockedAdd64(&Ctx->ActiveNBLCount, NblCount + 1);
+    InterlockedAdd64(&Ctx->ActiveNBLCount, NblCount);
     *MdlRefcount = NblCount;
     for (EtherTypeIndex Index = EtherTypeIndexStart; Index < EtherTypeIndexEnd; Index++)
     {
@@ -912,7 +909,6 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     }
 
     ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
-    TunCompletePause(Ctx, TRUE);
     TunCompleteRequest(Ctx, Irp, STATUS_SUCCESS, IO_NETWORK_INCREMENT);
     return STATUS_SUCCESS;
 
