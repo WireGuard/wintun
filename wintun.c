@@ -196,18 +196,12 @@ TunCompleteRequest(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp, _In_ NTSTATUS Status,
 }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
-static NDIS_STATUS
-TunCompletePause(_Inout_ TUN_CTX *Ctx, _In_ BOOLEAN AsyncCompletion)
+static void
+TunDecrementActiveNblCount(_Inout_ TUN_CTX *Ctx)
 {
     ASSERT(InterlockedGet64(&Ctx->ActiveNblCount) > 0);
     if (InterlockedDecrement64(&Ctx->ActiveNblCount) <= 0)
-    {
-        if (AsyncCompletion)
-            NdisMPauseComplete(Ctx->MiniportAdapterHandle);
-        return NDIS_STATUS_SUCCESS;
-    }
-
-    return NDIS_STATUS_PENDING;
+        NdisMPauseComplete(Ctx->MiniportAdapterHandle);
 }
 
 static IO_CSQ_INSERT_IRP_EX TunCsqInsertIrpEx;
@@ -459,7 +453,7 @@ TunNblRefDec(_Inout_ TUN_CTX *Ctx, _Inout_ NET_BUFFER_LIST *Nbl, _In_ ULONG Send
         NdisMSendNetBufferListsComplete(Ctx->MiniportAdapterHandle, Nbl, SendCompleteFlags);
         ASSERT(InterlockedGet(&Ctx->PacketQueue.NumNbl) > 0);
         InterlockedDecrement(&Ctx->PacketQueue.NumNbl);
-        TunCompletePause(Ctx, TRUE);
+        TunDecrementActiveNblCount(Ctx);
         return TRUE;
     }
     return FALSE;
@@ -787,7 +781,7 @@ TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUFFER_LIST Net
         else
             StatPacketsError++;
 
-        TunCompletePause(Ctx, TRUE);
+        TunDecrementActiveNblCount(Ctx);
 
         LONG volatile *MdlRefCount = NET_BUFFER_LIST_MDL_REFCOUNT(Nbl);
         ASSERT(InterlockedGet(MdlRefCount) > 0);
@@ -1118,7 +1112,8 @@ TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_PAUSE_PARAMETERS Min
         ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
     TunQueueClear(Ctx, NDIS_STATUS_PAUSED);
 
-    return TunCompletePause(Ctx, FALSE);
+    ASSERT(InterlockedGet64(&Ctx->ActiveNblCount) > 0);
+    return InterlockedDecrement64(&Ctx->ActiveNblCount) <= 0 ? NDIS_STATUS_SUCCESS : NDIS_STATUS_PENDING;
 }
 
 static MINIPORT_DEVICE_PNP_EVENT_NOTIFY TunDevicePnPEventNotify;
