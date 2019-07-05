@@ -346,32 +346,6 @@ TunUnmapUbuffer(_Inout_ TUN_MAPPED_UBUFFER *MappedBuffer)
     }
 }
 
-_IRQL_requires_max_(APC_LEVEL)
-_Must_inspect_result_
-static NTSTATUS
-TunMapIrp(_In_ IRP *Irp)
-{
-    ULONG Size;
-    TUN_MAPPED_UBUFFER *UserBuffer;
-    IO_STACK_LOCATION *Stack = IoGetCurrentIrpStackLocation(Irp);
-    TUN_FILE_CTX *FileCtx = (TUN_FILE_CTX *)Stack->FileObject->FsContext;
-
-    switch (Stack->MajorFunction)
-    {
-    case IRP_MJ_READ:
-        Size = Stack->Parameters.Read.Length;
-        if (Size < TUN_EXCH_MIN_BUFFER_SIZE_READ)
-            return STATUS_INVALID_USER_BUFFER;
-        UserBuffer = &FileCtx->ReadBuffer;
-        break;
-    default:
-        return STATUS_INVALID_PARAMETER;
-    }
-    if (Size > TUN_EXCH_MAX_BUFFER_SIZE)
-        return STATUS_INVALID_USER_BUFFER;
-    return TunMapUbuffer(UserBuffer, Irp->UserBuffer, Size);
-}
-
 _IRQL_requires_max_(DISPATCH_LEVEL)
 _Must_inspect_result_
 static _Return_type_success_(
@@ -737,8 +711,14 @@ _Must_inspect_result_
 static NTSTATUS
 TunDispatchRead(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
 {
-    NTSTATUS Status = TunMapIrp(Irp);
-    if (!NT_SUCCESS(Status))
+    IO_STACK_LOCATION *Stack = IoGetCurrentIrpStackLocation(Irp);
+    ULONG Size = Stack->Parameters.Read.Length;
+    TUN_MAPPED_UBUFFER *UserBuffer = &((TUN_FILE_CTX *)Stack->FileObject->FsContext)->ReadBuffer;
+    NTSTATUS Status;
+
+    if (Status = STATUS_INVALID_USER_BUFFER, Size < TUN_EXCH_MIN_BUFFER_SIZE_READ || Size > TUN_EXCH_MAX_BUFFER_SIZE)
+        goto cleanupCompleteRequest;
+    if (!NT_SUCCESS(Status = TunMapUbuffer(UserBuffer, Irp->UserBuffer, Size)))
         goto cleanupCompleteRequest;
 
     KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
