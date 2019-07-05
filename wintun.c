@@ -807,7 +807,7 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     LONG *MdlRefcount = (LONG *)BufferStart;
     try
     {
-        Status = STATUS_INSUFFICIENT_RESOURCES;
+        Status = STATUS_INVALID_USER_BUFFER;
         ProbeForRead(Irp->UserBuffer, Size, 1);
         NdisMoveMemory(BufferStart, Irp->UserBuffer, Size);
     }
