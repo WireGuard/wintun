@@ -82,7 +82,7 @@ typedef struct _TUN_CTX
     NDIS_HANDLE MiniportAdapterHandle; /* This is actually a pointer to NDIS_MINIPORT_BLOCK struct. */
     NDIS_STATISTICS_INFO Statistics;
 
-    volatile LONG64 ActiveNBLCount;
+    volatile LONG64 ActiveNblCount;
 
     struct
     {
@@ -108,7 +108,7 @@ typedef struct _TUN_CTX
         volatile LONG NumNbl;
     } PacketQueue;
 
-    NDIS_HANDLE NBLPool;
+    NDIS_HANDLE NblPool;
 } TUN_CTX;
 
 typedef struct _TUN_MAPPED_UBUFFER
@@ -199,8 +199,8 @@ _IRQL_requires_max_(DISPATCH_LEVEL)
 static NDIS_STATUS
 TunCompletePause(_Inout_ TUN_CTX *Ctx, _In_ BOOLEAN AsyncCompletion)
 {
-    ASSERT(InterlockedGet64(&Ctx->ActiveNBLCount) > 0);
-    if (InterlockedDecrement64(&Ctx->ActiveNBLCount) <= 0)
+    ASSERT(InterlockedGet64(&Ctx->ActiveNblCount) > 0);
+    if (InterlockedDecrement64(&Ctx->ActiveNblCount) <= 0)
     {
         if (AsyncCompletion)
             NdisMPauseComplete(Ctx->MiniportAdapterHandle);
@@ -432,16 +432,16 @@ TunWriteIntoIrp(_Inout_ IRP *Irp, _Inout_ UCHAR *Buffer, _In_ NET_BUFFER *Nb, _I
 
 _IRQL_requires_same_
 static void
-TunNBLRefInit(_Inout_ TUN_CTX *Ctx, _Inout_ NET_BUFFER_LIST *Nbl)
+TunNblRefInit(_Inout_ TUN_CTX *Ctx, _Inout_ NET_BUFFER_LIST *Nbl)
 {
-    InterlockedIncrement64(&Ctx->ActiveNBLCount);
+    InterlockedIncrement64(&Ctx->ActiveNblCount);
     InterlockedIncrement(&Ctx->PacketQueue.NumNbl);
     InterlockedExchange64(NET_BUFFER_LIST_REFCOUNT(Nbl), 1);
 }
 
 _IRQL_requires_same_
 static void
-TunNBLRefInc(_Inout_ NET_BUFFER_LIST *Nbl)
+TunNblRefInc(_Inout_ NET_BUFFER_LIST *Nbl)
 {
     ASSERT(InterlockedGet64(NET_BUFFER_LIST_REFCOUNT(Nbl)));
     InterlockedIncrement64(NET_BUFFER_LIST_REFCOUNT(Nbl));
@@ -450,7 +450,7 @@ TunNBLRefInc(_Inout_ NET_BUFFER_LIST *Nbl)
 _When_((SendCompleteFlags & NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL), _IRQL_requires_(DISPATCH_LEVEL))
 _When_(!(SendCompleteFlags & NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL), _IRQL_requires_max_(DISPATCH_LEVEL))
 static BOOLEAN
-TunNBLRefDec(_Inout_ TUN_CTX *Ctx, _Inout_ NET_BUFFER_LIST *Nbl, _In_ ULONG SendCompleteFlags)
+TunNblRefDec(_Inout_ TUN_CTX *Ctx, _Inout_ NET_BUFFER_LIST *Nbl, _In_ ULONG SendCompleteFlags)
 {
     ASSERT(InterlockedGet64(NET_BUFFER_LIST_REFCOUNT(Nbl)) > 0);
     if (InterlockedDecrement64(NET_BUFFER_LIST_REFCOUNT(Nbl)) <= 0)
@@ -467,7 +467,7 @@ TunNBLRefDec(_Inout_ TUN_CTX *Ctx, _Inout_ NET_BUFFER_LIST *Nbl, _In_ ULONG Send
 
 _IRQL_requires_same_
 static void
-TunAppendNBL(_Inout_ NET_BUFFER_LIST **Head, _Inout_ NET_BUFFER_LIST **Tail, __drv_aliasesMem _In_ NET_BUFFER_LIST *Nbl)
+TunAppendNbl(_Inout_ NET_BUFFER_LIST **Head, _Inout_ NET_BUFFER_LIST **Tail, __drv_aliasesMem _In_ NET_BUFFER_LIST *Nbl)
 {
     *(*Tail ? &NET_BUFFER_LIST_NEXT_NBL(*Tail) : Head) = Nbl;
     *Tail = Nbl;
@@ -491,15 +491,15 @@ TunQueueAppend(_Inout_ TUN_CTX *Ctx, _In_ NET_BUFFER_LIST *Nbl, _In_ ULONG MaxNb
 
         KLOCK_QUEUE_HANDLE LockHandle;
         KeAcquireInStackQueuedSpinLock(&Ctx->PacketQueue.Lock, &LockHandle);
-        TunNBLRefInit(Ctx, Nbl);
-        TunAppendNBL(&Ctx->PacketQueue.FirstNbl, &Ctx->PacketQueue.LastNbl, Nbl);
+        TunNblRefInit(Ctx, Nbl);
+        TunAppendNbl(&Ctx->PacketQueue.FirstNbl, &Ctx->PacketQueue.LastNbl, Nbl);
 
         while ((ULONG)InterlockedGet(&Ctx->PacketQueue.NumNbl) > MaxNbls && Ctx->PacketQueue.FirstNbl)
         {
             NET_BUFFER_LIST *SecondNbl = NET_BUFFER_LIST_NEXT_NBL(Ctx->PacketQueue.FirstNbl);
 
             NET_BUFFER_LIST_STATUS(Ctx->PacketQueue.FirstNbl) = NDIS_STATUS_SEND_ABORTED;
-            TunNBLRefDec(Ctx, Ctx->PacketQueue.FirstNbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+            TunNblRefDec(Ctx, Ctx->PacketQueue.FirstNbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
 
             Ctx->PacketQueue.NextNb = NULL;
             Ctx->PacketQueue.FirstNbl = SecondNbl;
@@ -537,12 +537,12 @@ retry:
         NET_BUFFER_LIST_NEXT_NBL(TopNbl) = NULL;
     }
     else
-        TunNBLRefInc(TopNbl);
+        TunNblRefInc(TopNbl);
 
     if (RetNbl && NET_BUFFER_DATA_LENGTH(RetNbl) > TUN_EXCH_MAX_IP_PACKET_SIZE)
     {
         NET_BUFFER_LIST_STATUS(TopNbl) = NDIS_STATUS_INVALID_LENGTH;
-        TunNBLRefDec(Ctx, TopNbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+        TunNblRefDec(Ctx, TopNbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
         InterlockedIncrement64((LONG64 *)&Ctx->Statistics.ifOutDiscards);
         goto retry;
     }
@@ -561,7 +561,7 @@ TunQueuePrepend(_Inout_ TUN_CTX *Ctx, _In_ NET_BUFFER *Nb, _In_ NET_BUFFER_LIST 
     if (!Nbl || Nbl == Ctx->PacketQueue.FirstNbl)
         return;
 
-    TunNBLRefInc(Nbl);
+    TunNblRefInc(Nbl);
     if (!Ctx->PacketQueue.FirstNbl)
         Ctx->PacketQueue.FirstNbl = Ctx->PacketQueue.LastNbl = Nbl;
     else
@@ -582,7 +582,7 @@ TunQueueClear(_Inout_ TUN_CTX *Ctx, _In_ NDIS_STATUS Status)
     {
         NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
         NET_BUFFER_LIST_STATUS(Nbl) = Status;
-        TunNBLRefDec(Ctx, Nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+        TunNblRefDec(Ctx, Nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
     }
     Ctx->PacketQueue.FirstNbl = NULL;
     Ctx->PacketQueue.LastNbl = NULL;
@@ -623,7 +623,7 @@ TunQueueProcess(_Inout_ TUN_CTX *Ctx)
                 TunQueuePrepend(Ctx, Nb, Nbl);
                 KeReleaseInStackQueuedSpinLock(&LockHandle);
                 if (Nbl)
-                    TunNBLRefDec(Ctx, Nbl, 0);
+                    TunNblRefDec(Ctx, Nbl, 0);
                 return;
             }
 
@@ -638,7 +638,7 @@ TunQueueProcess(_Inout_ TUN_CTX *Ctx)
         {
             TunQueuePrepend(Ctx, Nb, Nbl);
             if (Nbl)
-                TunNBLRefDec(Ctx, Nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+                TunNblRefDec(Ctx, Nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
             Nbl = NULL;
             Nb = NULL;
         }
@@ -664,13 +664,13 @@ TunQueueProcess(_Inout_ TUN_CTX *Ctx)
         }
 
         if (Nbl)
-            TunNBLRefDec(Ctx, Nbl, 0);
+            TunNblRefDec(Ctx, Nbl, 0);
     }
 }
 
 _IRQL_requires_same_
 static void
-TunSetNBLStatus(_Inout_opt_ NET_BUFFER_LIST *Nbl, _In_ NDIS_STATUS Status)
+TunSetNblStatus(_Inout_opt_ NET_BUFFER_LIST *Nbl, _In_ NDIS_STATUS Status)
 {
     for (; Nbl; Nbl = NET_BUFFER_LIST_NEXT_NBL(Nbl))
         NET_BUFFER_LIST_STATUS(Nbl) = Status;
@@ -694,7 +694,7 @@ TunSendNetBufferLists(
         (Status = NDIS_STATUS_PAUSED, !(Flags & TUN_FLAGS_RUNNING)) ||
         (Status = NDIS_STATUS_MEDIA_DISCONNECTED, InterlockedGet64(&Ctx->Device.RefCount) <= 0))
     {
-        TunSetNBLStatus(NetBufferLists, Status);
+        TunSetNblStatus(NetBufferLists, Status);
         NdisMSendNetBufferListsComplete(
             Ctx->MiniportAdapterHandle, NetBufferLists, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
     }
@@ -725,7 +725,7 @@ TunCancelSend(NDIS_HANDLE MiniportAdapterContext, PVOID CancelId)
         {
             NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SEND_ABORTED;
             *LastNblLink = NextNbl;
-            TunNBLRefDec(Ctx, Nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+            TunNblRefDec(Ctx, Nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
         }
         else
         {
@@ -879,7 +879,7 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         }
 
         NET_BUFFER_LIST *Nbl = NdisAllocateNetBufferAndNetBufferList(
-            Ctx->NBLPool, 0, 0, Mdl, (ULONG)(Packet->Data - BufferStart), Packet->Size);
+            Ctx->NblPool, 0, 0, Mdl, (ULONG)(Packet->Data - BufferStart), Packet->Size);
         if (Status = STATUS_INSUFFICIENT_RESOURCES, !Nbl)
             goto cleanupNblQueues;
 
@@ -888,7 +888,7 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         NET_BUFFER_LIST_INFO(Nbl, NetBufferListFrameType) = (PVOID)EtherTypeConstants[Index].NblProto;
         NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SUCCESS;
         NET_BUFFER_LIST_MDL_REFCOUNT(Nbl) = MdlRefCount;
-        TunAppendNBL(&NblQueue[Index].Head, &NblQueue[Index].Tail, Nbl);
+        TunAppendNbl(&NblQueue[Index].Head, &NblQueue[Index].Tail, Nbl);
         NblQueue[Index].Count++;
         NblCount++;
         BufferPos += AlignedPacketSize;
@@ -911,7 +911,7 @@ TunDispatchWrite(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         goto cleanupReleaseSpinLock;
     }
 
-    InterlockedAdd64(&Ctx->ActiveNBLCount, NblCount);
+    InterlockedAdd64(&Ctx->ActiveNblCount, NblCount);
     *MdlRefCount = NblCount;
     for (EtherTypeIndex Index = EtherTypeIndexStart; Index < EtherTypeIndexEnd; Index++)
     {
@@ -1099,7 +1099,7 @@ TunRestart(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_RESTART_PARAMETERS
 {
     TUN_CTX *Ctx = (TUN_CTX *)MiniportAdapterContext;
 
-    InterlockedExchange64(&Ctx->ActiveNBLCount, 1);
+    InterlockedExchange64(&Ctx->ActiveNblCount, 1);
     InterlockedOr(&Ctx->Flags, TUN_FLAGS_RUNNING);
 
     return NDIS_STATUS_SUCCESS;
@@ -1255,10 +1255,10 @@ TunInitializeEx(
         .fAllocateNetBuffer = TRUE,
         .PoolTag = TUN_MEMORY_TAG
     };
-#pragma warning( \
-    suppress : 6014) /* Leaking memory 'ctx->NBLPool'. Note: 'ctx->NBLPool' is freed in TunHaltEx; or on failure. */
-    Ctx->NBLPool = NdisAllocateNetBufferListPool(MiniportAdapterHandle, &NblPoolParameters);
-    if (Status = NDIS_STATUS_FAILURE, !Ctx->NBLPool)
+/* Leaking memory 'ctx->NblPool'. Note: 'ctx->NblPool' is freed in TunHaltEx; or on failure. */
+#pragma warning(suppress : 6014)
+    Ctx->NblPool = NdisAllocateNetBufferListPool(MiniportAdapterHandle, &NblPoolParameters);
+    if (Status = NDIS_STATUS_FAILURE, !Ctx->NblPool)
         goto cleanupDeregisterDevice;
 
     NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES AdapterRegistrationAttributes = {
@@ -1351,7 +1351,7 @@ TunInitializeEx(
     return NDIS_STATUS_SUCCESS;
 
 cleanupFreeNblPool:
-    NdisFreeNetBufferListPool(Ctx->NBLPool);
+    NdisFreeNetBufferListPool(Ctx->NblPool);
 cleanupDeregisterDevice:
     NdisDeregisterDeviceEx(DeviceObjectHandle);
     return Status;
@@ -1465,8 +1465,8 @@ TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltAction)
 {
     TUN_CTX *Ctx = (TUN_CTX *)MiniportAdapterContext;
 
-    ASSERT(!InterlockedGet64(&Ctx->ActiveNBLCount)); /* Adapter should not be halted if there are (potential)
-                                                      * active NBLs present. */
+    ASSERT(!InterlockedGet64(&Ctx->ActiveNblCount)); /* Adapter should not be halted if there are (potential)
+                                                      * active Nbls present. */
 
     InterlockedAnd(&Ctx->Flags, ~TUN_FLAGS_PRESENT);
     ExReleaseSpinLockExclusive(
@@ -1485,7 +1485,7 @@ TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltAction)
     /* Wait for processing IRP(s) to complete. */
     IoAcquireRemoveLock(&Ctx->Device.RemoveLock, NULL);
     IoReleaseRemoveLockAndWait(&Ctx->Device.RemoveLock, NULL);
-    NdisFreeNetBufferListPool(Ctx->NBLPool);
+    NdisFreeNetBufferListPool(Ctx->NblPool);
 
     /* MiniportAdapterHandle must not be used in TunDispatch(). After TunHaltEx() returns it is invalidated. */
     InterlockedExchangePointer(&Ctx->MiniportAdapterHandle, NULL);
