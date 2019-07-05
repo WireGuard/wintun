@@ -1467,7 +1467,7 @@ TunWaitForReferencesToDropToZero(_In_ DEVICE_OBJECT *DeviceObject)
         MaxTries = TotalTime / SleepTime
     };
 #pragma warning(suppress : 28175)
-    for (int Try = 0; Try < MaxTries && DeviceObject->ReferenceCount; ++Try)
+    for (INT Try = 0; Try < MaxTries && InterlockedGet(&DeviceObject->ReferenceCount); ++Try)
         NdisMSleep(SleepTime);
 }
 
