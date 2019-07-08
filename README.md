@@ -12,7 +12,7 @@ This is a layer 3 TUN driver for Windows 7, 8, 8.1, and 10. Originally created f
 
 ## Digital Signing
 
-Digital signing is integral part of the build process. By default, the driver will be test-signed using a certificate that the WDK should automatically generate. To subsequently load the driver, you will need to put your computer into test mode by executing as Administrator `bcdedit /set testsigning on`.
+Digital signing is an integral part of the build process. By default, the driver will be test-signed using a certificate that the WDK should automatically generate. To subsequently load the driver, you will need to put your computer into test mode by executing as Administrator `bcdedit /set testsigning on`.
 
 If you possess an EV certificate for kernel mode code signing you should switch TUN driver digital signing from test-signing to production-signing by authoring your `wintun.vcxproj.user` file to look something like this:
 
@@ -81,39 +81,102 @@ Note: due to the use of SHA256 signatures throughout, Windows 7 users who would 
 
 ## Usage
 
-After loading the driver and creating a network interface the typical way using [SetupAPI](https://docs.microsoft.com/en-us/windows-hardware/drivers/install/setupapi), open `\\.\Global\WINTUN%d` as Local System, where `%d` is the [LUID](https://docs.microsoft.com/en-us/windows/desktop/api/ifdef/ns-ifdef-_net_luid_lh) index (`NetLuidIndex` member) of the network device. You may then [`ReadFile`](https://docs.microsoft.com/en-us/windows/desktop/api/fileapi/nf-fileapi-readfile) and [`WriteFile`](https://docs.microsoft.com/en-us/windows/desktop/api/fileapi/nf-fileapi-writefile) bundles of packets of the following format:
+After loading the driver and creating a network interface the typical way using [SetupAPI](https://docs.microsoft.com/en-us/windows-hardware/drivers/install/setupapi), open `\\.\Global\WINTUN%d` as Local System, where `%d` is the [LUID](https://docs.microsoft.com/en-us/windows/desktop/api/ifdef/ns-ifdef-_net_luid_lh) index (`NetLuidIndex` member) of the network device.
 
-```
-+------------------------------+
-| size_0                       |
-|   4 bytes, native endian     |
-+------------------------------+
-|                              |
-| packet_0                     |
-|   size_0 bytes               |
-|                              |
-~                              ~
-|                              |
-+------------------------------+
-| padding                      |
-|   4-(size_0&3) bytes         |
-+------------------------------+
-| size_1                       |
-|   4 bytes, native endian     |
-+------------------------------+
-|                              |
-| packet_1                     |
-|   size_1 bytes               |
-|                              |
-~                              ~
-|                              |
-+------------------------------+
-| padding                      |
-|   4-(size_1&3) bytes         |
-+------------------------------+
-~                              ~
+You may then allocate two ring structs to use for exchanging packets:
+
+```C
+typedef struct _TUN_RING {
+    volatile ULONG Head;
+    volatile ULONG Tail;
+    volatile LONG Alertable;
+    UCHAR Data[];
+} TUN_RING;
 ```
 
-Each packet segment should contain a layer 3 IPv4 or IPv6 packet. Up to 15728640 bytes may be read or written during each call to `ReadFile` or `WriteFile`. All calls to `ReadFile` must be called with the same virtual address, for a given handle. This virtual address must reference pages that are writable for the same length as passed to the first call of `ReadFile`.
+- `Head`: Byte offset of the first packet in the ring. Its value must be a multiple of 4 and less than ring capacity.
 
-It is advisable to use [overlapped I/O](https://docs.microsoft.com/en-us/windows/desktop/sync/synchronization-and-overlapped-input-and-output) for this. If using blocking I/O instead, it may be desirable to open separate handles for reading and writing.
+- `Tail`: Byte offset of the start of free space in the ring. Its value must be multiple of 4 and less than ring capacity.
+
+- `Alertable`: Zero when the consumer is processing packets; Non-zero when the consumer has processed all packets and is waiting for `TailMoved` event.
+
+- `Data`: The ring data. Determine the size of this array as:
+
+   1. Pick the ring capacity ranging from 128kiB to 64MiB in bytes. The capacity must be a power of two (e.g. 1MiB). The ring can hold up to this much data (4 bytes less to prevent `Tail` to overflow `Head`).
+   2. Add 0x10000 trailing bytes to the capacity. The trailing space allows a packet to remain contiguous that would otherwise require it to be wrapped at the ring edge. Mind that the `Tail` value must be wrapped modulo capacity nevertheless.
+
+The total ring size memory is then `sizeof(TUN_RING)` + capacity + 0x10000.
+
+Each packet is stored in the ring (4-byte aligned) as:
+
+```C
+typedef struct _TUN_PACKET {
+    ULONG Size;
+    UCHAR Data[];
+} TUN_PACKET;
+```
+
+- `Size`: Size of packet (0xFFFF max)
+
+- `Data`: Layer 3 IPv4 or IPv6 packet
+
+Prepare a descriptor struct as:
+
+```C
+typedef struct _TUN_REGISTER_RINGS
+{
+    struct
+    {
+        ULONG RingSize;
+        TUN_RING *Ring;
+        HANDLE TailMoved;
+    } Send, Receive;
+} TUN_REGISTER_RINGS;
+```
+
+- `Send.RingSize`, `Receive.RingSize`: Sizes of the rings (`sizeof(TUN_RING)` + capacity + 0x10000 above)
+
+- `Send.Ring`, `Receive.Ring`: Pointers to rings
+
+- `Send.TailMoved`: An event created by the client the Wintun signals after it moves the Tail member of the send ring.
+
+- `Receive.TailMoved`: An event created by the client the client will signal when it moves the Tail member of the receive ring (if receive ring is alertable).
+
+With events created, send and receive rings allocated, descriptor struct initialized, call `TUN_IOCTL_REGISTER_RINGS` (0x22E000) [`DeviceIoControl`](https://docs.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-deviceiocontrol) with pointer and size of descriptor struct specified as `lpInBuffer` and `nInBufferSize` parameters. You may call `TUN_IOCTL_REGISTER_RINGS` on one handle only.
+
+Reading packets from the send ring:
+
+```C
+for (;;) {
+    TUN_PACKET *next = pop_from_ring(ring_descr->Send.Ring);
+    if (!next) {
+        ring_desc->Send.Ring->Alertable = TRUE;
+        next = pop_from_ring(ring_descr->Send.Ring);
+        if (!next) {
+            WaitForSingleObject(ring_desc->Send.TailMoved, INFINITE);
+            ring_desc->Send.Ring->Alertable = FALSE;
+            continue;
+        }
+        ring_desc->Send.Ring->Alertable = FALSE;
+        ResetEvent(ring_desc->Send.TailMoved);
+    }
+    send_to_encrypted_channel(encrypted_packets_channel, next);
+}
+```
+
+When closing the handle, Wintun will set the `Tail` to 0xFFFFFFFF and set the `TailMoved` event to unblock the waiting user process.
+
+Writing packets to the receive ring is:
+
+```C
+for (;;) {
+    TUN_PACKET *next = receive_from_encrypted_channel(encrypted_packets_channel);
+    write_to_ring(ring_desc->Receive.Ring, next);
+    if (ring_desc->Receive.Ring->Alertable)
+        SetEvent(ring_desc->Recieve.TailMoved);
+}
+```
+
+Wintun will abort reading the receive ring on invalid `Head` or `Tail`, invalid packet or an internal error. In this case, Wintun will set the `Head` to 0xFFFFFFFF. In order to restart it, you need to reopen the handle and call `TUN_IOCTL_REGISTER_RINGS` again.
+
+Release the rings memory only after closing the handle to the Wintun adapter.
