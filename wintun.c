@@ -518,7 +518,7 @@ retry:
     return RetNbl;
 }
 
-/* Note: Must be called immediately after TunQueueRemove without dropping ctx->PacketQueue.Lock. */
+/* Note: Must be called immediately after TunQueueRemove without dropping Ctx->PacketQueue.Lock. */
 _Requires_lock_held_(Ctx->PacketQueue.Lock)
 _IRQL_requires_(DISPATCH_LEVEL)
 static void
@@ -616,11 +616,11 @@ TunQueueProcess(_Inout_ TUN_CTX *Ctx)
         /* Process NB and IRP. */
         if (Nb)
         {
-            NTSTATUS status = TunWriteIntoIrp(Irp, Buffer, Nb, &Ctx->Statistics);
-            if (!NT_SUCCESS(status))
+            NTSTATUS Status = TunWriteIntoIrp(Irp, Buffer, Nb, &Ctx->Statistics);
+            if (!NT_SUCCESS(Status))
             {
                 if (Nbl)
-                    NET_BUFFER_LIST_STATUS(Nbl) = status;
+                    NET_BUFFER_LIST_STATUS(Nbl) = Status;
                 IoCsqInsertIrpEx(&Ctx->Device.ReadQueue.Csq, Irp, NULL, TUN_CSQ_INSERT_HEAD);
                 Irp = NULL;
             }
@@ -1230,7 +1230,7 @@ TunInitializeEx(
         .fAllocateNetBuffer = TRUE,
         .PoolTag = TUN_MEMORY_TAG
     };
-/* Leaking memory 'ctx->NblPool'. Note: 'ctx->NblPool' is freed in TunHaltEx; or on failure. */
+/* Leaking memory 'Ctx->NblPool'. Note: 'Ctx->NblPool' is freed in TunHaltEx; or on failure. */
 #pragma warning(suppress : 6014)
     Ctx->NblPool = NdisAllocateNetBufferListPool(MiniportAdapterHandle, &NblPoolParameters);
     if (Status = NDIS_STATUS_FAILURE, !Ctx->NblPool)
@@ -1469,7 +1469,7 @@ TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltAction)
     if (InterlockedDecrement64(&TunAdapterCount) <= 0)
         TunWaitForReferencesToDropToZero(Ctx->Device.Object);
 
-    /* Deregister device _after_ we are done using ctx not to risk an UaF. The ctx is hosted by device extension. */
+    /* Deregister device _after_ we are done using Ctx not to risk an UaF. The Ctx is hosted by device extension. */
     NdisDeregisterDeviceEx(Ctx->Device.Handle);
 }
 
@@ -1542,7 +1542,7 @@ TunOidQueryWriteBuf(_Inout_ NDIS_OID_REQUEST *OidRequest, _In_bytecount_(Size) c
 _IRQL_requires_max_(APC_LEVEL)
 _Must_inspect_result_
 static NDIS_STATUS
-TunOidQuery(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *OidRequest)
+TunOidQuery(_Inout_ TUN_CTX *Ctx, _Inout_ NDIS_OID_REQUEST *OidRequest)
 {
     ASSERT(
         OidRequest->RequestType == NdisRequestQueryInformation ||
@@ -1573,19 +1573,19 @@ TunOidQuery(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *OidRequest)
     case OID_GEN_XMIT_OK:
         return TunOidQueryWrite32or64(
             OidRequest,
-            InterlockedGet64((LONG64 *)&ctx->Statistics.ifHCOutUcastPkts) +
-                InterlockedGet64((LONG64 *)&ctx->Statistics.ifHCOutMulticastPkts) +
-                InterlockedGet64((LONG64 *)&ctx->Statistics.ifHCOutBroadcastPkts));
+            InterlockedGet64((LONG64 *)&Ctx->Statistics.ifHCOutUcastPkts) +
+                InterlockedGet64((LONG64 *)&Ctx->Statistics.ifHCOutMulticastPkts) +
+                InterlockedGet64((LONG64 *)&Ctx->Statistics.ifHCOutBroadcastPkts));
 
     case OID_GEN_RCV_OK:
         return TunOidQueryWrite32or64(
             OidRequest,
-            InterlockedGet64((LONG64 *)&ctx->Statistics.ifHCInUcastPkts) +
-                InterlockedGet64((LONG64 *)&ctx->Statistics.ifHCInMulticastPkts) +
-                InterlockedGet64((LONG64 *)&ctx->Statistics.ifHCInBroadcastPkts));
+            InterlockedGet64((LONG64 *)&Ctx->Statistics.ifHCInUcastPkts) +
+                InterlockedGet64((LONG64 *)&Ctx->Statistics.ifHCInMulticastPkts) +
+                InterlockedGet64((LONG64 *)&Ctx->Statistics.ifHCInBroadcastPkts));
 
     case OID_GEN_STATISTICS:
-        return TunOidQueryWriteBuf(OidRequest, &ctx->Statistics, (ULONG)sizeof(ctx->Statistics));
+        return TunOidQueryWriteBuf(OidRequest, &Ctx->Statistics, (ULONG)sizeof(Ctx->Statistics));
 
     case OID_GEN_INTERRUPT_MODERATION: {
         static const NDIS_INTERRUPT_MODERATION_PARAMETERS InterruptParameters = {
@@ -1608,7 +1608,7 @@ TunOidQuery(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *OidRequest)
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
 static NDIS_STATUS
-TunOidSet(_Inout_ TUN_CTX *ctx, _Inout_ NDIS_OID_REQUEST *OidRequest)
+TunOidSet(_Inout_ TUN_CTX *Ctx, _Inout_ NDIS_OID_REQUEST *OidRequest)
 {
     ASSERT(OidRequest->RequestType == NdisRequestSetInformation);
 
@@ -1726,7 +1726,7 @@ _Use_decl_annotations_
 NTSTATUS
 DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
 {
-    NTSTATUS status;
+    NTSTATUS Status;
 
     NdisVersion = NdisGetVersion();
     if (NdisVersion < NDIS_MINIPORT_VERSION_MIN)
@@ -1765,9 +1765,9 @@ DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
         .CancelDirectOidRequestHandler = TunCancelDirectOidRequest,
         .SynchronousOidRequestHandler = TunSynchronousOidRequest
     };
-    status = NdisMRegisterMiniportDriver(DriverObject, RegistryPath, NULL, &miniport, &NdisMiniportDriverHandle);
-    if (!NT_SUCCESS(status))
-        return status;
+    Status = NdisMRegisterMiniportDriver(DriverObject, RegistryPath, NULL, &miniport, &NdisMiniportDriverHandle);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
     NdisDispatchPnP = DriverObject->MajorFunction[IRP_MJ_PNP];
     DriverObject->MajorFunction[IRP_MJ_PNP] = TunDispatchPnP;
