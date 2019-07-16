@@ -330,6 +330,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
     KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
     TUN_RING *Ring = Ctx->Device.Receive.Ring;
     ULONG RingCapacity = Ctx->Device.Receive.Capacity;
+    const ULONG SpinMax = 10000 * 50 / KeQueryTimeIncrement(); /* 50ms */
 
     for (;;)
     {
@@ -345,18 +346,40 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         ULONG RingTail = InterlockedGetU(&Ring->Tail);
         if (RingHead == RingTail)
         {
-            InterlockedExchange(&Ring->Alertable, TRUE);
-            RingTail = InterlockedGetU(&Ring->Tail);
+            ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
+            ULONG64 SpinStart;
+            KeQueryTickCount(&SpinStart);
+            for (;;)
+            {
+                RingTail = InterlockedGetU(&Ring->Tail);
+                if (RingTail != RingHead)
+                    break;
+                if (!(InterlockedGet(&Ctx->Flags) & TUN_FLAGS_CONNECTED))
+                    break;
+                ULONG64 SpinNow;
+                KeQueryTickCount(&SpinNow);
+                if (SpinNow - SpinStart >= SpinMax)
+                    break;
+
+                /* This should really call KeYieldProcessorEx(&zero), so it does the Hyper-V paravirtualization call,
+                 * but it's not exported. */
+                YieldProcessor();
+            }
             if (RingHead == RingTail)
             {
-                ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
-                KeWaitForSingleObject(Ctx->Device.Receive.TailMoved, Executive, KernelMode, FALSE, NULL);
+                InterlockedExchange(&Ring->Alertable, TRUE);
+                RingTail = InterlockedGetU(&Ring->Tail);
+                if (RingHead == RingTail)
+                {
+                    KeWaitForSingleObject(Ctx->Device.Receive.TailMoved, Executive, KernelMode, FALSE, NULL);
+                    InterlockedExchange(&Ring->Alertable, FALSE);
+                    Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
+                    continue;
+                }
                 InterlockedExchange(&Ring->Alertable, FALSE);
-                Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
-                continue;
+                KeClearEvent(Ctx->Device.Receive.TailMoved);
             }
-            InterlockedExchange(&Ring->Alertable, FALSE);
-            KeClearEvent(Ctx->Device.Receive.TailMoved);
+            Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
         }
         if (RingTail >= RingCapacity)
             break;
