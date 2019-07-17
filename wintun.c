@@ -28,7 +28,8 @@
 
 /* Memory alignment of packets and rings */
 #define TUN_ALIGNMENT sizeof(ULONG)
-#define TUN_ALIGN(Size) (((ULONG)(Size) + (ULONG)(TUN_ALIGNMENT - 1)) & ~(ULONG)(TUN_ALIGNMENT - 1))
+#define TUN_ALIGN(Size) (((ULONG)(Size) + ((ULONG)TUN_ALIGNMENT - 1)) & ~((ULONG)TUN_ALIGNMENT - 1))
+#define TUN_IS_ALIGNED(Size) (!((ULONG)(Size) & ((ULONG)TUN_ALIGNMENT - 1)))
 /* Maximum IP packet size */
 #define TUN_MAX_IP_PACKET_SIZE 0xFFFF
 /* Maximum packet size */
@@ -140,6 +141,11 @@ typedef struct _TUN_CTX
             ULONG Capacity;
             KEVENT *TailMoved;
             KSPIN_LOCK Lock;
+            ULONG RingTail; /* We need a private tail offset to keep track of ring allocation without disturbing the client. */
+            struct
+            {
+                NET_BUFFER_LIST *Head, *Tail;
+            } ActiveNbls;
         } Send;
 
         struct
@@ -225,6 +231,31 @@ TunIndicateStatus(_In_ NDIS_HANDLE MiniportAdapterHandle, _In_ NDIS_MEDIA_CONNEC
     NdisMIndicateStatusEx(MiniportAdapterHandle, &Indication);
 }
 
+static void
+TunNblSetTailAndMarkActive(_Inout_ NET_BUFFER_LIST *Nbl, _In_ ULONG Tail)
+{
+    ASSERT(TUN_IS_ALIGNED(Tail)); /* Alignment ensures bit 0 will be 0 (0=active, 1=completed). */
+    NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[0] = (VOID *)Tail;
+}
+
+static ULONG
+TunNblGetTail(_In_ NET_BUFFER_LIST *Nbl)
+{
+    return (ULONG)((ULONG_PTR)(NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[0]) & ~((ULONG_PTR)TUN_ALIGNMENT - 1));
+}
+
+static void
+TunNblMarkCompleted(_Inout_ NET_BUFFER_LIST *Nbl)
+{
+    *(ULONG_PTR *)&NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[0] |= 1;
+}
+
+static BOOLEAN
+TunNblIsCompleted(_In_ NET_BUFFER_LIST *Nbl)
+{
+    return (ULONG_PTR)(NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[0]) & 1;
+}
+
 static MINIPORT_SEND_NET_BUFFER_LISTS TunSendNetBufferLists;
 _Use_decl_annotations_
 static void
@@ -235,76 +266,120 @@ TunSendNetBufferLists(
     ULONG SendFlags)
 {
     TUN_CTX *Ctx = (TUN_CTX *)MiniportAdapterContext;
-    LONG64 SentPacketsCount = 0, SentPacketsSize = 0, DiscardedPacketsCount = 0;
-
-    /* TODO: This handler is called by NDIS in parallel. Consider implementing a lock-less MPSC ring. */
-
+    LONG64 SentPacketsCount = 0, SentPacketsSize = 0, ErrorPacketsCount = 0, DiscardedPacketsCount = 0;
     KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
     LONG Flags = InterlockedGet(&Ctx->Flags);
+    TUN_RING *Ring = Ctx->Device.Send.Ring;
+    ULONG RingCapacity = Ctx->Device.Send.Capacity;
 
-    for (NET_BUFFER_LIST *Nbl = NetBufferLists; Nbl; Nbl = NET_BUFFER_LIST_NEXT_NBL(Nbl))
+    for (NET_BUFFER_LIST *Nbl = NetBufferLists, *NblNext; Nbl; Nbl = NblNext)
     {
+        NblNext = NET_BUFFER_LIST_NEXT_NBL(Nbl);
+
+        /* Measure NBL. */
+        ULONG PacketsCount = 0, RequiredRingSpace = 0;
         for (NET_BUFFER *Nb = NET_BUFFER_LIST_FIRST_NB(Nbl); Nb; Nb = NET_BUFFER_NEXT_NB(Nb))
         {
-            NDIS_STATUS Status;
-            if ((Status = NDIS_STATUS_ADAPTER_REMOVED, !(Flags & TUN_FLAGS_PRESENT)) ||
-                (Status = NDIS_STATUS_PAUSED, !(Flags & TUN_FLAGS_RUNNING)) ||
-                (Status = NDIS_STATUS_MEDIA_DISCONNECTED, !(Flags & TUN_FLAGS_CONNECTED)))
-                goto cleanupDiscardPacket;
+            PacketsCount++;
+            UINT PacketSize = NET_BUFFER_DATA_LENGTH(Nb);
+            if (PacketSize <= TUN_MAX_IP_PACKET_SIZE)
+                RequiredRingSpace += TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize);
+        }
 
-            TUN_RING *Ring = Ctx->Device.Send.Ring;
-            ULONG RingCapacity = Ctx->Device.Send.Capacity;
-            ULONG PacketSize = NET_BUFFER_DATA_LENGTH(Nb);
+        NDIS_STATUS Status;
+        if ((Status = NDIS_STATUS_ADAPTER_REMOVED, !(Flags & TUN_FLAGS_PRESENT)) ||
+            (Status = NDIS_STATUS_PAUSED, !(Flags & TUN_FLAGS_RUNNING)) ||
+            (Status = NDIS_STATUS_MEDIA_DISCONNECTED, !(Flags & TUN_FLAGS_CONNECTED)))
+            goto skipNbl;
+
+        /* Allocate space for packet(s) in the ring. */
+        ULONG RingHead = InterlockedGetU(&Ring->Head);
+        if (Status = NDIS_STATUS_ADAPTER_NOT_READY, RingHead >= RingCapacity)
+            goto skipNbl;
+
+        KLOCK_QUEUE_HANDLE LockHandle;
+        KeAcquireInStackQueuedSpinLock(&Ctx->Device.Send.Lock, &LockHandle);
+
+        ULONG RingTail = Ctx->Device.Send.RingTail;
+        ASSERT(RingTail < RingCapacity);
+
+        ULONG RingSpace = TUN_RING_WRAP(RingHead - RingTail - TUN_ALIGNMENT, RingCapacity);
+        if (Status = NDIS_STATUS_BUFFER_OVERFLOW, RingSpace < RequiredRingSpace)
+            goto cleanupKeReleaseInStackQueuedSpinLock;
+
+        TunNblSetTailAndMarkActive(
+            Nbl, Ctx->Device.Send.RingTail = TUN_RING_WRAP(RingTail + RequiredRingSpace, RingCapacity));
+        *(Ctx->Device.Send.ActiveNbls.Head ? &NET_BUFFER_LIST_NEXT_NBL(Ctx->Device.Send.ActiveNbls.Tail)
+                                           : &Ctx->Device.Send.ActiveNbls.Head) = Nbl;
+        Ctx->Device.Send.ActiveNbls.Tail = Nbl;
+
+        KeReleaseInStackQueuedSpinLock(&LockHandle);
+
+        /* Copy packet(s). */
+        for (NET_BUFFER *Nb = NET_BUFFER_LIST_FIRST_NB(Nbl); Nb; Nb = NET_BUFFER_NEXT_NB(Nb))
+        {
+            UINT PacketSize = NET_BUFFER_DATA_LENGTH(Nb);
             if (Status = NDIS_STATUS_INVALID_LENGTH, PacketSize > TUN_MAX_IP_PACKET_SIZE)
-                goto cleanupDiscardPacket;
-            ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize);
-
-            KLOCK_QUEUE_HANDLE LockHandle;
-            KeAcquireInStackQueuedSpinLock(&Ctx->Device.Send.Lock, &LockHandle);
-
-            ULONG RingHead = InterlockedGetU(&Ring->Head);
-            if (Status = NDIS_STATUS_ADAPTER_NOT_READY, RingHead >= RingCapacity)
-                goto cleanupReleaseSpinLock;
-
-            ULONG RingTail = InterlockedGetU(&Ring->Tail);
-            if (Status = NDIS_STATUS_ADAPTER_NOT_READY, RingTail >= RingCapacity)
-                goto cleanupReleaseSpinLock;
-
-            ULONG RingSpace = TUN_RING_WRAP(RingHead - RingTail - TUN_ALIGNMENT, RingCapacity);
-            if (Status = NDIS_STATUS_BUFFER_OVERFLOW, AlignedPacketSize > RingSpace)
-                goto cleanupReleaseSpinLock;
+                goto skipPacket;
 
             TUN_PACKET *Packet = (TUN_PACKET *)(Ring->Data + RingTail);
             Packet->Size = PacketSize;
             void *NbData = NdisGetDataBuffer(Nb, PacketSize, Packet->Data, 1, 0);
             if (!NbData)
-                goto cleanupReleaseSpinLock;
-            if (NbData != Packet->Data)
-                NdisMoveMemory(Packet->Data, NbData, PacketSize);
-            InterlockedExchangeU(&Ring->Tail, TUN_RING_WRAP(RingTail + AlignedPacketSize, RingCapacity));
-            KeSetEvent(Ctx->Device.Send.TailMoved, IO_NETWORK_INCREMENT, FALSE);
+            {
+                NdisZeroMemory(
+                    Packet->Data, PacketSize); /* The space for the packet has already been allocated in the ring. Write
+                                                  null-packet rather than fixing the gap in the ring. */
+                DiscardedPacketsCount++;
+            }
+            else
+            {
+                if (NbData != Packet->Data)
+                    NdisMoveMemory(Packet->Data, NbData, PacketSize);
+                SentPacketsCount++;
+                SentPacketsSize += PacketSize;
+            }
 
-            KeReleaseInStackQueuedSpinLock(&LockHandle);
-            SentPacketsCount++;
-            SentPacketsSize += PacketSize;
+            RingTail = TUN_RING_WRAP(RingTail + TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize), RingCapacity);
             continue;
 
-        cleanupReleaseSpinLock:
-            KeReleaseInStackQueuedSpinLock(&LockHandle);
-        cleanupDiscardPacket:
-            DiscardedPacketsCount++;
+        skipPacket:
+            ErrorPacketsCount++;
             NET_BUFFER_LIST_STATUS(Nbl) = Status;
         }
-    }
+        ASSERT(RingTail == TunNblGetTail(Nbl));
 
-    NdisMSendNetBufferListsComplete(
-        Ctx->MiniportAdapterHandle, NetBufferLists, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+        /* Adjust the ring tail. */
+        TunNblMarkCompleted(Nbl);
+        KeAcquireInStackQueuedSpinLock(&Ctx->Device.Send.Lock, &LockHandle);
+        while (Ctx->Device.Send.ActiveNbls.Head && TunNblIsCompleted(Ctx->Device.Send.ActiveNbls.Head))
+        {
+            NET_BUFFER_LIST *CompletedNbl = Ctx->Device.Send.ActiveNbls.Head;
+            Ctx->Device.Send.ActiveNbls.Head = NET_BUFFER_LIST_NEXT_NBL(CompletedNbl);
+            InterlockedExchangeU(&Ring->Tail, TunNblGetTail(CompletedNbl));
+            KeSetEvent(Ctx->Device.Send.TailMoved, IO_NETWORK_INCREMENT, FALSE);
+            NET_BUFFER_LIST_NEXT_NBL(CompletedNbl) = NULL;
+            NdisMSendNetBufferListsComplete(
+                Ctx->MiniportAdapterHandle, CompletedNbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+        }
+        KeReleaseInStackQueuedSpinLock(&LockHandle);
+        continue;
+
+    cleanupKeReleaseInStackQueuedSpinLock:
+        KeReleaseInStackQueuedSpinLock(&LockHandle);
+    skipNbl:
+        NET_BUFFER_LIST_STATUS(Nbl) = Status;
+        NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
+        NdisMSendNetBufferListsComplete(Ctx->MiniportAdapterHandle, Nbl, 0);
+        DiscardedPacketsCount += PacketsCount;
+    }
 
     ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
 
     InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCOutOctets, SentPacketsSize);
     InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCOutUcastOctets, SentPacketsSize);
     InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCOutUcastPkts, SentPacketsCount);
+    InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifOutErrors, ErrorPacketsCount);
     InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifOutDiscards, DiscardedPacketsCount);
 }
 
@@ -517,6 +592,10 @@ TunDispatchRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     Ctx->Device.Send.Ring =
         MmGetSystemAddressForMdlSafe(Ctx->Device.Send.Mdl, NormalPagePriority | MdlMappingNoExecute);
     if (Status = STATUS_INSUFFICIENT_RESOURCES, !Ctx->Device.Send.Ring)
+        goto cleanupSendUnlockPages;
+
+    Ctx->Device.Send.RingTail = InterlockedGetU(&Ctx->Device.Send.Ring->Tail);
+    if (Status = STATUS_INVALID_PARAMETER, Ctx->Device.Send.RingTail >= Ctx->Device.Send.Capacity)
         goto cleanupSendUnlockPages;
 
     /* Analyze and lock receive ring. */
