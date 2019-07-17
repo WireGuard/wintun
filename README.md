@@ -83,7 +83,9 @@ Note: due to the use of SHA256 signatures throughout, Windows 7 users who would 
 
 After loading the driver and creating a network interface the typical way using [SetupAPI](https://docs.microsoft.com/en-us/windows-hardware/drivers/install/setupapi), open `\\.\Global\WINTUN%d` as Local System, where `%d` is the [LUID](https://docs.microsoft.com/en-us/windows/desktop/api/ifdef/ns-ifdef-_net_luid_lh) index (`NetLuidIndex` member) of the network device.
 
-You may then allocate two ring structs to use for exchanging packets:
+### Ring layout
+
+You must allocate two ring structs, one for receiving and one for sending:
 
 ```C
 typedef struct _TUN_RING {
@@ -98,16 +100,18 @@ typedef struct _TUN_RING {
 
 - `Tail`: Byte offset of the start of free space in the ring. Its value must be multiple of 4 and less than ring capacity.
 
-- `Alertable`: Zero when the consumer is processing packets; Non-zero when the consumer has processed all packets and is waiting for `TailMoved` event.
+- `Alertable`: Zero when the consumer is processing packets, non-zero when the consumer has processed all packets and is waiting for `TailMoved` event.
 
-- `Data`: The ring data. Determine the size of this array as:
+- `Data`: The ring data.
 
-   1. Pick the ring capacity ranging from 128kiB to 64MiB in bytes. The capacity must be a power of two (e.g. 1MiB). The ring can hold up to this much data (4 bytes less to prevent `Tail` to overflow `Head`).
-   2. Add 0x10000 trailing bytes to the capacity. The trailing space allows a packet to remain contiguous that would otherwise require it to be wrapped at the ring edge. Mind that the `Tail` value must be wrapped modulo capacity nevertheless.
+In order to determine the size of the `Data` array:
 
-The total ring size memory is then `sizeof(TUN_RING)` + capacity + 0x10000.
+1. Pick a ring capacity ranging from 128kiB to 64MiB bytes. This capacity must be a power of two (e.g. 1MiB). The ring can hold up to this much data.
+2. Add 0x10000 trailing bytes to the capacity, in order to allow for always-contigious packet segments.
 
-Each packet is stored in the ring (4-byte aligned) as:
+The total ring size memory is then `sizeof(TUN_RING) + capacity + 0x10000`.
+
+Each packet is stored in the ring aligned to `sizeof(ULONG)` as:
 
 ```C
 typedef struct _TUN_PACKET {
@@ -116,11 +120,13 @@ typedef struct _TUN_PACKET {
 } TUN_PACKET;
 ```
 
-- `Size`: Size of packet (0xFFFF max)
+- `Size`: Size of packet (max 0xFFFF).
 
-- `Data`: Layer 3 IPv4 or IPv6 packet
+- `Data`: Layer 3 IPv4 or IPv6 packet.
 
-Prepare a descriptor struct as:
+### Registering rings
+
+In order to register the two `TUN_RING`s, prepare a registration struct as:
 
 ```C
 typedef struct _TUN_REGISTER_RINGS
@@ -134,49 +140,52 @@ typedef struct _TUN_REGISTER_RINGS
 } TUN_REGISTER_RINGS;
 ```
 
-- `Send.RingSize`, `Receive.RingSize`: Sizes of the rings (`sizeof(TUN_RING)` + capacity + 0x10000 above)
+- `Send.RingSize`, `Receive.RingSize`: Sizes of the rings (`sizeof(TUN_RING) + capacity + 0x10000`, as above).
 
-- `Send.Ring`, `Receive.Ring`: Pointers to rings
+- `Send.Ring`, `Receive.Ring`: Pointers to the rings.
 
-- `Send.TailMoved`: An event created by the client the Wintun signals after it moves the Tail member of the send ring.
+- `Send.TailMoved`: A handle to an [`auto-reset event`](https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createeventa) created by the client that Wintun signals after it moves the `Tail` member of the send ring.
 
-- `Receive.TailMoved`: An event created by the client the client will signal when it moves the Tail member of the receive ring (if receive ring is alertable).
+- `Receive.TailMoved`: A handle to an [`auto-reset event`](https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createeventa) created by the client that the client will signal when it changes `Receive.Ring->Tail` and `Receive.Ring->Alertable` is non-zero.
 
-With events created, send and receive rings allocated, descriptor struct initialized, call `TUN_IOCTL_REGISTER_RINGS` (0x22E000) [`DeviceIoControl`](https://docs.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-deviceiocontrol) with pointer and size of descriptor struct specified as `lpInBuffer` and `nInBufferSize` parameters. You may call `TUN_IOCTL_REGISTER_RINGS` on one handle only.
+With events created, send and receive rings allocated, and registration struct populated, [`DeviceIoControl`](https://docs.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-deviceiocontrol)(`TUN_IOCTL_REGISTER_RINGS`: 0x22E000) with pointer and size of descriptor struct specified as `lpInBuffer` and `nInBufferSize` parameters. You may call `TUN_IOCTL_REGISTER_RINGS` on one handle only.
 
-Reading packets from the send ring:
+
+### Writing to and from rings
+
+Reading packets from the send ring may be done as:
 
 ```C
 for (;;) {
-    TUN_PACKET *next = pop_from_ring(ring_descr->Send.Ring);
+    TUN_PACKET *next = PopFromRing(r->Send.Ring);
     if (!next) {
-        ring_desc->Send.Ring->Alertable = TRUE;
-        next = pop_from_ring(ring_descr->Send.Ring);
+        r->Send.Ring->Alertable = TRUE;
+        next = PopFromRing(r->Send.Ring);
         if (!next) {
-            WaitForSingleObject(ring_desc->Send.TailMoved, INFINITE);
-            ring_desc->Send.Ring->Alertable = FALSE;
+            WaitForSingleObject(r->Send.TailMoved, INFINITE);
+            r->Send.Ring->Alertable = FALSE;
             continue;
         }
-        ring_desc->Send.Ring->Alertable = FALSE;
-        ResetEvent(ring_desc->Send.TailMoved);
+        r->Send.Ring->Alertable = FALSE;
+        ResetEvent(r->Send.TailMoved);
     }
-    send_to_encrypted_channel(encrypted_packets_channel, next);
+    SendToClientProgram(next);
 }
 ```
+
+It may be desirable to spin for ~50ms before waiting on the `TailMoved` event, in order to reduce latency.
 
 When closing the handle, Wintun will set the `Tail` to 0xFFFFFFFF and set the `TailMoved` event to unblock the waiting user process.
 
-Writing packets to the receive ring is:
+Writing packets to the receive ring may be done as:
 
 ```C
 for (;;) {
-    TUN_PACKET *next = receive_from_encrypted_channel(encrypted_packets_channel);
-    write_to_ring(ring_desc->Receive.Ring, next);
-    if (ring_desc->Receive.Ring->Alertable)
-        SetEvent(ring_desc->Recieve.TailMoved);
+    TUN_PACKET *next = ReceiveFromClientProgram();
+    WriteToRing(r->Receive.Ring, next);
+    if (r->Receive.Ring->Alertable)
+        SetEvent(r->Recieve.TailMoved);
 }
 ```
 
-Wintun will abort reading the receive ring on invalid `Head` or `Tail`, invalid packet or an internal error. In this case, Wintun will set the `Head` to 0xFFFFFFFF. In order to restart it, you need to reopen the handle and call `TUN_IOCTL_REGISTER_RINGS` again.
-
-Release the rings memory only after closing the handle to the Wintun adapter.
+Wintun will abort reading the receive ring on invalid `Head` or `Tail` or on a bogus packet. In this case, Wintun will set the `Head` to 0xFFFFFFFF. In order to restart it, reopen the handle and call `TUN_IOCTL_REGISTER_RINGS` again. However, it should be entirely possible to avoid feeding Wintun bogus packets and invalid offsets.
