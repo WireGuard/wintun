@@ -112,7 +112,6 @@ typedef enum _TUN_FLAGS
 {
     TUN_FLAGS_RUNNING = 1 << 0,   /* Toggles between paused and running state */
     TUN_FLAGS_PRESENT = 1 << 1,   /* Toggles between removal pending and being present */
-    TUN_FLAGS_CONNECTED = 1 << 2, /* Is client connected? */
 } TUN_FLAGS;
 
 typedef struct _TUN_CTX
@@ -133,6 +132,7 @@ typedef struct _TUN_CTX
         DEVICE_OBJECT *Object;
         IO_REMOVE_LOCK RemoveLock;
         FILE_OBJECT *volatile Owner;
+        KEVENT Disconnected;
 
         struct
         {
@@ -289,7 +289,7 @@ TunSendNetBufferLists(
         NDIS_STATUS Status;
         if ((Status = NDIS_STATUS_ADAPTER_REMOVED, !(Flags & TUN_FLAGS_PRESENT)) ||
             (Status = NDIS_STATUS_PAUSED, !(Flags & TUN_FLAGS_RUNNING)) ||
-            (Status = NDIS_STATUS_MEDIA_DISCONNECTED, !(Flags & TUN_FLAGS_CONNECTED)))
+            (Status = NDIS_STATUS_MEDIA_DISCONNECTED, KeReadStateEvent(&Ctx->Device.Disconnected)))
             goto skipNbl;
 
         /* Allocate space for packet(s) in the ring. */
@@ -406,13 +406,11 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
     TUN_RING *Ring = Ctx->Device.Receive.Ring;
     ULONG RingCapacity = Ctx->Device.Receive.Capacity;
     const ULONG SpinMax = 10000 * 50 / KeQueryTimeIncrement(); /* 50ms */
+    VOID *Events[] = { &Ctx->Device.Disconnected, Ctx->Device.Receive.TailMoved };
+    ASSERT(RTL_NUMBER_OF(Events) <= THREAD_WAIT_OBJECTS);
 
-    for (;;)
+    while (!KeReadStateEvent(&Ctx->Device.Disconnected))
     {
-        LONG Flags = InterlockedGet(&Ctx->Flags);
-        if (!(Flags & TUN_FLAGS_CONNECTED))
-            break;
-
         /* Get next packet from the ring. */
         ULONG RingHead = InterlockedGetU(&Ring->Head);
         if (RingHead >= RingCapacity)
@@ -429,7 +427,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
                 RingTail = InterlockedGetU(&Ring->Tail);
                 if (RingTail != RingHead)
                     break;
-                if (!(InterlockedGet(&Ctx->Flags) & TUN_FLAGS_CONNECTED))
+                if (KeReadStateEvent(&Ctx->Device.Disconnected))
                     break;
                 ULONG64 SpinNow;
                 KeQueryTickCount(&SpinNow);
@@ -446,7 +444,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
                 RingTail = InterlockedGetU(&Ring->Tail);
                 if (RingHead == RingTail)
                 {
-                    KeWaitForSingleObject(Ctx->Device.Receive.TailMoved, Executive, KernelMode, FALSE, NULL);
+                    KeWaitForMultipleObjects(RTL_NUMBER_OF(Events), Events, WaitAny, Executive, KernelMode, FALSE, NULL, NULL);
                     InterlockedExchange(&Ring->Alertable, FALSE);
                     Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
                     continue;
@@ -498,7 +496,8 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SUCCESS;
 
         /* Inform NDIS of the packet. */
-        if ((Flags & (TUN_FLAGS_PRESENT | TUN_FLAGS_RUNNING)) != (TUN_FLAGS_PRESENT | TUN_FLAGS_RUNNING))
+        if ((InterlockedGet(&Ctx->Flags) & (TUN_FLAGS_PRESENT | TUN_FLAGS_RUNNING)) !=
+            (TUN_FLAGS_PRESENT | TUN_FLAGS_RUNNING))
             goto cleanupFreeNbl;
 
         /* TODO: Consider making packet(s) copy rather than using NDIS_RECEIVE_FLAGS_RESOURCES. */
@@ -608,7 +607,8 @@ TunDispatchRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     if (!NT_SUCCESS(
             Status = ObReferenceObjectByHandle(
                 Rrb->Receive.TailMoved,
-                SYNCHRONIZE | EVENT_MODIFY_STATE, /* We need to set recv ring TailMoved event to unblock on close. */
+                SYNCHRONIZE | EVENT_MODIFY_STATE, /* We need to clear recv ring TailMoved event on transition to
+                                                     non-alertable state. */
                 *ExEventObjectType,
                 UserMode,
                 &Ctx->Device.Receive.TailMoved,
@@ -630,7 +630,7 @@ TunDispatchRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     if (Status = STATUS_INSUFFICIENT_RESOURCES, !Ctx->Device.Receive.Ring)
         goto cleanupReceiveUnlockPages;
 
-    InterlockedOr(&Ctx->Flags, TUN_FLAGS_CONNECTED);
+    KeClearEvent(&Ctx->Device.Disconnected);
 
     /* Spawn receiver thread. */
     OBJECT_ATTRIBUTES ObjectAttributes;
@@ -644,7 +644,7 @@ TunDispatchRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     return STATUS_SUCCESS;
 
 cleanupFlagsConnected:
-    InterlockedAnd(&Ctx->Flags, ~TUN_FLAGS_CONNECTED);
+    KeSetEvent(&Ctx->Device.Disconnected, IO_NO_INCREMENT, FALSE);
     ExReleaseSpinLockExclusive(
         &Ctx->TransitionLock,
         ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
@@ -672,13 +672,12 @@ TunDispatchUnregisterBuffers(_Inout_ TUN_CTX *Ctx, _In_ FILE_OBJECT *Owner)
     if (InterlockedCompareExchangePointer(&Ctx->Device.Owner, NULL, Owner) != Owner)
         return;
 
-    InterlockedAnd(&Ctx->Flags, ~TUN_FLAGS_CONNECTED);
+    TunIndicateStatus(Ctx->MiniportAdapterHandle, MediaConnectStateDisconnected);
+
+    KeSetEvent(&Ctx->Device.Disconnected, IO_NO_INCREMENT, FALSE);
     ExReleaseSpinLockExclusive(
         &Ctx->TransitionLock,
-        ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); /* Ensure Flags change is visible to all readers. */
-    KeSetEvent(Ctx->Device.Receive.TailMoved, IO_NO_INCREMENT, FALSE);
-
-    TunIndicateStatus(Ctx->MiniportAdapterHandle, MediaConnectStateDisconnected);
+        ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
 
     PKTHREAD ThreadObject;
     if (NT_SUCCESS(
@@ -914,6 +913,7 @@ TunInitializeEx(
     Ctx->Device.Handle = DeviceObjectHandle;
     Ctx->Device.Object = DeviceObject;
     IoInitializeRemoveLock(&Ctx->Device.RemoveLock, TUN_MEMORY_TAG, 0, 0);
+    KeInitializeEvent(&Ctx->Device.Disconnected, NotificationEvent, TRUE);
     KeInitializeSpinLock(&Ctx->Device.Send.Lock);
 
     NET_BUFFER_LIST_POOL_PARAMETERS NblPoolParameters = {
