@@ -680,7 +680,7 @@ TunUnregisterBuffers(_Inout_ TUN_CTX *Ctx, _In_ FILE_OBJECT *Owner)
 }
 
 _Dispatch_type_(IRP_MJ_DEVICE_CONTROL)
-static DRIVER_DISPATCH TunDispatchDeviceControl;
+static DRIVER_DISPATCH_PAGED TunDispatchDeviceControl;
 _Use_decl_annotations_
 static NTSTATUS
 TunDispatchDeviceControl(DEVICE_OBJECT *DeviceObject, IRP *Irp)
@@ -702,7 +702,7 @@ TunDispatchDeviceControl(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 }
 
 _Dispatch_type_(IRP_MJ_CLOSE)
-static DRIVER_DISPATCH TunDispatchClose;
+static DRIVER_DISPATCH_PAGED TunDispatchClose;
 _Use_decl_annotations_
 static NTSTATUS
 TunDispatchClose(DEVICE_OBJECT *DeviceObject, IRP *Irp)
@@ -717,7 +717,7 @@ TunDispatchClose(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 }
 
 _Dispatch_type_(IRP_MJ_PNP)
-static DRIVER_DISPATCH TunDispatchPnP;
+static DRIVER_DISPATCH_PAGED TunDispatchPnP;
 _Use_decl_annotations_
 static NTSTATUS
 TunDispatchPnP(DEVICE_OBJECT *DeviceObject, IRP *Irp)
@@ -794,6 +794,9 @@ TunInitializeEx(
 
     if (!MiniportAdapterHandle)
         return NDIS_STATUS_FAILURE;
+
+/* Leaking memory 'Ctx'. Note: 'Ctx' is freed in TunHaltEx or on failure. */
+#pragma warning(suppress : 6014)
     TUN_CTX *Ctx = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(*Ctx), TUN_MEMORY_TAG);
     if (!Ctx)
         return NDIS_STATUS_FAILURE;
@@ -837,7 +840,7 @@ TunInitializeEx(
         .fAllocateNetBuffer = TRUE,
         .PoolTag = TUN_MEMORY_TAG
     };
-/* Leaking memory 'Ctx->NblPool'. Note: 'Ctx->NblPool' is freed in TunHaltEx; or on failure. */
+/* Leaking memory 'Ctx->NblPool'. Note: 'Ctx->NblPool' is freed in TunHaltEx or on failure. */
 #pragma warning(suppress : 6014)
     Ctx->NblPool = NdisAllocateNetBufferListPool(MiniportAdapterHandle, &NblPoolParameters);
     if (Status = NDIS_STATUS_FAILURE, !Ctx->NblPool)
