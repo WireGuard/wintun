@@ -304,8 +304,8 @@ TunSendNetBufferLists(
         if (Status = NDIS_STATUS_BUFFER_OVERFLOW, RingSpace < RequiredRingSpace)
             goto cleanupKeReleaseInStackQueuedSpinLock;
 
-        TunNblSetTailAndMarkActive(
-            Nbl, Ctx->Device.Send.RingTail = TUN_RING_WRAP(RingTail + RequiredRingSpace, RingCapacity));
+        Ctx->Device.Send.RingTail = TUN_RING_WRAP(RingTail + RequiredRingSpace, RingCapacity);
+        TunNblSetTailAndMarkActive(Nbl, Ctx->Device.Send.RingTail);
         *(Ctx->Device.Send.ActiveNbls.Head ? &NET_BUFFER_LIST_NEXT_NBL(Ctx->Device.Send.ActiveNbls.Tail)
                                            : &Ctx->Device.Send.ActiveNbls.Head) = Nbl;
         Ctx->Device.Send.ActiveNbls.Tail = Nbl;
