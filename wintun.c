@@ -324,9 +324,9 @@ TunSendNetBufferLists(
             void *NbData = NdisGetDataBuffer(Nb, PacketSize, Packet->Data, 1, 0);
             if (!NbData)
             {
-                NdisZeroMemory(
-                    Packet->Data, PacketSize); /* The space for the packet has already been allocated in the ring. Write
-                                                  null-packet rather than fixing the gap in the ring. */
+                /* The space for the packet has already been allocated in the ring. Write a zero-packet rather than
+                 * fixing the gap in the ring. */
+                NdisZeroMemory(Packet->Data, PacketSize);
                 DiscardedPacketsCount++;
             }
             else
