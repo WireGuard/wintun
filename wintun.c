@@ -279,7 +279,6 @@ TunSendNetBufferLists(
 
         KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
         LONG Flags = InterlockedGet(&Ctx->Flags);
-
         NDIS_STATUS Status;
         if ((Status = NDIS_STATUS_ADAPTER_REMOVED, !(Flags & TUN_FLAGS_PRESENT)) ||
             (Status = NDIS_STATUS_PAUSED, !(Flags & TUN_FLAGS_RUNNING)) ||
@@ -399,24 +398,22 @@ _Function_class_(KSTART_ROUTINE)
 static void
 TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
 {
-    KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
     TUN_RING *Ring = Ctx->Device.Receive.Ring;
     ULONG RingCapacity = Ctx->Device.Receive.Capacity;
     const ULONG SpinMax = 10000 * 50 / KeQueryTimeIncrement(); /* 50ms */
     VOID *Events[] = { &Ctx->Device.Disconnected, Ctx->Device.Receive.TailMoved };
     ASSERT(RTL_NUMBER_OF(Events) <= THREAD_WAIT_OBJECTS);
 
+    ULONG RingHead = InterlockedGetU(&Ring->Head);
+    if (RingHead >= RingCapacity)
+        goto cleanup;
+
     while (!KeReadStateEvent(&Ctx->Device.Disconnected))
     {
         /* Get next packet from the ring. */
-        ULONG RingHead = InterlockedGetU(&Ring->Head);
-        if (RingHead >= RingCapacity)
-            break;
-
         ULONG RingTail = InterlockedGetU(&Ring->Tail);
         if (RingHead == RingTail)
         {
-            ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
             ULONG64 SpinStart;
             KeQueryTickCount(&SpinStart);
             for (;;)
@@ -444,13 +441,11 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
                     KeWaitForMultipleObjects(
                         RTL_NUMBER_OF(Events), Events, WaitAny, Executive, KernelMode, FALSE, NULL, NULL);
                     InterlockedExchange(&Ring->Alertable, FALSE);
-                    Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
                     continue;
                 }
                 InterlockedExchange(&Ring->Alertable, FALSE);
                 KeClearEvent(Ctx->Device.Receive.TailMoved);
             }
-            Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
         }
         if (RingTail >= RingCapacity)
             break;
@@ -494,6 +489,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SUCCESS;
 
         /* Inform NDIS of the packet. */
+        KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
         if ((InterlockedGet(&Ctx->Flags) & (TUN_FLAGS_PRESENT | TUN_FLAGS_RUNNING)) !=
             (TUN_FLAGS_PRESENT | TUN_FLAGS_RUNNING))
             goto cleanupFreeNbl;
@@ -505,23 +501,25 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
             NDIS_DEFAULT_PORT_NUMBER,
             1,
             NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL | NDIS_RECEIVE_FLAGS_RESOURCES | NDIS_RECEIVE_FLAGS_SINGLE_ETHER_TYPE);
+        ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
+        NdisFreeNetBufferList(Nbl);
         InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCInOctets, PacketSize);
         InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCInUcastOctets, PacketSize);
         InterlockedIncrement64((LONG64 *)&Ctx->Statistics.ifHCInUcastPkts);
-
-        NdisFreeNetBufferList(Nbl);
         goto nextPacket;
 
     cleanupFreeNbl:
+        ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
         NdisFreeNetBufferList(Nbl);
     cleanupDiscardPacket:
         InterlockedIncrement64((LONG64 *)&Ctx->Statistics.ifInDiscards);
     nextPacket:
-        InterlockedExchangeU(&Ring->Head, TUN_RING_WRAP(RingHead + AlignedPacketSize, RingCapacity));
+        RingHead = TUN_RING_WRAP(RingHead + AlignedPacketSize, RingCapacity);
+        InterlockedExchangeU(&Ring->Head, RingHead);
     }
 
+cleanup:
     InterlockedExchangeU(&Ring->Head, MAXULONG);
-    ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
