@@ -99,7 +99,8 @@ StatementMacros: [
     '__drv_allocatesMem',
     '__drv_freesMem',
 	'_Field_size_bytes_',
-    '_Function_class_'
+    '_Function_class_',
+    '_Dispatch_type_'
     ]
 TabWidth: '4'
 UseTab: Never

@@ -8,7 +8,6 @@
 #include <wdmsec.h>
 #include <ndis.h>
 #include <ntstrsafe.h>
-#include "undocumented.h"
 
 #pragma warning(disable : 4100) /* unreferenced formal parameter */
 #pragma warning(disable : 4200) /* nonstandard: zero-sized array in struct/union */
@@ -18,9 +17,6 @@
 
 #define NDIS_MINIPORT_VERSION_MIN ((NDIS_MINIPORT_MINIMUM_MAJOR_VERSION << 16) | NDIS_MINIPORT_MINIMUM_MINOR_VERSION)
 #define NDIS_MINIPORT_VERSION_MAX ((NDIS_MINIPORT_MAJOR_VERSION << 16) | NDIS_MINIPORT_MINOR_VERSION)
-
-/* Data device name */
-#define TUN_DEVICE_NAME L"WINTUN%u"
 
 #define TUN_VENDOR_NAME "Wintun Tunnel"
 #define TUN_VENDOR_ID 0xFFFFFF00
@@ -110,8 +106,8 @@ typedef struct _TUN_REGISTER_RINGS
 
 typedef enum _TUN_FLAGS
 {
-    TUN_FLAGS_RUNNING = 1 << 0,   /* Toggles between paused and running state */
-    TUN_FLAGS_PRESENT = 1 << 1,   /* Toggles between removal pending and being present */
+    TUN_FLAGS_RUNNING = 1 << 0, /* Toggles between paused and running state */
+    TUN_FLAGS_PRESENT = 1 << 1, /* Toggles between removal pending and being present */
 } TUN_FLAGS;
 
 typedef struct _TUN_CTX
@@ -124,13 +120,11 @@ typedef struct _TUN_CTX
     EX_SPIN_LOCK TransitionLock;
 
     NDIS_HANDLE MiniportAdapterHandle; /* This is actually a pointer to NDIS_MINIPORT_BLOCK struct. */
+    DEVICE_OBJECT *FunctionalDeviceObject;
     NDIS_STATISTICS_INFO Statistics;
 
     struct
     {
-        NDIS_HANDLE Handle;
-        DEVICE_OBJECT *Object;
-        IO_REMOVE_LOCK RemoveLock;
         FILE_OBJECT *volatile Owner;
         KEVENT Disconnected;
 
@@ -141,7 +135,8 @@ typedef struct _TUN_CTX
             ULONG Capacity;
             KEVENT *TailMoved;
             KSPIN_LOCK Lock;
-            ULONG RingTail; /* We need a private tail offset to keep track of ring allocation without disturbing the client. */
+            ULONG RingTail; /* We need a private tail offset to keep track of ring allocation without disturbing the
+                             * client. */
             struct
             {
                 NET_BUFFER_LIST *Head, *Tail;
@@ -163,8 +158,8 @@ typedef struct _TUN_CTX
 
 static UINT NdisVersion;
 static NDIS_HANDLE NdisMiniportDriverHandle;
-static DRIVER_DISPATCH *NdisDispatchPnP;
-static volatile LONG64 TunAdapterCount;
+static DRIVER_DISPATCH *NdisDispatchPnP, *NdisDispatchDeviceControl, *NdisDispatchClose;
+static ERESOURCE TunCtxDispatchGuard;
 
 static __forceinline ULONG
 InterlockedExchangeU(_Inout_ _Interlocked_operand_ ULONG volatile *Target, _In_ ULONG Value)
@@ -444,7 +439,8 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
                 RingTail = InterlockedGetU(&Ring->Tail);
                 if (RingHead == RingTail)
                 {
-                    KeWaitForMultipleObjects(RTL_NUMBER_OF(Events), Events, WaitAny, Executive, KernelMode, FALSE, NULL, NULL);
+                    KeWaitForMultipleObjects(
+                        RTL_NUMBER_OF(Events), Events, WaitAny, Executive, KernelMode, FALSE, NULL, NULL);
                     InterlockedExchange(&Ring->Alertable, FALSE);
                     Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
                     continue;
@@ -526,33 +522,15 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
     ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
 }
 
-_IRQL_requires_max_(APC_LEVEL)
-_Must_inspect_result_
-static NTSTATUS
-TunDispatchCreate(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
-{
-    NTSTATUS Status;
-
-    KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
-    LONG Flags = InterlockedGet(&Ctx->Flags);
-    if (Status = STATUS_DELETE_PENDING, !(Flags & TUN_FLAGS_PRESENT))
-        goto cleanupReleaseSpinLock;
-
-    IO_STACK_LOCATION *Stack = IoGetCurrentIrpStackLocation(Irp);
-    Status = IoAcquireRemoveLock(&Ctx->Device.RemoveLock, Stack->FileObject);
-
-cleanupReleaseSpinLock:
-    ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
-    return Status;
-}
-
 _IRQL_requires_max_(PASSIVE_LEVEL)
 _Must_inspect_result_
 static NTSTATUS
-TunDispatchRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
+TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
 {
     NTSTATUS Status;
     IO_STACK_LOCATION *Stack = IoGetCurrentIrpStackLocation(Irp);
+
+    /* TODO TODO TODO: SeCaptureSubjectContext, SeAccessCheck */
 
     if (InterlockedCompareExchangePointer(&Ctx->Device.Owner, Stack->FileObject, NULL) != NULL)
         return STATUS_ALREADY_INITIALIZED;
@@ -667,7 +645,7 @@ cleanupResetOwner:
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
 static void
-TunDispatchUnregisterBuffers(_Inout_ TUN_CTX *Ctx, _In_ FILE_OBJECT *Owner)
+TunUnregisterBuffers(_Inout_ TUN_CTX *Ctx, _In_ FILE_OBJECT *Owner)
 {
     if (InterlockedCompareExchangePointer(&Ctx->Device.Owner, NULL, Owner) != Owner)
         return;
@@ -699,83 +677,72 @@ TunDispatchUnregisterBuffers(_Inout_ TUN_CTX *Ctx, _In_ FILE_OBJECT *Owner)
     ObDereferenceObject(Ctx->Device.Send.TailMoved);
 }
 
-static DRIVER_DISPATCH_PAGED TunDispatch;
+_Dispatch_type_(IRP_MJ_DEVICE_CONTROL)
+static DRIVER_DISPATCH TunDispatchDeviceControl;
 _Use_decl_annotations_
 static NTSTATUS
-TunDispatch(DEVICE_OBJECT *DeviceObject, IRP *Irp)
+TunDispatchDeviceControl(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 {
-    NTSTATUS Status;
-
-    Irp->IoStatus.Information = 0;
-    TUN_CTX *Ctx = NdisGetDeviceReservedExtension(DeviceObject);
-    if (Status = STATUS_INVALID_HANDLE, !Ctx)
-        goto cleanupCompleteRequest;
-
     IO_STACK_LOCATION *Stack = IoGetCurrentIrpStackLocation(Irp);
-    switch (Stack->MajorFunction)
-    {
-    case IRP_MJ_CREATE:
-        if (!NT_SUCCESS(Status = IoAcquireRemoveLock(&Ctx->Device.RemoveLock, Irp)))
-            goto cleanupCompleteRequest;
-        Status = TunDispatchCreate(Ctx, Irp);
-        IoReleaseRemoveLock(&Ctx->Device.RemoveLock, Irp);
-        break;
-
-    case IRP_MJ_DEVICE_CONTROL:
-        if ((Status = STATUS_INVALID_PARAMETER,
-             Stack->Parameters.DeviceIoControl.IoControlCode != TUN_IOCTL_REGISTER_RINGS) ||
-            !NT_SUCCESS(Status = IoAcquireRemoveLock(&Ctx->Device.RemoveLock, Irp)))
-            goto cleanupCompleteRequest;
-        Status = TunDispatchRegisterBuffers(Ctx, Irp);
-        IoReleaseRemoveLock(&Ctx->Device.RemoveLock, Irp);
-        break;
-
-    case IRP_MJ_CLOSE:
-        Status = STATUS_SUCCESS;
-        TunDispatchUnregisterBuffers(Ctx, Stack->FileObject);
-        IoReleaseRemoveLock(&Ctx->Device.RemoveLock, Stack->FileObject);
-        break;
-
-    default:
-        Status = STATUS_INVALID_PARAMETER;
-        break;
-    }
-
-cleanupCompleteRequest:
+    if (Stack->Parameters.DeviceIoControl.IoControlCode != TUN_IOCTL_REGISTER_RINGS)
+        return NdisDispatchDeviceControl(DeviceObject, Irp);
+    ExAcquireResourceSharedLite(&TunCtxDispatchGuard, TRUE);
+#pragma warning(suppress : 28175)
+    TUN_CTX *Ctx = DeviceObject->Reserved;
+    NTSTATUS Status = NDIS_STATUS_ADAPTER_NOT_READY;
+    if (Ctx)
+        Status = TunRegisterBuffers(Ctx, Irp);
+    ExReleaseResourceLite(&TunCtxDispatchGuard);
     Irp->IoStatus.Status = Status;
+    Irp->IoStatus.Information = 0;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return Status;
 }
 
-_Dispatch_type_(IRP_MJ_PNP) static DRIVER_DISPATCH TunDispatchPnP;
+_Dispatch_type_(IRP_MJ_CLOSE)
+static DRIVER_DISPATCH TunDispatchClose;
+_Use_decl_annotations_
+static NTSTATUS
+TunDispatchClose(DEVICE_OBJECT *DeviceObject, IRP *Irp)
+{
+    ExAcquireResourceSharedLite(&TunCtxDispatchGuard, TRUE);
+#pragma warning(suppress : 28175)
+    TUN_CTX *Ctx = DeviceObject->Reserved;
+    if (Ctx)
+        TunUnregisterBuffers(Ctx, IoGetCurrentIrpStackLocation(Irp)->FileObject);
+    ExReleaseResourceLite(&TunCtxDispatchGuard);
+    return NdisDispatchClose(DeviceObject, Irp);
+}
+
+_Dispatch_type_(IRP_MJ_PNP)
+static DRIVER_DISPATCH TunDispatchPnP;
 _Use_decl_annotations_
 static NTSTATUS
 TunDispatchPnP(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 {
-    IO_STACK_LOCATION *Stack = IoGetCurrentIrpStackLocation(Irp);
-    if (Stack->MajorFunction == IRP_MJ_PNP)
-    {
+    ExAcquireResourceSharedLite(&TunCtxDispatchGuard, TRUE);
 #pragma warning(suppress : 28175)
-        TUN_CTX *Ctx = DeviceObject->Reserved;
-        if (!Ctx)
-            return NdisDispatchPnP(DeviceObject, Irp);
+    TUN_CTX *Ctx = DeviceObject->Reserved;
+    if (!Ctx)
+        goto cleanup;
 
-        switch (Stack->MinorFunction)
-        {
-        case IRP_MN_QUERY_REMOVE_DEVICE:
-        case IRP_MN_SURPRISE_REMOVAL:
-            InterlockedAnd(&Ctx->Flags, ~TUN_FLAGS_PRESENT);
-            ExReleaseSpinLockExclusive(
-                &Ctx->TransitionLock,
-                ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
-            break;
+    switch (IoGetCurrentIrpStackLocation(Irp)->MinorFunction)
+    {
+    case IRP_MN_QUERY_REMOVE_DEVICE:
+    case IRP_MN_SURPRISE_REMOVAL:
+        InterlockedAnd(&Ctx->Flags, ~TUN_FLAGS_PRESENT);
+        ExReleaseSpinLockExclusive(
+            &Ctx->TransitionLock,
+            ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
+        break;
 
-        case IRP_MN_CANCEL_REMOVE_DEVICE:
-            InterlockedOr(&Ctx->Flags, TUN_FLAGS_PRESENT);
-            break;
-        }
+    case IRP_MN_CANCEL_REMOVE_DEVICE:
+        InterlockedOr(&Ctx->Flags, TUN_FLAGS_PRESENT);
+        break;
     }
 
+cleanup:
+    ExReleaseResourceLite(&TunCtxDispatchGuard);
     return NdisDispatchPnP(DeviceObject, Irp);
 }
 
@@ -825,63 +792,14 @@ TunInitializeEx(
 
     if (!MiniportAdapterHandle)
         return NDIS_STATUS_FAILURE;
-
-    /* Register data device first. Having only one device per adapter allows us to store adapter context inside device
-     * extension. */
-    WCHAR DeviceName[sizeof(L"\\Device\\" TUN_DEVICE_NAME L"4294967295") / sizeof(WCHAR) + 1] = { 0 };
-    UNICODE_STRING UnicodeDeviceName;
-    TunInitUnicodeString(&UnicodeDeviceName, DeviceName);
-    RtlUnicodeStringPrintf(
-        &UnicodeDeviceName, L"\\Device\\" TUN_DEVICE_NAME, (ULONG)MiniportInitParameters->NetLuid.Info.NetLuidIndex);
-
-    WCHAR SymbolicName[sizeof(L"\\DosDevices\\" TUN_DEVICE_NAME L"4294967295") / sizeof(WCHAR) + 1] = { 0 };
-    UNICODE_STRING UnicodeSymbolicName;
-    TunInitUnicodeString(&UnicodeSymbolicName, SymbolicName);
-    RtlUnicodeStringPrintf(
-        &UnicodeSymbolicName,
-        L"\\DosDevices\\" TUN_DEVICE_NAME,
-        (ULONG)MiniportInitParameters->NetLuid.Info.NetLuidIndex);
-
-    static PDRIVER_DISPATCH DispatchTable[IRP_MJ_MAXIMUM_FUNCTION + 1] = {
-        TunDispatch, /* IRP_MJ_CREATE                   */
-        NULL,        /* IRP_MJ_CREATE_NAMED_PIPE        */
-        TunDispatch, /* IRP_MJ_CLOSE                    */
-        NULL,        /* IRP_MJ_READ                     */
-        NULL,        /* IRP_MJ_WRITE                    */
-        NULL,        /* IRP_MJ_QUERY_INFORMATION        */
-        NULL,        /* IRP_MJ_SET_INFORMATION          */
-        NULL,        /* IRP_MJ_QUERY_EA                 */
-        NULL,        /* IRP_MJ_SET_EA                   */
-        NULL,        /* IRP_MJ_FLUSH_BUFFERS            */
-        NULL,        /* IRP_MJ_QUERY_VOLUME_INFORMATION */
-        NULL,        /* IRP_MJ_SET_VOLUME_INFORMATION   */
-        NULL,        /* IRP_MJ_DIRECTORY_CONTROL        */
-        NULL,        /* IRP_MJ_FILE_SYSTEM_CONTROL      */
-        TunDispatch, /* IRP_MJ_DEVICE_CONTROL           */
-    };
-    NDIS_DEVICE_OBJECT_ATTRIBUTES DeviceObjectAttributes = {
-        .Header = { .Type = NDIS_OBJECT_TYPE_DEVICE_OBJECT_ATTRIBUTES,
-                    .Revision = NDIS_DEVICE_OBJECT_ATTRIBUTES_REVISION_1,
-                    .Size = NDIS_SIZEOF_DEVICE_OBJECT_ATTRIBUTES_REVISION_1 },
-        .DeviceName = &UnicodeDeviceName,
-        .SymbolicName = &UnicodeSymbolicName,
-        .MajorFunctions = DispatchTable,
-        .ExtensionSize = sizeof(TUN_CTX),
-        .DefaultSDDLString = &SDDL_DEVOBJ_SYS_ALL /* Kernel, and SYSTEM: full control. Others: none */
-    };
-    NDIS_HANDLE DeviceObjectHandle;
-    DEVICE_OBJECT *DeviceObject;
-    if (!NT_SUCCESS(
-            Status = NdisRegisterDeviceEx(
-                NdisMiniportDriverHandle, &DeviceObjectAttributes, &DeviceObject, &DeviceObjectHandle)))
+    TUN_CTX *Ctx = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(*Ctx), TUN_MEMORY_TAG);
+    if (!Ctx)
         return NDIS_STATUS_FAILURE;
+    NdisZeroMemory(Ctx, sizeof(*Ctx));
 
-    TUN_CTX *Ctx = NdisGetDeviceReservedExtension(DeviceObject);
-    if (Status = NDIS_STATUS_FAILURE, !Ctx)
-        goto cleanupDeregisterDevice;
-    DEVICE_OBJECT *FunctionalDeviceObject;
-    NdisMGetDeviceProperty(MiniportAdapterHandle, NULL, &FunctionalDeviceObject, NULL, NULL, NULL);
+    Ctx->MiniportAdapterHandle = MiniportAdapterHandle;
 
+    NdisMGetDeviceProperty(MiniportAdapterHandle, NULL, &Ctx->FunctionalDeviceObject, NULL, NULL, NULL);
     /* Reverse engineering indicates that we'd be better off calling
      * NdisWdfGetAdapterContextFromAdapterHandle(functional_device),
      * which points to our TUN_CTX object directly, but this isn't
@@ -889,12 +807,9 @@ TunInitializeEx(
      * this reserved field. Revisit this when we drop support for old
      * Windows versions. */
 #pragma warning(suppress : 28175)
-    ASSERT(!FunctionalDeviceObject->Reserved);
+    ASSERT(!Ctx->FunctionalDeviceObject->Reserved);
 #pragma warning(suppress : 28175)
-    FunctionalDeviceObject->Reserved = Ctx;
-
-    NdisZeroMemory(Ctx, sizeof(*Ctx));
-    Ctx->MiniportAdapterHandle = MiniportAdapterHandle;
+    Ctx->FunctionalDeviceObject->Reserved = Ctx;
 
     Ctx->Statistics.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
     Ctx->Statistics.Header.Revision = NDIS_STATISTICS_INFO_REVISION_1;
@@ -909,10 +824,6 @@ TunInitializeEx(
         NDIS_STATISTICS_FLAGS_VALID_DIRECTED_BYTES_RCV | NDIS_STATISTICS_FLAGS_VALID_MULTICAST_BYTES_RCV |
         NDIS_STATISTICS_FLAGS_VALID_BROADCAST_BYTES_RCV | NDIS_STATISTICS_FLAGS_VALID_DIRECTED_BYTES_XMIT |
         NDIS_STATISTICS_FLAGS_VALID_MULTICAST_BYTES_XMIT | NDIS_STATISTICS_FLAGS_VALID_BROADCAST_BYTES_XMIT;
-
-    Ctx->Device.Handle = DeviceObjectHandle;
-    Ctx->Device.Object = DeviceObject;
-    IoInitializeRemoveLock(&Ctx->Device.RemoveLock, TUN_MEMORY_TAG, 0, 0);
     KeInitializeEvent(&Ctx->Device.Disconnected, NotificationEvent, TRUE);
     KeInitializeSpinLock(&Ctx->Device.Send.Lock);
 
@@ -928,7 +839,7 @@ TunInitializeEx(
 #pragma warning(suppress : 6014)
     Ctx->NblPool = NdisAllocateNetBufferListPool(MiniportAdapterHandle, &NblPoolParameters);
     if (Status = NDIS_STATUS_FAILURE, !Ctx->NblPool)
-        goto cleanupDeregisterDevice;
+        goto cleanupFreeCtx;
 
     NDIS_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES AdapterRegistrationAttributes = {
         .Header = { .Type = NDIS_OBJECT_TYPE_MINIPORT_ADAPTER_REGISTRATION_ATTRIBUTES,
@@ -1015,116 +926,14 @@ TunInitializeEx(
      * registration attributes even if the driver is still in the context
      * of the MiniportInitializeEx function. */
     TunIndicateStatus(Ctx->MiniportAdapterHandle, MediaConnectStateDisconnected);
-    InterlockedIncrement64(&TunAdapterCount);
     InterlockedOr(&Ctx->Flags, TUN_FLAGS_PRESENT);
     return NDIS_STATUS_SUCCESS;
 
 cleanupFreeNblPool:
     NdisFreeNetBufferListPool(Ctx->NblPool);
-cleanupDeregisterDevice:
-    NdisDeregisterDeviceEx(DeviceObjectHandle);
+cleanupFreeCtx:
+    ExFreePoolWithTag(Ctx, TUN_MEMORY_TAG);
     return Status;
-}
-
-_IRQL_requires_max_(PASSIVE_LEVEL)
-static NTSTATUS
-TunDeviceSetDenyAllDacl(_In_ DEVICE_OBJECT *DeviceObject)
-{
-    NTSTATUS Status;
-    SECURITY_DESCRIPTOR Sd;
-    ACL Acl;
-    HANDLE DeviceObjectHandle;
-
-    if (!NT_SUCCESS(Status = RtlCreateSecurityDescriptor(&Sd, SECURITY_DESCRIPTOR_REVISION)) ||
-        !NT_SUCCESS(Status = RtlCreateAcl(&Acl, sizeof(ACL), ACL_REVISION)) ||
-        !NT_SUCCESS(Status = RtlSetDaclSecurityDescriptor(&Sd, TRUE, &Acl, FALSE)) ||
-        !NT_SUCCESS(
-            Status = ObOpenObjectByPointer(
-                DeviceObject,
-                OBJ_KERNEL_HANDLE,
-                NULL,
-                WRITE_DAC,
-                *IoDeviceObjectType,
-                KernelMode,
-                &DeviceObjectHandle)))
-        return Status;
-
-    Status = ZwSetSecurityObject(DeviceObjectHandle, DACL_SECURITY_INFORMATION, &Sd);
-    ZwClose(DeviceObjectHandle);
-    return Status;
-}
-
-_IRQL_requires_max_(PASSIVE_LEVEL)
-static void
-TunForceHandlesClosed(_Inout_ TUN_CTX *Ctx)
-{
-    NTSTATUS Status;
-    PEPROCESS Process;
-    KAPC_STATE ApcState;
-    PVOID Object = NULL;
-    ULONG VerifierFlags = 0;
-    OBJECT_HANDLE_INFORMATION HandleInfo;
-    SYSTEM_HANDLE_INFORMATION_EX *HandleTable = NULL;
-
-    MmIsVerifierEnabled(&VerifierFlags);
-
-    for (ULONG Size = 0, RequestedSize;
-         (Status = ZwQuerySystemInformation(SystemExtendedHandleInformation, HandleTable, Size, &RequestedSize)) ==
-         STATUS_INFO_LENGTH_MISMATCH;
-         Size = RequestedSize)
-    {
-        if (HandleTable)
-            ExFreePoolWithTag(HandleTable, TUN_MEMORY_TAG);
-        HandleTable = ExAllocatePoolWithTag(PagedPool, RequestedSize, TUN_MEMORY_TAG);
-        if (!HandleTable)
-            return;
-    }
-    if (!NT_SUCCESS(Status) || !HandleTable)
-        goto cleanup;
-
-    for (ULONG_PTR Index = 0; Index < HandleTable->NumberOfHandles; ++Index)
-    {
-        /* XXX: We should perhaps first look at table->Handles[i].ObjectTypeIndex, but
-         * the value changes lots between NT versions, and it should be implicit anyway. */
-        FILE_OBJECT *FileObject = HandleTable->Handles[Index].Object;
-        if (!FileObject || FileObject->Type != 5 || FileObject->DeviceObject != Ctx->Device.Object)
-            continue;
-        Status = PsLookupProcessByProcessId(HandleTable->Handles[Index].UniqueProcessId, &Process);
-        if (!NT_SUCCESS(Status))
-            continue;
-        KeStackAttachProcess(Process, &ApcState);
-        if (!VerifierFlags)
-            Status = ObReferenceObjectByHandle(
-                HandleTable->Handles[Index].HandleValue, 0, NULL, UserMode, &Object, &HandleInfo);
-        if (NT_SUCCESS(Status))
-        {
-            if (VerifierFlags || Object == FileObject)
-                ObCloseHandle(HandleTable->Handles[Index].HandleValue, UserMode);
-            if (!VerifierFlags)
-                ObfDereferenceObject(Object);
-        }
-        KeUnstackDetachProcess(&ApcState);
-        ObfDereferenceObject(Process);
-    }
-cleanup:
-    if (HandleTable)
-        ExFreePoolWithTag(HandleTable, TUN_MEMORY_TAG);
-}
-
-_IRQL_requires_max_(APC_LEVEL)
-static void
-TunWaitForReferencesToDropToZero(_In_ DEVICE_OBJECT *DeviceObject)
-{
-    /* The sleep loop isn't pretty, but we don't have a choice. This is an NDIS bug we're working around. */
-    enum
-    {
-        SleepTime = 50,
-        TotalTime = 2 * 60 * 1000,
-        MaxTries = TotalTime / SleepTime
-    };
-#pragma warning(suppress : 28175)
-    for (INT Try = 0; Try < MaxTries && InterlockedGet(&DeviceObject->ReferenceCount); ++Try)
-        NdisMSleep(SleepTime);
 }
 
 static MINIPORT_HALT TunHaltEx;
@@ -1138,26 +947,14 @@ TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltAction)
     ExReleaseSpinLockExclusive(
         &Ctx->TransitionLock,
         ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
-
-    /* Setting a deny-all DACL we prevent userspace to open the data device by symlink after TunForceHandlesClosed(). */
-    TunDeviceSetDenyAllDacl(Ctx->Device.Object);
-    TunForceHandlesClosed(Ctx);
-
-    /* Wait for processing IRP(s) to complete. */
-    IoAcquireRemoveLock(&Ctx->Device.RemoveLock, NULL);
-    IoReleaseRemoveLockAndWait(&Ctx->Device.RemoveLock, NULL);
     NdisFreeNetBufferListPool(Ctx->NblPool);
 
-    /* MiniportAdapterHandle must not be used in TunDispatch(). After TunHaltEx() returns it is invalidated. */
     InterlockedExchangePointer(&Ctx->MiniportAdapterHandle, NULL);
-
-    ASSERT(InterlockedGet64(&TunAdapterCount) > 0);
-    if (InterlockedDecrement64(&TunAdapterCount) <= 0)
-        TunWaitForReferencesToDropToZero(Ctx->Device.Object);
-
-    /* Deregister data device _after_ we are done using Ctx not to risk an UaF. The Ctx is hosted by device extension.
-     */
-    NdisDeregisterDeviceEx(Ctx->Device.Handle);
+#pragma warning(suppress : 28175)
+    InterlockedExchangePointer(&Ctx->FunctionalDeviceObject->Reserved, NULL);
+    ExAcquireResourceExclusiveLite(&TunCtxDispatchGuard, TRUE); /* Ensure above change is visible to all readers. */
+    ExReleaseResourceLite(&TunCtxDispatchGuard);
+    ExFreePoolWithTag(Ctx, TUN_MEMORY_TAG);
 }
 
 static MINIPORT_SHUTDOWN TunShutdownEx;
@@ -1406,6 +1203,7 @@ static VOID
 TunUnload(PDRIVER_OBJECT DriverObject)
 {
     NdisMDeregisterMiniportDriver(NdisMiniportDriverHandle);
+    ExDeleteResourceLite(&TunCtxDispatchGuard);
 }
 
 DRIVER_INITIALIZE DriverEntry;
@@ -1420,6 +1218,8 @@ DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
         return NDIS_STATUS_UNSUPPORTED_REVISION;
     if (NdisVersion > NDIS_MINIPORT_VERSION_MAX)
         NdisVersion = NDIS_MINIPORT_VERSION_MAX;
+
+    ExInitializeResourceLite(&TunCtxDispatchGuard);
 
     NDIS_MINIPORT_DRIVER_CHARACTERISTICS miniport = {
         .Header = { .Type = NDIS_OBJECT_TYPE_MINIPORT_DRIVER_CHARACTERISTICS,
@@ -1457,7 +1257,11 @@ DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
         return Status;
 
     NdisDispatchPnP = DriverObject->MajorFunction[IRP_MJ_PNP];
+    NdisDispatchDeviceControl = DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL];
+    NdisDispatchClose = DriverObject->MajorFunction[IRP_MJ_CLOSE];
     DriverObject->MajorFunction[IRP_MJ_PNP] = TunDispatchPnP;
+    DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = TunDispatchDeviceControl;
+    DriverObject->MajorFunction[IRP_MJ_CLOSE] = TunDispatchClose;
 
     return STATUS_SUCCESS;
 }

@@ -81,7 +81,7 @@ Note: due to the use of SHA256 signatures throughout, Windows 7 users who would 
 
 ## Usage
 
-After loading the driver and creating a network interface the typical way using [SetupAPI](https://docs.microsoft.com/en-us/windows-hardware/drivers/install/setupapi), open `\\.\Global\WINTUN%d` as Local System, where `%d` is the [LUID](https://docs.microsoft.com/en-us/windows/desktop/api/ifdef/ns-ifdef-_net_luid_lh) index (`NetLuidIndex` member) of the network device.
+After loading the driver and creating a network interface the typical way using [SetupAPI](https://docs.microsoft.com/en-us/windows-hardware/drivers/install/setupapi), open the NDIS device object associated with the PnPInstanceId.
 
 ### Ring layout
 
