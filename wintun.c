@@ -262,10 +262,6 @@ TunSendNetBufferLists(
 {
     TUN_CTX *Ctx = (TUN_CTX *)MiniportAdapterContext;
     LONG64 SentPacketsCount = 0, SentPacketsSize = 0, ErrorPacketsCount = 0, DiscardedPacketsCount = 0;
-    KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
-    LONG Flags = InterlockedGet(&Ctx->Flags);
-    TUN_RING *Ring = Ctx->Device.Send.Ring;
-    ULONG RingCapacity = Ctx->Device.Send.Capacity;
 
     for (NET_BUFFER_LIST *Nbl = NetBufferLists, *NblNext; Nbl; Nbl = NblNext)
     {
@@ -281,11 +277,17 @@ TunSendNetBufferLists(
                 RequiredRingSpace += TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize);
         }
 
+        KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
+        LONG Flags = InterlockedGet(&Ctx->Flags);
+
         NDIS_STATUS Status;
         if ((Status = NDIS_STATUS_ADAPTER_REMOVED, !(Flags & TUN_FLAGS_PRESENT)) ||
             (Status = NDIS_STATUS_PAUSED, !(Flags & TUN_FLAGS_RUNNING)) ||
             (Status = NDIS_STATUS_MEDIA_DISCONNECTED, KeReadStateEvent(&Ctx->Device.Disconnected)))
             goto skipNbl;
+
+        TUN_RING *Ring = Ctx->Device.Send.Ring;
+        ULONG RingCapacity = Ctx->Device.Send.Capacity;
 
         /* Allocate space for packet(s) in the ring. */
         ULONG RingHead = InterlockedGetU(&Ring->Head);
@@ -358,6 +360,7 @@ TunSendNetBufferLists(
                 Ctx->MiniportAdapterHandle, CompletedNbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
         }
         KeReleaseInStackQueuedSpinLock(&LockHandle);
+        ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
         continue;
 
     cleanupKeReleaseInStackQueuedSpinLock:
@@ -365,11 +368,10 @@ TunSendNetBufferLists(
     skipNbl:
         NET_BUFFER_LIST_STATUS(Nbl) = Status;
         NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
-        NdisMSendNetBufferListsComplete(Ctx->MiniportAdapterHandle, Nbl, 0);
+        NdisMSendNetBufferListsComplete(Ctx->MiniportAdapterHandle, Nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+        ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
         DiscardedPacketsCount += PacketsCount;
     }
-
-    ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
 
     InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCOutOctets, SentPacketsSize);
     InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCOutUcastOctets, SentPacketsSize);
