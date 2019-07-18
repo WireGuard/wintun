@@ -158,7 +158,7 @@ typedef struct _TUN_CTX
 
 static UINT NdisVersion;
 static NDIS_HANDLE NdisMiniportDriverHandle;
-static DRIVER_DISPATCH *NdisDispatchPnP, *NdisDispatchDeviceControl, *NdisDispatchClose;
+static DRIVER_DISPATCH *NdisDispatchDeviceControl, *NdisDispatchClose;
 static ERESOURCE TunCtxDispatchGuard;
 
 static __forceinline ULONG
@@ -716,38 +716,6 @@ TunDispatchClose(DEVICE_OBJECT *DeviceObject, IRP *Irp)
     return NdisDispatchClose(DeviceObject, Irp);
 }
 
-_Dispatch_type_(IRP_MJ_PNP)
-static DRIVER_DISPATCH_PAGED TunDispatchPnP;
-_Use_decl_annotations_
-static NTSTATUS
-TunDispatchPnP(DEVICE_OBJECT *DeviceObject, IRP *Irp)
-{
-    ExAcquireResourceSharedLite(&TunCtxDispatchGuard, TRUE);
-#pragma warning(suppress : 28175)
-    TUN_CTX *Ctx = DeviceObject->Reserved;
-    if (!Ctx)
-        goto cleanup;
-
-    switch (IoGetCurrentIrpStackLocation(Irp)->MinorFunction)
-    {
-    case IRP_MN_QUERY_REMOVE_DEVICE:
-    case IRP_MN_SURPRISE_REMOVAL:
-        InterlockedAnd(&Ctx->Flags, ~TUN_FLAGS_PRESENT);
-        ExReleaseSpinLockExclusive(
-            &Ctx->TransitionLock,
-            ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
-        break;
-
-    case IRP_MN_CANCEL_REMOVE_DEVICE:
-        InterlockedOr(&Ctx->Flags, TUN_FLAGS_PRESENT);
-        break;
-    }
-
-cleanup:
-    ExReleaseResourceLite(&TunCtxDispatchGuard);
-    return NdisDispatchPnP(DeviceObject, Irp);
-}
-
 static MINIPORT_RESTART TunRestart;
 _Use_decl_annotations_
 static NDIS_STATUS
@@ -1261,10 +1229,8 @@ DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
     if (!NT_SUCCESS(Status))
         return Status;
 
-    NdisDispatchPnP = DriverObject->MajorFunction[IRP_MJ_PNP];
     NdisDispatchDeviceControl = DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL];
     NdisDispatchClose = DriverObject->MajorFunction[IRP_MJ_CLOSE];
-    DriverObject->MajorFunction[IRP_MJ_PNP] = TunDispatchPnP;
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = TunDispatchDeviceControl;
     DriverObject->MajorFunction[IRP_MJ_CLOSE] = TunDispatchClose;
 
