@@ -476,7 +476,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         ULONG RingTail = InterlockedGetU(&Ring->Tail);
         if (RingHead == RingTail)
         {
-            ULONG64 SpinStart;
+            LARGE_INTEGER SpinStart;
             KeQueryTickCount(&SpinStart);
             for (;;)
             {
@@ -485,9 +485,9 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
                     break;
                 if (KeReadStateEvent(&Ctx->Device.Disconnected))
                     break;
-                ULONG64 SpinNow;
+                LARGE_INTEGER SpinNow;
                 KeQueryTickCount(&SpinNow);
-                if (SpinNow - SpinStart >= SpinMax)
+                if ((ULONG64)SpinNow.QuadPart - (ULONG64)SpinStart.QuadPart >= SpinMax)
                     break;
 
                 /* This should really call KeYieldProcessorEx(&zero), so it does the Hyper-V paravirtualization call,
@@ -594,6 +594,8 @@ cleanup:
     InterlockedExchangeU(&Ring->Head, MAXULONG);
 }
 
+#define IS_POW2(x) ((x) && !((x) & ((x)-1)))
+
 _IRQL_requires_max_(PASSIVE_LEVEL)
 _Must_inspect_result_
 static NTSTATUS
@@ -612,7 +614,7 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     Ctx->Device.Send.Capacity = TUN_RING_CAPACITY(Rrb->Send.RingSize);
     if (Status = STATUS_INVALID_PARAMETER,
         (Ctx->Device.Send.Capacity < TUN_MIN_RING_CAPACITY || Ctx->Device.Send.Capacity > TUN_MAX_RING_CAPACITY ||
-         PopulationCount64(Ctx->Device.Send.Capacity) != 1 || !Rrb->Send.TailMoved || !Rrb->Send.Ring))
+         !IS_POW2(Ctx->Device.Send.Capacity) || !Rrb->Send.TailMoved || !Rrb->Send.Ring))
         goto cleanupResetOwner;
 
     if (!NT_SUCCESS(
@@ -648,7 +650,7 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     Ctx->Device.Receive.Capacity = TUN_RING_CAPACITY(Rrb->Receive.RingSize);
     if (Status = STATUS_INVALID_PARAMETER,
         (Ctx->Device.Receive.Capacity < TUN_MIN_RING_CAPACITY || Ctx->Device.Receive.Capacity > TUN_MAX_RING_CAPACITY ||
-         PopulationCount64(Ctx->Device.Receive.Capacity) != 1 || !Rrb->Receive.TailMoved || !Rrb->Receive.Ring))
+         !IS_POW2(Ctx->Device.Receive.Capacity) || !Rrb->Receive.TailMoved || !Rrb->Receive.Ring))
         goto cleanupSendUnlockPages;
 
     if (!NT_SUCCESS(
@@ -774,7 +776,7 @@ static NTSTATUS TunInitializeDispatchSecurityDescriptor(VOID)
     ULONG RequiredBytes = 0;
     Status = RtlAbsoluteToSelfRelativeSD(&SecurityDescriptor, NULL, &RequiredBytes);
     if (Status != STATUS_BUFFER_TOO_SMALL)
-		return NT_SUCCESS(Status) ? STATUS_INSUFFICIENT_RESOURCES : Status;
+        return NT_SUCCESS(Status) ? STATUS_INSUFFICIENT_RESOURCES : Status;
     TunDispatchSecurityDescriptor = ExAllocatePoolWithTag(NonPagedPoolNx, RequiredBytes, TUN_MEMORY_TAG);
     if (!TunDispatchSecurityDescriptor)
         return STATUS_INSUFFICIENT_RESOURCES;
