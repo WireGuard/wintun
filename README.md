@@ -148,7 +148,7 @@ typedef struct _TUN_REGISTER_RINGS
 
 - `Receive.TailMoved`: A handle to an [`auto-reset event`](https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createeventa) created by the client that the client will signal when it changes `Receive.Ring->Tail` and `Receive.Ring->Alertable` is non-zero.
 
-With events created, send and receive rings allocated, and registration struct populated, [`DeviceIoControl`](https://docs.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-deviceiocontrol)(`TUN_IOCTL_REGISTER_RINGS`: 0x22E000) with pointer and size of descriptor struct specified as `lpInBuffer` and `nInBufferSize` parameters. You may call `TUN_IOCTL_REGISTER_RINGS` on one handle only.
+With events created, send and receive rings allocated, and registration struct populated, [`DeviceIoControl`](https://docs.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-deviceiocontrol)(`TUN_IOCTL_REGISTER_RINGS`: 0xca6ce5c0) with pointer and size of descriptor struct specified as `lpInBuffer` and `nInBufferSize` parameters. You may call `TUN_IOCTL_REGISTER_RINGS` on one handle only.
 
 
 ### Writing to and from rings

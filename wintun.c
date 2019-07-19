@@ -101,8 +101,7 @@ typedef struct _TUN_REGISTER_RINGS
 /* Register rings hosted by the client
  * The lpInBuffer and nInBufferSize parameters of DeviceIoControl() must point to an TUN_REGISTER_RINGS struct.
  * Client must wait for this IOCTL to finish before adding packets to the ring. */
-#define TUN_IOCTL_REGISTER_RINGS CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
-/* TODO: Select and specify OEM-specific device type instead of FILE_DEVICE_UNKNOWN. */
+#define TUN_IOCTL_REGISTER_RINGS CTL_CODE(51820, 0x970, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
 
 typedef enum _TUN_FLAGS
 {
