@@ -1,6 +1,6 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!--
-  SPDX-License-Identifier: MIT
+  SPDX-License-Identifier: GPL-2.0
 
   Copyright (C) 2019 WireGuard LLC. All Rights Reserved.
 -->
@@ -20,4 +20,25 @@
     <DistributionDir>dist\</DistributionDir>
     <SDVDir>sdv\</SDVDir>
   </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_STR="$(WintunVersionStr)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level4</WarningLevel>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_STR="$(WintunVersionStr)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+    </ClCompile>
+  </ItemDefinitionGroup>
 </Project>

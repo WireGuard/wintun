@@ -7,31 +7,46 @@
     </Filter>
     <Filter Include="Header Files">
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
     <Filter Include="Resource Files">
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav</Extensions>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="MSM">
+      <UniqueIdentifier>{1ae72c39-669d-49e5-85c7-f6956595e079}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="wintun.c">
+    <ClCompile Include="msi.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="installation.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="rundll32.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="wintun.rc">
+    <ResourceCompile Include="resources.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <Inf Include="wintun.inf">
-      <Filter>Source Files</Filter>
-    </Inf>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="undocumented.h">
+    <ClInclude Include="installation.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="exports.def">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="installer.wixproj">
+      <Filter>MSM</Filter>
+    </None>
+    <None Include="installer.wxs">
+      <Filter>MSM</Filter>
+    </None>
   </ItemGroup>
 </Project>

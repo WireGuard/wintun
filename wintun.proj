@@ -1,6 +1,6 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!--
-  SPDX-License-Identifier: MIT
+  SPDX-License-Identifier: GPL-2.0
 
   Copyright (C) 2019 WireGuard LLC. All Rights Reserved.
 -->
@@ -45,6 +45,22 @@
   </Target>
 
   <!--
+    installer.dll Building
+  -->
+  <Target Name="Installer-x86" DependsOnTargets="Driver-x86"
+    Outputs="x86\Release\installer.dll">
+    <MSBuild Projects="installer\installer.vcxproj" Targets="Build" Properties="Configuration=Release;Platform=Win32"/>
+  </Target>
+  <Target Name="Installer-amd64" DependsOnTargets="Driver-amd64"
+    Outputs="amd64\Release\installer.dll">
+    <MSBuild Projects="installer\installer.vcxproj" Targets="Build" Properties="Configuration=Release;Platform=x64"/>
+  </Target>
+  <Target Name="Installer-arm64" DependsOnTargets="Driver-arm64"
+    Outputs="arm64\Release\installer.dll">
+    <MSBuild Projects="installer\installer.vcxproj" Targets="Build" Properties="Configuration=Release;Platform=ARM64"/>
+  </Target>
+
+  <!--
     Static Driver Verifier
   -->
   <Target Name="SDV" Outputs="$(SDVDir)SDV.DVL.xml;amd64\Release\vc.nativecodeanalysis.all.xml">
@@ -63,10 +79,12 @@
   <!--
     MSM Building
   -->
-  <Target Name="MSM-x86" Outputs="$(DistributionDir)wintun-x86-$(WintunVersionStr).msm">
-    <MSBuild Projects="wintun.wixproj" Targets="Build" Properties="Configuration=Release;Platform=x86"/>
+  <Target Name="MSM-x86" DependsOnTargets="Installer-x86"
+    Outputs="$(DistributionDir)wintun-x86-$(WintunVersionStr).msm">
+    <MSBuild Projects="installer/installer.wixproj" Targets="Build" Properties="Configuration=Release;Platform=x86"/>
   </Target>
-  <Target Name="MSM-amd64" Outputs="$(DistributionDir)wintun-amd64-$(WintunVersionStr).msm">
-    <MSBuild Projects="wintun.wixproj" Targets="Build" Properties="Configuration=Release;Platform=x64"/>
+  <Target Name="MSM-amd64" DependsOnTargets="Installer-amd64"
+    Outputs="$(DistributionDir)wintun-amd64-$(WintunVersionStr).msm">
+    <MSBuild Projects="installer/installer.wixproj" Targets="Build" Properties="Configuration=Release;Platform=x64"/>
   </Target>
 </Project>

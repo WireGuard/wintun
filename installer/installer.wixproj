@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
   SPDX-License-Identifier: GPL-2.0
 
@@ -7,7 +7,7 @@
 <Project
   xmlns="http://schemas.microsoft.com/developer/msbuild/2003"
   ToolsVersion="4.0"
-  InitialTargets="EnsureWixToolsetInstalled"
+  InitialTargets="EnsureWixToolsetInstalled;HashInstallerLibrary"
   DefaultTargets="Build">
   <PropertyGroup>
     <Configuration Condition="'$(Configuration)'==''">Release</Configuration>
@@ -18,42 +18,26 @@
     <DefineSolutionProperties>false</DefineSolutionProperties>
   </PropertyGroup>
 
-  <Import Project="wintun.props"/>
+  <Import Project="..\wintun.props"/>
 
   <PropertyGroup>
-    <IntermediateOutputPath>$(WintunPlatform)\$(Configuration)\</IntermediateOutputPath>
-    <OutputPath>$(WintunPlatform)\$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>..\$(WintunPlatform)\$(Configuration)\</IntermediateOutputPath>
+    <OutputPath>..\$(WintunPlatform)\$(Configuration)\</OutputPath>
     <OutputName>$(ProjectName)</OutputName>
     <DefineConstants>WINTUN_VERSION=$(WintunVersion);$(DefineConstants)</DefineConstants>
     <SuppressSpecificWarnings>1006;1086;$(SuppressSpecificWarnings)</SuppressSpecificWarnings>
-    <LinkerSuppressSpecificWarnings>1103;$(LinkerSuppressSpecificWarnings)</LinkerSuppressSpecificWarnings>
-    <SuppressIces>ICE30;$(SuppressIces)</SuppressIces>
-    <LinkerAdditionalOptions>-b output_dir="$(IntermediateOutputPath.TrimEnd('\'))" -b whql_dir="$(WintunPlatform)\$(Configuration)\whql" $(LinkerAdditionalOptions)</LinkerAdditionalOptions>
+    <LinkerSuppressSpecificWarnings>1079;1103;$(LinkerSuppressSpecificWarnings)</LinkerSuppressSpecificWarnings>
+    <SuppressIces>ICE30;ICE49;$(SuppressIces)</SuppressIces>
+    <LinkerAdditionalOptions>-b output_dir="$(IntermediateOutputPath.TrimEnd('\'))" $(LinkerAdditionalOptions)</LinkerAdditionalOptions>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <SuppressPdbOutput>true</SuppressPdbOutput>
-    <OutputPath>$(DistributionDir)</OutputPath>
+    <OutputPath>..\$(DistributionDir)</OutputPath>
     <OutputName>$(ProjectName)-$(WintunPlatform)-$(WintunVersionStr)</OutputName>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="wintun.wxs"/>
-  </ItemGroup>
-  <ItemGroup>
-    <WixExtension Include="WixDifxAppExtension">
-      <HintPath>$(WixExtDir)\WixDifxAppExtension.dll</HintPath>
-      <Name>WixDifxAppExtension</Name>
-    </WixExtension>
-    <WixExtension Include="WixIIsExtension">
-      <HintPath>$(WixExtDir)\WixIIsExtension.dll</HintPath>
-      <Name>WixIIsExtension</Name>
-    </WixExtension>
-  </ItemGroup>
-  <ItemGroup>
-    <WixLibrary Include="difxapp_$(Platform).wixlib">
-      <HintPath>$(WixExtDir)\difxapp_$(Platform).wixlib</HintPath>
-      <Name>difxapp</Name>
-    </WixLibrary>
+    <Compile Include="installer.wxs"/>
   </ItemGroup>
 
   <Import Project="$(MSBuildProjectName).user" Condition="exists('$(MSBuildProjectName).user')"/>
@@ -63,7 +47,16 @@
     <Error Text="The WiX Toolset v3.11 (or newer) build tools must be installed to build this project. To download the WiX Toolset, see http://wixtoolset.org/releases/"/>
   </Target>
 
-  <Import Project="wintun.vcxproj.user" Condition="exists('wintun.vcxproj.user')"/>
+  <Target Name="HashInstallerLibrary">
+    <GetFileHash Files="$(IntermediateOutputPath)installer.dll" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Items" ItemName="InstallerLibraryHash"/>
+    </GetFileHash>
+    <PropertyGroup>
+      <DefineConstants>$(DefineConstants);INSTALLER_LIBRARY_HASH=@(InstallerLibraryHash->Metadata('FileHash'));INSTALLER_LIBRARY_TIME=$([System.IO.File]::GetLastWriteTime('$(IntermediateOutputPath)installer.dll').Ticks)</DefineConstants>
+    </PropertyGroup>
+  </Target>
+
+  <Import Project="..\wintun.vcxproj.user" Condition="exists('..\wintun.vcxproj.user')"/>
   <PropertyGroup>
     <SigningCertificate Condition="$(SignMode)=='TestSign' And '$(TestCertificate)'!=''">$(TestCertificate)</SigningCertificate>
     <SigningCertificate Condition="$(SignMode)=='ProductionSign' And '$(ProductionCertificate)'!=''">$(ProductionCertificate)</SigningCertificate>

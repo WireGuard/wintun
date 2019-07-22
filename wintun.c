@@ -102,9 +102,9 @@ typedef struct _TUN_REGISTER_RINGS
 /* Register rings hosted by the client.
  * The lpInBuffer and nInBufferSize parameters of DeviceIoControl() must point to an TUN_REGISTER_RINGS struct.
  * Client must wait for this IOCTL to finish before adding packets to the ring. */
-#define TUN_IOCTL_REGISTER_RINGS CTL_CODE(51820, 0x970, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
+#define TUN_IOCTL_REGISTER_RINGS CTL_CODE(51820U, 0x970U, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
 /* Force close all open handles to allow for updating. */
-#define TUN_IOCTL_FORCE_CLOSE_HANDLES CTL_CODE(51820, 0x971, METHOD_NEITHER, FILE_READ_DATA | FILE_WRITE_DATA)
+#define TUN_IOCTL_FORCE_CLOSE_HANDLES CTL_CODE(51820U, 0x971U, METHOD_NEITHER, FILE_READ_DATA | FILE_WRITE_DATA)
 
 typedef struct _TUN_CTX
 {
@@ -176,7 +176,7 @@ InterlockedSetU(_Inout_ _Interlocked_operand_ ULONG volatile *Target, _In_ ULONG
 }
 
 static __forceinline VOID
-InterlockedSetPointer(_Inout_ _Interlocked_operand_ VOID * volatile *Target, _In_opt_ VOID *Value)
+InterlockedSetPointer(_Inout_ _Interlocked_operand_ VOID *volatile *Target, _In_opt_ VOID *Value)
 {
     *Target = Value;
 }
