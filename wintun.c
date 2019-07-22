@@ -653,6 +653,8 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
          !IS_POW2(Ctx->Device.Receive.Capacity) || !Rrb->Receive.TailMoved || !Rrb->Receive.Ring))
         goto cleanupSendUnlockPages;
 
+    IoInitializeRemoveLock(&Ctx->Device.Receive.ActiveNbls.RemoveLock, TUN_MEMORY_TAG, 0, 0);
+
     if (!NT_SUCCESS(
             Status = ObReferenceObjectByHandle(
                 Rrb->Receive.TailMoved,
@@ -849,6 +851,7 @@ static NDIS_STATUS
 TunRestart(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_RESTART_PARAMETERS MiniportRestartParameters)
 {
     TUN_CTX *Ctx = (TUN_CTX *)MiniportAdapterContext;
+    IoInitializeRemoveLock(&Ctx->Device.Receive.ActiveNbls.RemoveLock, TUN_MEMORY_TAG, 0, 0);
     InterlockedOr(&Ctx->Flags, TUN_FLAGS_RUNNING);
     return NDIS_STATUS_SUCCESS;
 }
@@ -928,7 +931,6 @@ TunInitializeEx(
     KeInitializeEvent(&Ctx->Device.Disconnected, NotificationEvent, TRUE);
     KeInitializeSpinLock(&Ctx->Device.Send.Lock);
     KeInitializeSpinLock(&Ctx->Device.Receive.Lock);
-    IoInitializeRemoveLock(&Ctx->Device.Receive.ActiveNbls.RemoveLock, TUN_MEMORY_TAG, 0, 0);
 
     NET_BUFFER_LIST_POOL_PARAMETERS NblPoolParameters = {
         .Header = { .Type = NDIS_OBJECT_TYPE_DEFAULT,
