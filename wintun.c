@@ -606,6 +606,8 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     if (InterlockedCompareExchangePointer(&Ctx->Device.Owner, Stack->FileObject, NULL) != NULL)
         return STATUS_ALREADY_INITIALIZED;
 
+    ASSERT(InterlockedGet(&Ctx->Flags) & TUN_FLAGS_RUNNING);
+
     TUN_REGISTER_RINGS *Rrb = Irp->AssociatedIrp.SystemBuffer;
     if (Status = STATUS_INVALID_PARAMETER, Stack->Parameters.DeviceIoControl.InputBufferLength != sizeof(*Rrb))
         goto cleanupResetOwner;
