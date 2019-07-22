@@ -109,7 +109,6 @@ typedef struct _TUN_REGISTER_RINGS
 typedef enum _TUN_FLAGS
 {
     TUN_FLAGS_RUNNING = 1 << 0, /* Toggles between paused and running state */
-    TUN_FLAGS_PRESENT = 1 << 1, /* Toggles between removal pending and being present */
 } TUN_FLAGS;
 
 typedef struct _TUN_CTX
@@ -286,10 +285,8 @@ TunSendNetBufferLists(
         }
 
         KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
-        LONG Flags = InterlockedGet(&Ctx->Flags);
         NDIS_STATUS Status;
-        if ((Status = NDIS_STATUS_ADAPTER_REMOVED, !(Flags & TUN_FLAGS_PRESENT)) ||
-            (Status = NDIS_STATUS_PAUSED, !(Flags & TUN_FLAGS_RUNNING)) ||
+        if ((Status = NDIS_STATUS_PAUSED, !(InterlockedGet(&Ctx->Flags) & TUN_FLAGS_RUNNING)) ||
             (Status = NDIS_STATUS_MEDIA_DISCONNECTED, KeReadStateEvent(&Ctx->Device.Disconnected)))
             goto skipNbl;
 
@@ -566,8 +563,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         KeReleaseInStackQueuedSpinLock(&LockHandle);
 
         KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
-        if ((InterlockedGet(&Ctx->Flags) & (TUN_FLAGS_PRESENT | TUN_FLAGS_RUNNING)) !=
-            (TUN_FLAGS_PRESENT | TUN_FLAGS_RUNNING))
+        if (!(InterlockedGet(&Ctx->Flags) & TUN_FLAGS_RUNNING))
             goto skipNbl;
 
         if (!NT_SUCCESS(IoAcquireRemoveLock(&Ctx->Device.Receive.ActiveNbls.RemoveLock, Nbl)))
@@ -1104,7 +1100,6 @@ TunInitializeEx(
      * registration attributes even if the driver is still in the context
      * of the MiniportInitializeEx function. */
     TunIndicateStatus(Ctx->MiniportAdapterHandle, MediaConnectStateDisconnected);
-    InterlockedOr(&Ctx->Flags, TUN_FLAGS_PRESENT);
     return NDIS_STATUS_SUCCESS;
 
 cleanupFreeNblPool:
@@ -1121,7 +1116,6 @@ TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltAction)
 {
     TUN_CTX *Ctx = (TUN_CTX *)MiniportAdapterContext;
 
-    InterlockedAnd(&Ctx->Flags, ~TUN_FLAGS_PRESENT);
     ExReleaseSpinLockExclusive(
         &Ctx->TransitionLock,
         ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
