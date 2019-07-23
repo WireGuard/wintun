@@ -8,6 +8,7 @@
 #include <wdmsec.h>
 #include <ndis.h>
 #include <ntstrsafe.h>
+#include "undocumented.h"
 
 #pragma warning(disable : 4100) /* unreferenced formal parameter */
 #pragma warning(disable : 4200) /* nonstandard: zero-sized array in struct/union */
@@ -98,10 +99,12 @@ typedef struct _TUN_REGISTER_RINGS
     } Send, Receive;
 } TUN_REGISTER_RINGS;
 
-/* Register rings hosted by the client
+/* Register rings hosted by the client.
  * The lpInBuffer and nInBufferSize parameters of DeviceIoControl() must point to an TUN_REGISTER_RINGS struct.
  * Client must wait for this IOCTL to finish before adding packets to the ring. */
 #define TUN_IOCTL_REGISTER_RINGS CTL_CODE(51820, 0x970, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
+/* Force close all open handles to allow for updating. */
+#define TUN_IOCTL_FORCE_CLOSE_HANDLES CTL_CODE(51820, 0x971, METHOD_NEITHER, FILE_READ_DATA | FILE_WRITE_DATA)
 
 typedef enum _TUN_FLAGS
 {
@@ -749,6 +752,65 @@ TunUnregisterBuffers(_Inout_ TUN_CTX *Ctx, _In_ FILE_OBJECT *Owner)
     ObDereferenceObject(Ctx->Device.Send.TailMoved);
 }
 
+_IRQL_requires_max_(PASSIVE_LEVEL)
+static void
+TunForceHandlesClosed(_Inout_ DEVICE_OBJECT *DeviceObject)
+{
+    NTSTATUS Status;
+    PEPROCESS Process;
+    KAPC_STATE ApcState;
+    PVOID Object = NULL;
+    ULONG VerifierFlags = 0;
+    OBJECT_HANDLE_INFORMATION HandleInfo;
+    SYSTEM_HANDLE_INFORMATION_EX *HandleTable = NULL;
+
+    MmIsVerifierEnabled(&VerifierFlags);
+
+    for (ULONG Size = 0, RequestedSize;
+         (Status = ZwQuerySystemInformation(SystemExtendedHandleInformation, HandleTable, Size, &RequestedSize)) ==
+         STATUS_INFO_LENGTH_MISMATCH;
+         Size = RequestedSize)
+    {
+        if (HandleTable)
+            ExFreePoolWithTag(HandleTable, TUN_MEMORY_TAG);
+        HandleTable = ExAllocatePoolWithTag(PagedPool, RequestedSize, TUN_MEMORY_TAG);
+        if (!HandleTable)
+            return;
+    }
+    if (!NT_SUCCESS(Status) || !HandleTable)
+        goto cleanup;
+
+    HANDLE CurrentProcessId = PsGetCurrentProcessId();
+    for (ULONG_PTR Index = 0; Index < HandleTable->NumberOfHandles; ++Index)
+    {
+        FILE_OBJECT *FileObject = HandleTable->Handles[Index].Object;
+        if (!FileObject || FileObject->Type != 5 || FileObject->DeviceObject != DeviceObject)
+            continue;
+        HANDLE ProcessId = HandleTable->Handles[Index].UniqueProcessId;
+        if (ProcessId == CurrentProcessId)
+            continue;
+        Status = PsLookupProcessByProcessId(ProcessId, &Process);
+        if (!NT_SUCCESS(Status))
+            continue;
+        KeStackAttachProcess(Process, &ApcState);
+        if (!VerifierFlags)
+            Status = ObReferenceObjectByHandle(
+                HandleTable->Handles[Index].HandleValue, 0, NULL, UserMode, &Object, &HandleInfo);
+        if (NT_SUCCESS(Status))
+        {
+            if (VerifierFlags || Object == FileObject)
+                ObCloseHandle(HandleTable->Handles[Index].HandleValue, UserMode);
+            if (!VerifierFlags)
+                ObfDereferenceObject(Object);
+        }
+        KeUnstackDetachProcess(&ApcState);
+        ObfDereferenceObject(Process);
+    }
+cleanup:
+    if (HandleTable)
+        ExFreePoolWithTag(HandleTable, TUN_MEMORY_TAG);
+}
+
 static NTSTATUS TunInitializeDispatchSecurityDescriptor(VOID)
 {
     NTSTATUS Status;
@@ -795,7 +857,8 @@ static NTSTATUS
 TunDispatchDeviceControl(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 {
     IO_STACK_LOCATION *Stack = IoGetCurrentIrpStackLocation(Irp);
-    if (Stack->Parameters.DeviceIoControl.IoControlCode != TUN_IOCTL_REGISTER_RINGS)
+    if (Stack->Parameters.DeviceIoControl.IoControlCode != TUN_IOCTL_REGISTER_RINGS &&
+        Stack->Parameters.DeviceIoControl.IoControlCode != TUN_IOCTL_FORCE_CLOSE_HANDLES)
         return NdisDispatchDeviceControl(DeviceObject, Irp);
 
     SECURITY_SUBJECT_CONTEXT SubjectContext;
@@ -816,13 +879,23 @@ TunDispatchDeviceControl(DEVICE_OBJECT *DeviceObject, IRP *Irp)
     SeReleaseSubjectContext(&SubjectContext);
     if (!HasAccess)
         goto cleanup;
-    ExAcquireResourceSharedLite(&TunDispatchCtxGuard, TRUE);
+    switch (Stack->Parameters.DeviceIoControl.IoControlCode)
+    {
+    case TUN_IOCTL_REGISTER_RINGS: {
+        ExAcquireResourceSharedLite(&TunDispatchCtxGuard, TRUE);
 #pragma warning(suppress : 28175)
-    TUN_CTX *Ctx = DeviceObject->Reserved;
-    Status = NDIS_STATUS_ADAPTER_NOT_READY;
-    if (Ctx)
-        Status = TunRegisterBuffers(Ctx, Irp);
-    ExReleaseResourceLite(&TunDispatchCtxGuard);
+        TUN_CTX *Ctx = DeviceObject->Reserved;
+        Status = NDIS_STATUS_ADAPTER_NOT_READY;
+        if (Ctx)
+            Status = TunRegisterBuffers(Ctx, Irp);
+        ExReleaseResourceLite(&TunDispatchCtxGuard);
+        break;
+    }
+    case TUN_IOCTL_FORCE_CLOSE_HANDLES:
+        TunForceHandlesClosed(Stack->FileObject->DeviceObject);
+        Status = STATUS_SUCCESS;
+        break;
+    }
 cleanup:
     Irp->IoStatus.Status = Status;
     Irp->IoStatus.Information = 0;
