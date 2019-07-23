@@ -106,14 +106,9 @@ typedef struct _TUN_REGISTER_RINGS
 /* Force close all open handles to allow for updating. */
 #define TUN_IOCTL_FORCE_CLOSE_HANDLES CTL_CODE(51820, 0x971, METHOD_NEITHER, FILE_READ_DATA | FILE_WRITE_DATA)
 
-typedef enum _TUN_FLAGS
-{
-    TUN_FLAGS_RUNNING = 1 << 0, /* Toggles between paused and running state */
-} TUN_FLAGS;
-
 typedef struct _TUN_CTX
 {
-    volatile LONG Flags;
+    volatile LONG Running;
 
     /* Used like RCU. When we're making use of rings, we take a shared lock. When we want to register or release the
      * rings and toggle the state, we take an exclusive lock before toggling the atomic and then releasing. It's similar
@@ -168,10 +163,22 @@ static DRIVER_DISPATCH *NdisDispatchDeviceControl, *NdisDispatchClose;
 static ERESOURCE TunDispatchCtxGuard;
 static SECURITY_DESCRIPTOR *TunDispatchSecurityDescriptor;
 
-static __forceinline ULONG
-InterlockedExchangeU(_Inout_ _Interlocked_operand_ ULONG volatile *Target, _In_ ULONG Value)
+static __forceinline VOID
+InterlockedSet(_Inout_ _Interlocked_operand_ LONG volatile *Target, _In_ LONG Value)
 {
-    return (ULONG)InterlockedExchange((LONG volatile *)Target, Value);
+    *Target = Value;
+}
+
+static __forceinline VOID
+InterlockedSetU(_Inout_ _Interlocked_operand_ ULONG volatile *Target, _In_ ULONG Value)
+{
+    *Target = Value;
+}
+
+static __forceinline VOID
+InterlockedSetPointer(_Inout_ _Interlocked_operand_ VOID * volatile *Target, _In_opt_ VOID *Value)
+{
+    *Target = Value;
 }
 
 static __forceinline LONG
@@ -286,7 +293,7 @@ TunSendNetBufferLists(
 
         KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
         NDIS_STATUS Status;
-        if ((Status = NDIS_STATUS_PAUSED, !(InterlockedGet(&Ctx->Flags) & TUN_FLAGS_RUNNING)) ||
+        if ((Status = NDIS_STATUS_PAUSED, !InterlockedGet(&Ctx->Running)) ||
             (Status = NDIS_STATUS_MEDIA_DISCONNECTED, KeReadStateEvent(&Ctx->Device.Disconnected)))
             goto skipNbl;
 
@@ -357,7 +364,7 @@ TunSendNetBufferLists(
         {
             NET_BUFFER_LIST *CompletedNbl = Ctx->Device.Send.ActiveNbls.Head;
             Ctx->Device.Send.ActiveNbls.Head = NET_BUFFER_LIST_NEXT_NBL(CompletedNbl);
-            InterlockedExchangeU(&Ring->Tail, TunNblGetOffset(CompletedNbl));
+            InterlockedSetU(&Ring->Tail, TunNblGetOffset(CompletedNbl));
             KeSetEvent(Ctx->Device.Send.TailMoved, IO_NETWORK_INCREMENT, FALSE);
             NET_BUFFER_LIST_NEXT_NBL(CompletedNbl) = NULL;
             NdisMSendNetBufferListsComplete(
@@ -440,7 +447,7 @@ TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUFFER_LIST Net
             }
             Ctx->Device.Receive.ActiveNbls.Head = NET_BUFFER_LIST_NEXT_NBL_EX(CompletedNbl);
             KeReleaseInStackQueuedSpinLock(&LockHandle);
-            InterlockedExchangeU(&Ring->Head, TunNblGetOffset(CompletedNbl));
+            InterlockedSetU(&Ring->Head, TunNblGetOffset(CompletedNbl));
             NdisFreeNetBufferList(CompletedNbl);
         }
 
@@ -496,16 +503,16 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
             }
             if (RingHead == RingTail)
             {
-                InterlockedExchange(&Ring->Alertable, TRUE);
+                InterlockedSet(&Ring->Alertable, TRUE);
                 RingTail = InterlockedGetU(&Ring->Tail);
                 if (RingHead == RingTail)
                 {
                     KeWaitForMultipleObjects(
                         RTL_NUMBER_OF(Events), Events, WaitAny, Executive, KernelMode, FALSE, NULL, NULL);
-                    InterlockedExchange(&Ring->Alertable, FALSE);
+                    InterlockedSet(&Ring->Alertable, FALSE);
                     continue;
                 }
-                InterlockedExchange(&Ring->Alertable, FALSE);
+                InterlockedSet(&Ring->Alertable, FALSE);
                 KeClearEvent(Ctx->Device.Receive.TailMoved);
             }
         }
@@ -563,7 +570,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         KeReleaseInStackQueuedSpinLock(&LockHandle);
 
         KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
-        if (!(InterlockedGet(&Ctx->Flags) & TUN_FLAGS_RUNNING))
+        if (!InterlockedGet(&Ctx->Running))
             goto skipNbl;
 
         if (!NT_SUCCESS(IoAcquireRemoveLock(&Ctx->Device.Receive.ActiveNbls.RemoveLock, Nbl)))
@@ -590,7 +597,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
     if (NT_SUCCESS(IoAcquireRemoveLock(&Ctx->Device.Receive.ActiveNbls.RemoveLock, NULL)))
         IoReleaseRemoveLockAndWait(&Ctx->Device.Receive.ActiveNbls.RemoveLock, NULL);
 cleanup:
-    InterlockedExchangeU(&Ring->Head, MAXULONG);
+    InterlockedSetU(&Ring->Head, MAXULONG);
 }
 
 #define IS_POW2(x) ((x) && !((x) & ((x)-1)))
@@ -606,7 +613,7 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     if (InterlockedCompareExchangePointer(&Ctx->Device.Owner, Stack->FileObject, NULL) != NULL)
         return STATUS_ALREADY_INITIALIZED;
 
-    ASSERT(InterlockedGet(&Ctx->Flags) & TUN_FLAGS_RUNNING);
+    ASSERT(InterlockedGet(&Ctx->Running));
 
     TUN_REGISTER_RINGS *Rrb = Irp->AssociatedIrp.SystemBuffer;
     if (Status = STATUS_INVALID_PARAMETER, Stack->Parameters.DeviceIoControl.InputBufferLength != sizeof(*Rrb))
@@ -712,7 +719,7 @@ cleanupSendMdl:
 cleanupSendTailMoved:
     ObDereferenceObject(Ctx->Device.Send.TailMoved);
 cleanupResetOwner:
-    InterlockedExchangePointer(&Ctx->Device.Owner, NULL);
+    InterlockedSetPointer(&Ctx->Device.Owner, NULL);
     return Status;
 }
 
@@ -739,7 +746,7 @@ TunUnregisterBuffers(_Inout_ TUN_CTX *Ctx, _In_ FILE_OBJECT *Owner)
     }
     ZwClose(Ctx->Device.Receive.Thread);
 
-    InterlockedExchangeU(&Ctx->Device.Send.Ring->Tail, MAXULONG);
+    InterlockedSetU(&Ctx->Device.Send.Ring->Tail, MAXULONG);
     KeSetEvent(Ctx->Device.Send.TailMoved, IO_NO_INCREMENT, FALSE);
 
     MmUnlockPages(Ctx->Device.Receive.Mdl);
@@ -923,7 +930,7 @@ TunRestart(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_RESTART_PARAMETERS
 {
     TUN_CTX *Ctx = (TUN_CTX *)MiniportAdapterContext;
     IoInitializeRemoveLock(&Ctx->Device.Receive.ActiveNbls.RemoveLock, TUN_MEMORY_TAG, 0, 0);
-    InterlockedOr(&Ctx->Flags, TUN_FLAGS_RUNNING);
+    InterlockedSet(&Ctx->Running, TRUE);
     return NDIS_STATUS_SUCCESS;
 }
 
@@ -934,7 +941,7 @@ TunPause(NDIS_HANDLE MiniportAdapterContext, PNDIS_MINIPORT_PAUSE_PARAMETERS Min
 {
     TUN_CTX *Ctx = (TUN_CTX *)MiniportAdapterContext;
 
-    InterlockedAnd(&Ctx->Flags, ~TUN_FLAGS_RUNNING);
+    InterlockedSet(&Ctx->Running, FALSE);
     ExReleaseSpinLockExclusive(
         &Ctx->TransitionLock,
         ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
@@ -1123,9 +1130,9 @@ TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltAction)
         ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
     NdisFreeNetBufferListPool(Ctx->NblPool);
 
-    InterlockedExchangePointer(&Ctx->MiniportAdapterHandle, NULL);
+    InterlockedSetPointer(&Ctx->MiniportAdapterHandle, NULL);
 #pragma warning(suppress : 28175)
-    InterlockedExchangePointer(&Ctx->FunctionalDeviceObject->Reserved, NULL);
+    InterlockedSetPointer(&Ctx->FunctionalDeviceObject->Reserved, NULL);
     ExAcquireResourceExclusiveLite(&TunDispatchCtxGuard, TRUE); /* Ensure above change is visible to all readers. */
     ExReleaseResourceLite(&TunDispatchCtxGuard);
     ExFreePoolWithTag(Ctx, TUN_MEMORY_TAG);
