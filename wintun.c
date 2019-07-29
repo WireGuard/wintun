@@ -9,6 +9,7 @@
 #include <ndis.h>
 #include <ntstrsafe.h>
 #include "undocumented.h"
+#include "atomic.h"
 
 #pragma warning(disable : 4100) /* unreferenced formal parameter */
 #pragma warning(disable : 4200) /* nonstandard: zero-sized array in struct/union */
@@ -41,18 +42,18 @@
 #define TUN_RING_WRAP(Value, Capacity) ((Value) & (Capacity - 1))
 
 #if REG_DWORD == REG_DWORD_BIG_ENDIAN
-#    define TUN_HTONS(x) ((USHORT)(x))
-#    define TUN_HTONL(x) ((ULONG)(x))
+#    define HTONS(x) ((USHORT)(x))
+#    define HTONL(x) ((ULONG)(x))
 #elif REG_DWORD == REG_DWORD_LITTLE_ENDIAN
-#    define TUN_HTONS(x) ((((USHORT)(x)&0x00ff) << 8) | (((USHORT)(x)&0xff00) >> 8))
-#    define TUN_HTONL(x) \
+#    define HTONS(x) ((((USHORT)(x)&0x00ff) << 8) | (((USHORT)(x)&0xff00) >> 8))
+#    define HTONL(x) \
         ((((ULONG)(x)&0x000000ff) << 24) | (((ULONG)(x)&0x0000ff00) << 8) | (((ULONG)(x)&0x00ff0000) >> 8) | \
          (((ULONG)(x)&0xff000000) >> 24))
 #else
 #    error "Unable to determine endianess"
 #endif
 
-#define TUN_MEMORY_TAG TUN_HTONL('wtun')
+#define TUN_MEMORY_TAG HTONL('wtun')
 
 typedef struct _TUN_PACKET
 {
@@ -162,59 +163,6 @@ static NDIS_HANDLE NdisMiniportDriverHandle;
 static DRIVER_DISPATCH *NdisDispatchDeviceControl, *NdisDispatchClose;
 static ERESOURCE TunDispatchCtxGuard;
 static SECURITY_DESCRIPTOR *TunDispatchSecurityDescriptor;
-
-static __forceinline VOID
-InterlockedSet(_Inout_ _Interlocked_operand_ LONG volatile *Target, _In_ LONG Value)
-{
-    *Target = Value;
-}
-
-static __forceinline VOID
-InterlockedSetU(_Inout_ _Interlocked_operand_ ULONG volatile *Target, _In_ ULONG Value)
-{
-    *Target = Value;
-}
-
-static __forceinline VOID
-InterlockedSetPointer(_Inout_ _Interlocked_operand_ VOID *volatile *Target, _In_opt_ VOID *Value)
-{
-    *Target = Value;
-}
-
-static __forceinline LONG
-InterlockedGet(_In_ _Interlocked_operand_ LONG volatile *Value)
-{
-    return *Value;
-}
-
-static __forceinline ULONG
-InterlockedGetU(_In_ _Interlocked_operand_ ULONG volatile *Value)
-{
-    return *Value;
-}
-
-static __forceinline PVOID
-InterlockedGetPointer(_In_ _Interlocked_operand_ PVOID volatile *Value)
-{
-    return *Value;
-}
-
-static __forceinline LONG64
-InterlockedGet64(_In_ _Interlocked_operand_ LONG64 volatile *Value)
-{
-#ifdef _WIN64
-    return *Value;
-#else
-    return InterlockedCompareExchange64(Value, 0, 0);
-#endif
-}
-
-#define TunInitUnicodeString(str, buf) \
-    { \
-        (str)->Length = 0; \
-        (str)->MaximumLength = sizeof(buf); \
-        (str)->Buffer = buf; \
-    }
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 static VOID
@@ -537,12 +485,12 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         if (PacketSize >= 20 && Packet->Data[0] >> 4 == 4)
         {
             NblFlags = NDIS_NBL_FLAGS_IS_IPV4;
-            NblProto = TUN_HTONS(NDIS_ETH_TYPE_IPV4);
+            NblProto = HTONS(NDIS_ETH_TYPE_IPV4);
         }
         else if (PacketSize >= 40 && Packet->Data[0] >> 4 == 6)
         {
             NblFlags = NDIS_NBL_FLAGS_IS_IPV6;
-            NblProto = TUN_HTONS(NDIS_ETH_TYPE_IPV6);
+            NblProto = HTONS(NDIS_ETH_TYPE_IPV6);
         }
         else
             break;
@@ -1227,7 +1175,7 @@ TunOidQuery(_Inout_ TUN_CTX *Ctx, _Inout_ NDIS_OID_REQUEST *OidRequest)
         return TunOidQueryWrite(OidRequest, TUN_MAX_RING_CAPACITY);
 
     case OID_GEN_VENDOR_ID:
-        return TunOidQueryWrite(OidRequest, TUN_HTONL(TUN_VENDOR_ID));
+        return TunOidQueryWrite(OidRequest, HTONL(TUN_VENDOR_ID));
 
     case OID_GEN_VENDOR_DESCRIPTION:
         return TunOidQueryWriteBuf(OidRequest, TUN_VENDOR_NAME, (ULONG)sizeof(TUN_VENDOR_NAME));
