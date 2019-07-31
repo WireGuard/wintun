@@ -835,6 +835,7 @@ TunDispatchDeviceControl(DEVICE_OBJECT *DeviceObject, IRP *Irp)
     switch (Stack->Parameters.DeviceIoControl.IoControlCode)
     {
     case TUN_IOCTL_REGISTER_RINGS: {
+        KeEnterCriticalRegion();
         ExAcquireResourceSharedLite(&TunDispatchCtxGuard, TRUE);
 #pragma warning(suppress : 28175)
         TUN_CTX *Ctx = DeviceObject->Reserved;
@@ -842,6 +843,7 @@ TunDispatchDeviceControl(DEVICE_OBJECT *DeviceObject, IRP *Irp)
         if (Ctx)
             Status = TunRegisterBuffers(Ctx, Irp);
         ExReleaseResourceLite(&TunDispatchCtxGuard);
+        KeLeaveCriticalRegion();
         break;
     }
     case TUN_IOCTL_FORCE_CLOSE_HANDLES:
@@ -862,12 +864,14 @@ _Use_decl_annotations_
 static NTSTATUS
 TunDispatchClose(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 {
+    KeEnterCriticalRegion();
     ExAcquireResourceSharedLite(&TunDispatchCtxGuard, TRUE);
 #pragma warning(suppress : 28175)
     TUN_CTX *Ctx = DeviceObject->Reserved;
     if (Ctx)
         TunUnregisterBuffers(Ctx, IoGetCurrentIrpStackLocation(Irp)->FileObject);
     ExReleaseResourceLite(&TunDispatchCtxGuard);
+    KeLeaveCriticalRegion();
     return NdisDispatchClose(DeviceObject, Irp);
 }
 
@@ -1083,8 +1087,10 @@ TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltAction)
     InterlockedSetPointer(&Ctx->MiniportAdapterHandle, NULL);
 #pragma warning(suppress : 28175)
     InterlockedSetPointer(&Ctx->FunctionalDeviceObject->Reserved, NULL);
+    KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(&TunDispatchCtxGuard, TRUE); /* Ensure above change is visible to all readers. */
     ExReleaseResourceLite(&TunDispatchCtxGuard);
+    KeLeaveCriticalRegion();
     ExFreePoolWithTag(Ctx, TUN_MEMORY_TAG);
 }
 
