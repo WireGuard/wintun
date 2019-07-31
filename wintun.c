@@ -930,6 +930,8 @@ TunInitializeEx(
     Ctx->MiniportAdapterHandle = MiniportAdapterHandle;
 
     NdisMGetDeviceProperty(MiniportAdapterHandle, NULL, &Ctx->FunctionalDeviceObject, NULL, NULL, NULL);
+    if (Status = NDIS_STATUS_FAILURE, !Ctx->FunctionalDeviceObject)
+        goto cleanupFreeCtx;
     /* Reverse engineering indicates that we'd be better off calling
      * NdisWdfGetAdapterContextFromAdapterHandle(functional_device),
      * which points to our TUN_CTX object directly, but this isn't

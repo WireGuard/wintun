@@ -51,6 +51,8 @@ msbuild wintun.proj [/t:<target>]
 
   - `SDV`: Runs Static Driver Verifier, which includes a clean driver build, only for AMD64 release configuration.
 
+  - `SDVView`: Views the results of the Static Driver Verifier.
+
   - `DVL`: Runs the `SDV`, and creates a Driver Verification Log, only for AMD64 release configurations.
 
   - `MSM`: Builds Microsoft Installer Merge Modules in `<output folder>\wintun-<platform>-<version>.msm`. Requires WHQL signed driver.
