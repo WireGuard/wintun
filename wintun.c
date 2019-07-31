@@ -936,14 +936,14 @@ TunInitializeEx(
     NdisMGetDeviceProperty(MiniportAdapterHandle, NULL, &Ctx->FunctionalDeviceObject, NULL, NULL, NULL);
     if (Status = NDIS_STATUS_FAILURE, !Ctx->FunctionalDeviceObject)
         goto cleanupFreeCtx;
+#pragma warning(suppress : 28175)
+    ASSERT(!Ctx->FunctionalDeviceObject->Reserved);
     /* Reverse engineering indicates that we'd be better off calling
      * NdisWdfGetAdapterContextFromAdapterHandle(functional_device),
      * which points to our TUN_CTX object directly, but this isn't
      * available before Windows 10, so for now we just stick it into
      * this reserved field. Revisit this when we drop support for old
      * Windows versions. */
-#pragma warning(suppress : 28175)
-    ASSERT(!Ctx->FunctionalDeviceObject->Reserved);
 #pragma warning(suppress : 28175)
     Ctx->FunctionalDeviceObject->Reserved = Ctx;
 
