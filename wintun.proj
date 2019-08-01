@@ -50,15 +50,15 @@
   <!--
     installer.dll Building
   -->
-  <Target Name="Installer-x86" DependsOnTargets="Driver-x86"
+  <Target Name="Installer-x86"
     Outputs="x86\Release\installer.dll">
     <MSBuild Projects="installer\installer.vcxproj" Targets="Build" Properties="Configuration=Release;Platform=Win32"/>
   </Target>
-  <Target Name="Installer-amd64" DependsOnTargets="Driver-amd64"
+  <Target Name="Installer-amd64"
     Outputs="amd64\Release\installer.dll">
     <MSBuild Projects="installer\installer.vcxproj" Targets="Build" Properties="Configuration=Release;Platform=x64"/>
   </Target>
-  <Target Name="Installer-arm64" DependsOnTargets="Driver-arm64"
+  <Target Name="Installer-arm64"
     Outputs="arm64\Release\installer.dll">
     <MSBuild Projects="installer\installer.vcxproj" Targets="Build" Properties="Configuration=Release;Platform=ARM64"/>
   </Target>
