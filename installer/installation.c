@@ -432,7 +432,10 @@ ForceCloseWintunAdapterHandle(_In_ HDEVINFO DeviceInfoSet, _In_ SP_DEVINFO_DATA 
         if (Ret == CR_SUCCESS)
             break;
         if (Ret != CR_BUFFER_SMALL)
+        {
+            free(InterfaceList);
             return FALSE;
+        }
     }
 
     HANDLE NdisHandle = CreateFile(
