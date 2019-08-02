@@ -20,7 +20,34 @@ It is advisable to use the prebuilt and Microsoft-signed MSM files from [Wintun.
 
 ## Usage
 
-After loading the driver and creating a network interface the typical way using [SetupAPI](https://docs.microsoft.com/en-us/windows-hardware/drivers/install/setupapi), open the NDIS device object associated with the PnPInstanceId, enabling all forms of file sharing.
+After loading the driver and creating a network interface the typical way using [SetupAPI](https://docs.microsoft.com/en-us/windows-hardware/drivers/install/setupapi), open the NDIS device object associated with the PnPInstanceId, enabling all forms of file sharing:
+
+```C
+TCHAR *InterfaceList = NULL;
+for (;;) {
+    free(InterfaceList);
+    DWORD RequiredBytes;
+    if (CM_Get_Device_Interface_List_Size(&RequiredBytes, (LPGUID)&GUID_DEVINTERFACE_NET,
+        InstanceId, CM_GET_DEVICE_INTERFACE_LIST_PRESENT) != CR_SUCCESS)
+        return FALSE;
+    InterfaceList = calloc(sizeof(*InterfaceList), RequiredBytes);
+    if (!InterfaceList)
+        return FALSE;
+    CONFIGRET Ret = CM_Get_Device_Interface_List((LPGUID)&GUID_DEVINTERFACE_NET, InstanceId,
+                    InterfaceList, RequiredBytes, CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
+    if (Ret == CR_SUCCESS)
+        break;
+    if (Ret != CR_BUFFER_SMALL) {
+        free(InterfaceList);
+        return FALSE;
+    }
+}
+HANDLE WintunHandle = CreateFile(InterfaceList, GENERIC_READ | GENERIC_WRITE,
+                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                 NULL, OPEN_EXISTING, 0, NULL);
+free(InterfaceList);
+...
+```
 
 ### Ring layout
 
@@ -68,10 +95,8 @@ typedef struct _TUN_PACKET {
 In order to register the two `TUN_RING`s, prepare a registration struct as:
 
 ```C
-typedef struct _TUN_REGISTER_RINGS
-{
-    struct
-    {
+typedef struct _TUN_REGISTER_RINGS {
+    struct {
         ULONG RingSize;
         TUN_RING *Ring;
         HANDLE TailMoved;
@@ -96,19 +121,19 @@ Reading packets from the send ring may be done as:
 
 ```C
 for (;;) {
-    TUN_PACKET *next = PopFromRing(r->Send.Ring);
-    if (!next) {
-        r->Send.Ring->Alertable = TRUE;
-        next = PopFromRing(r->Send.Ring);
-        if (!next) {
-            WaitForSingleObject(r->Send.TailMoved, INFINITE);
-            r->Send.Ring->Alertable = FALSE;
+    TUN_PACKET *Next = PopFromRing(Rings->Send.Ring);
+    if (!Next) {
+        Rings->Send.Ring->Alertable = TRUE;
+        Next = PopFromRing(Rings->Send.Ring);
+        if (!Next) {
+            WaitForSingleObject(Rings->Send.TailMoved, INFINITE);
+            Rings->Send.Ring->Alertable = FALSE;
             continue;
         }
-        r->Send.Ring->Alertable = FALSE;
-        ResetEvent(r->Send.TailMoved);
+        Rings->Send.Ring->Alertable = FALSE;
+        ResetEvent(Rings->Send.TailMoved);
     }
-    SendToClientProgram(next);
+    SendToClientProgram(Next);
 }
 ```
 
@@ -120,10 +145,10 @@ Writing packets to the receive ring may be done as:
 
 ```C
 for (;;) {
-    TUN_PACKET *next = ReceiveFromClientProgram();
-    WriteToRing(r->Receive.Ring, next);
-    if (r->Receive.Ring->Alertable)
-        SetEvent(r->Recieve.TailMoved);
+    TUN_PACKET *Next = ReceiveFromClientProgram();
+    WriteToRing(Rings->Receive.Ring, Next);
+    if (Rings->Receive.Ring->Alertable)
+        SetEvent(Rings->Recieve.TailMoved);
 }
 ```
 
@@ -208,3 +233,7 @@ If you possess an EV certificate for kernel mode code signing you should switch 
 Modify the `<CrossCertificateFile>` to contain the full path to the cross-signing certificate of CA that issued your certificate. You should be able to find its `.crt` file in `C:\Program Files (x86)\Windows Kits\10\CrossCertificates`. Note that the `$(WDKContentRoot)` expands to `C:\Program Files (x86)\Windows Kits\10\`.
 
 If you already have `wintun.vcxproj.user` file, just add the `<PropertyGroup>` section.
+
+## License
+
+The entire contents of this repository, including all documentation code, is "Copyright © 2018-2019 WireGuard LLC. All Rights Reserved." and is licensed under the [GPLv2](COPYING).
