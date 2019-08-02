@@ -18,7 +18,7 @@
     <DefineSolutionProperties>false</DefineSolutionProperties>
   </PropertyGroup>
 
-  <Import Project="..\wintun.props"/>
+  <Import Project="..\wintun.props" />
 
   <PropertyGroup>
     <IntermediateOutputPath>..\$(WintunPlatform)\$(Configuration)\</IntermediateOutputPath>
@@ -37,26 +37,26 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="installer.wxs"/>
+    <Compile Include="installer.wxs" />
   </ItemGroup>
 
-  <Import Project="$(MSBuildProjectName).user" Condition="exists('$(MSBuildProjectName).user')"/>
-  <Import Project="$(WixTargetsPath)" Condition="'$(WixTargetsPath)'!=''"/>
-  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets" Condition="'$(WixTargetsPath)'=='' AND Exists('$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets')"/>
+  <Import Project="$(MSBuildProjectName).user" Condition="exists('$(MSBuildProjectName).user')" />
+  <Import Project="$(WixTargetsPath)" Condition="'$(WixTargetsPath)'!=''" />
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets" Condition="'$(WixTargetsPath)'=='' AND Exists('$(MSBuildExtensionsPath32)\Microsoft\WiX\v3.x\Wix.targets')" />
   <Target Name="EnsureWixToolsetInstalled" Condition="'$(WixTargetsImported)'!='true'">
-    <Error Text="The WiX Toolset v3.11 (or newer) build tools must be installed to build this project. To download the WiX Toolset, see http://wixtoolset.org/releases/"/>
+    <Error Text="The WiX Toolset v3.11 (or newer) build tools must be installed to build this project. To download the WiX Toolset, see http://wixtoolset.org/releases/" />
   </Target>
 
   <Target Name="HashInstallerLibrary">
     <GetFileHash Files="$(IntermediateOutputPath)installer.dll" Algorithm="SHA256" HashEncoding="hex">
-      <Output TaskParameter="Items" ItemName="InstallerLibraryHash"/>
+      <Output TaskParameter="Items" ItemName="InstallerLibraryHash" />
     </GetFileHash>
     <PropertyGroup>
       <DefineConstants>$(DefineConstants);INSTALLER_LIBRARY_HASH=@(InstallerLibraryHash->Metadata('FileHash'));INSTALLER_LIBRARY_TIME=$([System.IO.File]::GetLastWriteTime('$(IntermediateOutputPath)installer.dll').Ticks)</DefineConstants>
     </PropertyGroup>
   </Target>
 
-  <Import Project="..\wintun.vcxproj.user" Condition="exists('..\wintun.vcxproj.user')"/>
+  <Import Project="..\wintun.vcxproj.user" Condition="exists('..\wintun.vcxproj.user')" />
   <PropertyGroup>
     <SigningCertificate Condition="$(SignMode)=='TestSign' And '$(TestCertificate)'!=''">$(TestCertificate)</SigningCertificate>
     <SigningCertificate Condition="$(SignMode)=='ProductionSign' And '$(ProductionCertificate)'!=''">$(ProductionCertificate)</SigningCertificate>
@@ -68,9 +68,9 @@
     Inputs="$(TargetPath)"
     Outputs="$(IntermediateOutputPath)$(TargetName).sign">
     <Exec Command="signtool.exe sign /sha1 &quot;$(SigningCertificate)&quot; /fd sha256 /tr &quot;$(TimeStampServer)&quot; /td sha256 &quot;$(TargetPath)&quot;" />
-    <Touch Files="$(IntermediateOutputPath)$(TargetName).sign" AlwaysCreate="true"/>
+    <Touch Files="$(IntermediateOutputPath)$(TargetName).sign" AlwaysCreate="true" />
   </Target>
   <Target Name="CleanSignTarget">
-    <Delete Files="$(IntermediateOutputPath)$(TargetName).sign"/>
+    <Delete Files="$(IntermediateOutputPath)$(TargetName).sign" />
   </Target>
 </Project>
