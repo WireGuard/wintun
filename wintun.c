@@ -503,6 +503,8 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         if (!Nbl)
         {
             InterlockedIncrement64((LONG64 *)&Ctx->Statistics.ifInDiscards);
+            KeWaitForSingleObject(&Ctx->Device.Receive.ActiveNbls.Empty, Executive, KernelMode, FALSE, NULL);
+            InterlockedSetU(&Ring->Head, RingHead);
             continue;
         }
 
