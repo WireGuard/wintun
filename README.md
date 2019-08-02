@@ -156,83 +156,14 @@ Wintun will abort reading the receive ring on invalid `Head` or `Tail` or on a b
 
 ## Building
 
+**Do not distribute drivers named "Wintun", as they will most certainly clash with official deployments. Instead distribute [the signed MSMs from Wintun.net](https://www.wintun.net/).**
+
 General requirements:
 
 - [Visual Studio 2019](https://visualstudio.microsoft.com/downloads/)
 - [Windows Driver Kit for Windows 10, version 1903](https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk)
-- [WiX Toolset 3.11.1](http://wixtoolset.org/releases/)
 
-`wintun.sln` may be opened in Visual Studio for development and building. Or the below instructions can be followed for command line builds.
-
-### Building from Command Line
-
-Open _Developer Command Prompt for VS 2019_ and use the `msbuild` command:
-
-```
-msbuild wintun.proj [/t:<target>]
-```
-
-#### Targets
-
-  - `Build`: Builds the driver release configurations of all supported platforms. This is the default target.
-
-  - `Clean`: Deletes all intermediate and output files.
-
-  - `Rebuild`: Alias for `Clean` followed by `Build`.
-
-  - `SDV`: Runs Static Driver Verifier, which includes a clean driver build, only for AMD64 release configuration.
-
-  - `SDVView`: Views the results of the Static Driver Verifier.
-
-  - `DVL`: Runs the `SDV`, and creates a Driver Verification Log, only for AMD64 release configurations.
-
-  - `MSM`: Builds Microsoft Installer Merge Modules in `<output folder>\wintun-<platform>-<version>.msm`. Requires WHQL signed driver.
-
-The driver output folders are:
-
-Platform and Configuration | Folder
--------------------------- | --------------------
-x86 Debug                  | `x86\Debug\wintun`
-x86 Release                | `x86\Release\wintun`
-AMD64 Debug                | `amd64\Debug\wintun`
-AMD64 Release              | `amd64\Release\wintun`
-ARM64 Debug                | `arm64\Debug\wintun`
-ARM64 Release              | `arm64\Release\wintun`
-
-Do note that since the `Build` target builds for all supported platforms, you will need to have the toolchains installed for those platforms.
-
-### Building Microsoft Installer Merge Modules
-
-1. `msbuild wintun.proj /t:DVL;Build`.
-2. Perform Windows Hardware Lab Kit tests.
-3. Submit submission package to Microsoft.
-4. Copy WHQL-signed driver to `x86\Release\whql\` and `amd64\Release\whql\` subfolders.
-5. `msbuild wintun.proj /t:MSM`
-6. MSM files are placed in `dist` subfolder.
-
-Note: due to the use of SHA256 signatures throughout, Windows 7 users who would like a prompt-less installation generally need to have the [KB2921916 hotfix](https://support.microsoft.com/en-us/help/2921916/the-untrusted-publisher-dialog-box-appears-when-you-install-a-driver-i) installed, which can be obtained from these mirrors: [amd64](https://download.wireguard.com/windows-toolchain/distfiles/Windows6.1-KB2921916-x64.msu) and [x86](https://download.wireguard.com/windows-toolchain/distfiles/Windows6.1-KB2921916-x86.msu).
-
-### Digital Signing
-
-By default, the driver will be test-signed using a certificate that the WDK should automatically generate. To subsequently load the driver, you will need to put your computer into test mode by executing as Administrator `bcdedit /set testsigning on`.
-
-If you possess an EV certificate for kernel mode code signing you should switch TUN driver digital signing from test-signing to production-signing by authoring your `wintun.vcxproj.user` file to look something like this:
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <PropertyGroup>
-    <SignMode>ProductionSign</SignMode>
-    <CrossCertificateFile>$(WDKContentRoot)CrossCertificates\DigiCert_High_Assurance_EV_Root_CA.crt</CrossCertificateFile>
-    <ProductionCertificate>DF98E075A012ED8C86FBCF14854B8F9555CB3D45</ProductionCertificate>
-    <TimestampServer>http://timestamp.digicert.com</TimestampServer>
-  </PropertyGroup>
-</Project>
-```
-
-Modify the `<CrossCertificateFile>` to contain the full path to the cross-signing certificate of CA that issued your certificate. You should be able to find its `.crt` file in `C:\Program Files (x86)\Windows Kits\10\CrossCertificates`. Note that the `$(WDKContentRoot)` expands to `C:\Program Files (x86)\Windows Kits\10\`.
-
-If you already have `wintun.vcxproj.user` file, just add the `<PropertyGroup>` section.
+`wintun.sln` may be opened in Visual Studio for development and building. Be sure to run `bcdedit /set testsigning on` before to enable unsigned driver loading. The default run sequence (F5) in Visual Studio will build and insert Wintun.
 
 ## License
 
