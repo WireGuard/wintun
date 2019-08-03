@@ -35,7 +35,7 @@ ConsoleLogger(_In_ LOGGER_LEVEL Level, _In_ const TCHAR *LogLine)
 
 static BOOL ElevateToSystem(VOID)
 {
-    HANDLE ThreadToken, ProcessSnapshot, WinlogonProcess, WinlogonToken, DuplicatedToken;
+    HANDLE CurrentProcessToken, ThreadToken, ProcessSnapshot, WinlogonProcess, WinlogonToken, DuplicatedToken;
     PROCESSENTRY32 ProcessEntry = { .dwSize = sizeof(PROCESSENTRY32) };
     BOOL Ret;
     DWORD LastError = ERROR_SUCCESS;
@@ -50,8 +50,13 @@ static BOOL ElevateToSystem(VOID)
         TOKEN_USER MaybeLocalSystem;
         CHAR LargeEnoughForLocalSystem[0x400];
     } TokenUserBuffer;
-    if (!GetTokenInformation(
-            GetCurrentProcessToken(), TokenUser, &TokenUserBuffer, sizeof(TokenUserBuffer), &RequiredBytes))
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &CurrentProcessToken))
+        goto cleanup;
+    Ret =
+        GetTokenInformation(CurrentProcessToken, TokenUser, &TokenUserBuffer, sizeof(TokenUserBuffer), &RequiredBytes);
+    LastError = GetLastError();
+    CloseHandle(CurrentProcessToken);
+    if (!Ret)
         goto cleanup;
     if (EqualSid(TokenUserBuffer.MaybeLocalSystem.User.Sid, LocalSystemSid))
         return TRUE;
@@ -116,7 +121,12 @@ RunAsAdministrator(HWND hwnd, TCHAR *Verb, int nCmdShow)
 {
     TOKEN_ELEVATION Elevation;
     DWORD Required;
-    if (!GetTokenInformation(GetCurrentProcessToken(), TokenElevation, &Elevation, sizeof(Elevation), &Required))
+    HANDLE CurrentProcessToken;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &CurrentProcessToken))
+        return;
+    BOOL Ret = GetTokenInformation(CurrentProcessToken, TokenElevation, &Elevation, sizeof(Elevation), &Required);
+    CloseHandle(CurrentProcessToken);
+    if (!Ret)
         return;
     if (Elevation.TokenIsElevated)
         return;
@@ -155,6 +165,6 @@ VOID __stdcall InstallWintun(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int 
 
 VOID __stdcall UninstallWintun(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
 {
-    RunAsAdministrator(hwnd, TEXT(__FUNCTION__) , nCmdShow);
+    RunAsAdministrator(hwnd, TEXT(__FUNCTION__), nCmdShow);
     Do(FALSE, !!nCmdShow);
 }
