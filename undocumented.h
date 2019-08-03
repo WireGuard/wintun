@@ -37,3 +37,5 @@ ZwQuerySystemInformation(
     PVOID SystemInformation,
     ULONG SystemInformationLength,
     ULONG *ReturnLength);
+
+extern NTSTATUS ZwYieldExecution(VOID);

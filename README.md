@@ -137,7 +137,7 @@ for (;;) {
 }
 ```
 
-It may be desirable to spin for ~50ms before waiting on the `TailMoved` event, in order to reduce latency.
+It may be desirable to spin a short amount of time before waiting on the `TailMoved` event, in order to reduce latency.
 
 When closing the handle, Wintun will set the `Tail` to 0xFFFFFFFF and set the `TailMoved` event to unblock the waiting user process.
 

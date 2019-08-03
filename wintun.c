@@ -402,9 +402,11 @@ _Function_class_(KSTART_ROUTINE)
 static VOID
 TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
 {
+    KeSetPriorityThread(KeGetCurrentThread(), 1);
+
     TUN_RING *Ring = Ctx->Device.Receive.Ring;
     ULONG RingCapacity = Ctx->Device.Receive.Capacity;
-    const ULONG SpinMax = 10000 * 50 / KeQueryTimeIncrement(); /* 50ms */
+    const ULONG SpinMax = 10000 * 20 / KeQueryTimeIncrement(); /* 20 ms */
     VOID *Events[] = { &Ctx->Device.Disconnected, Ctx->Device.Receive.TailMoved };
     ASSERT(RTL_NUMBER_OF(Events) <= THREAD_WAIT_OBJECTS);
 
@@ -431,10 +433,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
                 KeQueryTickCount(&SpinNow);
                 if ((ULONG64)SpinNow.QuadPart - (ULONG64)SpinStart.QuadPart >= SpinMax)
                     break;
-
-                /* This should really call KeYieldProcessorEx(&zero), so it does the Hyper-V paravirtualization call,
-                 * but it's not exported. */
-                YieldProcessor();
+                ZwYieldExecution();
             }
             if (RingHead == RingTail)
             {
