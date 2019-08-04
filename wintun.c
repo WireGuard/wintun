@@ -406,7 +406,9 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
 
     TUN_RING *Ring = Ctx->Device.Receive.Ring;
     ULONG RingCapacity = Ctx->Device.Receive.Capacity;
-    const ULONG SpinMax = 10000 * 20 / KeQueryTimeIncrement(); /* 20 ms */
+    LARGE_INTEGER Frequency;
+    KeQueryPerformanceCounter(&Frequency);
+    ULONG64 SpinMax = Frequency.QuadPart / 1000 / 10; /* 1/10 ms */
     VOID *Events[] = { &Ctx->Device.Disconnected, Ctx->Device.Receive.TailMoved };
     ASSERT(RTL_NUMBER_OF(Events) <= THREAD_WAIT_OBJECTS);
 
@@ -420,8 +422,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         ULONG RingTail = InterlockedGetU(&Ring->Tail);
         if (RingHead == RingTail)
         {
-            LARGE_INTEGER SpinStart;
-            KeQueryTickCount(&SpinStart);
+            LARGE_INTEGER SpinStart = KeQueryPerformanceCounter(NULL);
             for (;;)
             {
                 RingTail = InterlockedGetU(&Ring->Tail);
@@ -429,8 +430,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
                     break;
                 if (KeReadStateEvent(&Ctx->Device.Disconnected))
                     break;
-                LARGE_INTEGER SpinNow;
-                KeQueryTickCount(&SpinNow);
+                LARGE_INTEGER SpinNow = KeQueryPerformanceCounter(NULL);
                 if ((ULONG64)SpinNow.QuadPart - (ULONG64)SpinStart.QuadPart >= SpinMax)
                     break;
                 ZwYieldExecution();
