@@ -111,8 +111,20 @@
     <CodeAnalysisRuleSet>NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <RunCodeAnalysis>true</RunCodeAnalysis>
     <LocalDebuggerCommand>rundll32.exe</LocalDebuggerCommand>
-    <LocalDebuggerCommandArguments>..\$(WintunPlatform)\$(Configuration)\installer.dll,InstallWintun</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>$(OutDir)$(TargetName)$(TargetExt),InstallWintun</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <WixArch Condition="'$(Platform)'=='Win32'">x86</WixArch>
+    <WixArch Condition="'$(Platform)'=='x64'">x64</WixArch>
+    <WixArch Condition="'$(Platform)'=='ARM64'">arm64</WixArch>
+    <WixCandleFlags>$(WixCandleFlags) -nologo -arch $(WixArch) -dWINTUN_PLATFORM=$(WintunPlatform) -dWINTUN_VERSION=$(WintunVersion) -sw1086</WixCandleFlags>
+    <WixLightFlags>$(WixLightFlags) -nologo -b output_dir="$(OutDir.TrimEnd('\'))" -spdb -sw1076 -sw1079</WixLightFlags>
+    <WixOutputPath>$(OutDir)</WixOutputPath>
+    <WixOutputName>wintun</WixOutputName>
+    <WixOutputExt>.msm</WixOutputExt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <WixOutputPath>..\$(DistributionDir)</WixOutputPath>
+    <WixOutputName>wintun-$(WintunPlatform)-$(WintunVersionStr)</WixOutputName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -171,7 +183,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="exports.def" />
-    <None Include="installer.wixproj" />
     <None Include="installer.wxs" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
@@ -182,7 +193,9 @@
     <SigningCertificate Condition="$(SignMode)=='TestSign' And '$(TestCertificate)'!=''">$(TestCertificate)</SigningCertificate>
     <SigningCertificate Condition="$(SignMode)=='ProductionSign' And '$(ProductionCertificate)'!=''">$(ProductionCertificate)</SigningCertificate>
     <BuildDependsOn Condition="'$(SigningCertificate)'!='' And '$(TimeStampServer)'!=''">$(BuildDependsOn);SignTarget</BuildDependsOn>
-    <CleanDependsOn>CleanSignTarget;$(CleanDependsOn)</CleanDependsOn>
+    <MSMDependsOn>$(MSMDependsOn);WixCompile;WixLink</MSMDependsOn>
+    <MSMDependsOn Condition="'$(SigningCertificate)'!='' And '$(TimeStampServer)'!=''">$(MSMDependsOn);WixSign</MSMDependsOn>
+    <CleanDependsOn>CleanSignTarget;WixClean;$(CleanDependsOn)</CleanDependsOn>
   </PropertyGroup>
   <Target Name="SignTarget" Inputs="$(TargetPath)" Outputs="$(IntermediateOutputPath)$(TargetName).sign">
     <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 &quot;$(SigningCertificate)&quot; /fd sha256 /tr &quot;$(TimeStampServer)&quot; /td sha256 &quot;$(TargetPath)&quot;" />
@@ -191,4 +204,26 @@
   <Target Name="CleanSignTarget">
     <Delete Files="$(IntermediateOutputPath)$(TargetName).sign" />
   </Target>
+  <Target Name="HashInstallerLibrary" DependsOnTargets="Build">
+    <GetFileHash Files="$(OutDir)$(TargetName)$(TargetExt)" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Items" ItemName="InstallerLibraryHash" />
+    </GetFileHash>
+    <PropertyGroup>
+      <WixCandleFlags>$(WixCandleFlags) -dINSTALLER_LIBRARY_HASH=@(InstallerLibraryHash->Metadata('FileHash')) -dINSTALLER_LIBRARY_TIME=$([System.IO.File]::GetLastWriteTime('$(OutDir)$(TargetName)$(TargetExt)').Ticks)</WixCandleFlags>
+    </PropertyGroup>
+  </Target>
+  <Target Name="WixCompile" DependsOnTargets="HashInstallerLibrary" Inputs="installer.wxs" Outputs="$(IntDir)installer.wixobj">
+    <Exec Command="&quot;$(WIX)bin\candle.exe&quot; $(WixCandleFlags) -out &quot;$(IntDir)installer.wixobj&quot; installer.wxs" />
+  </Target>
+  <Target Name="WixLink" DependsOnTargets="Build;WixCompile" Inputs="$(IntDir)installer.wixobj;$(OutDir)$(TargetName)$(TargetExt)" Outputs="$(WixOutputPath)$(WixOutputName)$(WixOutputExt)">
+    <Exec Command="&quot;$(WIX)bin\light.exe&quot; $(WixLightFlags) -out &quot;$(WixOutputPath)$(WixOutputName)$(WixOutputExt)&quot; &quot;$(IntDir)installer.wixobj&quot;" />
+  </Target>
+  <Target Name="WixSign" DependsOnTargets="WixLink" Inputs="$(WixOutputPath)$(WixOutputName)$(WixOutputExt)" Outputs="$(IntDir)$(WixOutputName).sign">
+    <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 &quot;$(SigningCertificate)&quot; /fd sha256 /tr &quot;$(TimeStampServer)&quot; /td sha256 &quot;$(WixOutputPath)$(WixOutputName)$(WixOutputExt)&quot;" />
+    <Touch Files="$(IntDir)$(WixOutputName).sign" AlwaysCreate="true" />
+  </Target>
+  <Target Name="WixClean">
+    <Delete Files="$(IntDir)installer.wixobj;$(WixOutputPath)$(WixOutputName)$(WixOutputExt);$(IntDir)$(WixOutputName).sign" />
+  </Target>
+  <Target Name="MSM" DependsOnTargets="$(MSMDependsOn)" />
 </Project>

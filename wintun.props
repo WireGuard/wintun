@@ -11,8 +11,7 @@
     <WintunVersionStr>0.6</WintunVersionStr><!-- Used in filenames and ProductVersion resource string, may contain strings. -->
     <WintunVersion>$(WintunVersionMaj).$(WintunVersionMin)</WintunVersion><!-- Used for versioning, must be n.n[.n[.n]]. -->
 
-    <!-- .vcxproj and .wixproj are using different platform names. -->
-    <WintunPlatform Condition="'$(Platform)'=='x86'">x86</WintunPlatform>
+    <!-- .vcxproj are using different platform names. -->
     <WintunPlatform Condition="'$(Platform)'=='Win32'">x86</WintunPlatform>
     <WintunPlatform Condition="'$(Platform)'=='x64'">amd64</WintunPlatform>
     <WintunPlatform Condition="'$(Platform)'=='ARM64'">arm64</WintunPlatform>

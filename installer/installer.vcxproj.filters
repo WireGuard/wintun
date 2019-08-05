@@ -42,9 +42,6 @@
     <None Include="exports.def">
       <Filter>Source Files</Filter>
     </None>
-    <None Include="installer.wixproj">
-      <Filter>MSM</Filter>
-    </None>
     <None Include="installer.wxs">
       <Filter>MSM</Filter>
     </None>

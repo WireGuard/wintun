@@ -38,7 +38,7 @@
       <Custom Action="ProcessWintun" After="InstallFiles" />
     </InstallExecuteSequence>
 
-    <?if $(var.Platform) = "x86"?>
+    <?if $(var.WINTUN_PLATFORM) = "x86"?>
     <CustomAction Id="WoW64Unsupported" Error="You are attempting to install the 32-bit variant of [ProductName] on a 64-bit operating system, which is not supported. Please install the 64-bit variant instead." />
     <InstallExecuteSequence>
       <Custom Action="WoW64Unsupported" After="LaunchConditions"><![CDATA[VersionNT64]]></Custom>
