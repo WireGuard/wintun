@@ -41,4 +41,9 @@
       <Optimization>Disabled</Optimization>
     </ClCompile>
   </ItemDefinitionGroup>
+  <PropertyGroup>
+    <WindowsSdkToolchainPlatform>$(PROCESSOR_ARCHITECTURE)</WindowsSdkToolchainPlatform>
+    <WindowsSdkToolchainPlatform Condition="'$(PROCESSOR_ARCHITECTURE)'=='AMD64'">x64</WindowsSdkToolchainPlatform>
+    <SignToolPath>$(WindowsSdkDir)bin\$(TargetPlatformVersion)\$(WindowsSdkToolchainPlatform)\signtool.exe</SignToolPath>
+  </PropertyGroup>
 </Project>
