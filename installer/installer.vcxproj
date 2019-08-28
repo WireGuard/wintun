@@ -190,15 +190,16 @@
   </ImportGroup>
   <Import Project="..\wintun.vcxproj.user" Condition="exists('..\wintun.vcxproj.user')" />
   <PropertyGroup>
-    <SigningCertificate Condition="$(SignMode)=='TestSign' And '$(TestCertificate)'!=''">$(TestCertificate)</SigningCertificate>
-    <SigningCertificate Condition="$(SignMode)=='ProductionSign' And '$(ProductionCertificate)'!=''">$(ProductionCertificate)</SigningCertificate>
-    <BuildDependsOn Condition="'$(SigningCertificate)'!='' And '$(TimeStampServer)'!=''">$(BuildDependsOn);SignTarget</BuildDependsOn>
-    <MSMDependsOn>$(MSMDependsOn);WixCompile;WixLink</MSMDependsOn>
-    <MSMDependsOn Condition="'$(SigningCertificate)'!='' And '$(TimeStampServer)'!=''">$(MSMDependsOn);WixSign</MSMDependsOn>
+    <BuildDependsOn>$(BuildDependsOn);TestSignTarget;ProductionSignTarget</BuildDependsOn>
+    <MSMDependsOn>$(MSMDependsOn);WixCompile;WixLink;WixTestSign;WixProductionSign</MSMDependsOn>
     <CleanDependsOn>CleanSignTarget;WixClean;$(CleanDependsOn)</CleanDependsOn>
   </PropertyGroup>
-  <Target Name="SignTarget" Inputs="$(TargetPath)" Outputs="$(IntermediateOutputPath)$(TargetName).sign">
-    <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 &quot;$(SigningCertificate)&quot; /fd sha256 /tr &quot;$(TimeStampServer)&quot; /td sha256 &quot;$(TargetPath)&quot;" />
+  <Target Name="TestSignTarget" Condition="$(SignMode)=='TestSign'" Inputs="$(TargetPath)" Outputs="$(IntermediateOutputPath)$(TargetName).sign">
+    <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 &quot;$(TestCertificate)&quot; /fd sha256 &quot;$(TargetPath)&quot;" />
+    <Touch Files="$(IntermediateOutputPath)$(TargetName).sign" AlwaysCreate="true" />
+  </Target>
+  <Target Name="ProductionSignTarget" Condition="$(SignMode)=='ProductionSign'" Inputs="$(TargetPath)" Outputs="$(IntermediateOutputPath)$(TargetName).sign">
+    <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 &quot;$(ProductionCertificate)&quot; /fd sha256 /tr &quot;$(TimeStampServer)&quot; /td sha256 &quot;$(TargetPath)&quot;" />
     <Touch Files="$(IntermediateOutputPath)$(TargetName).sign" AlwaysCreate="true" />
   </Target>
   <Target Name="CleanSignTarget">
@@ -218,8 +219,12 @@
   <Target Name="WixLink" DependsOnTargets="Build;WixCompile" Inputs="$(IntDir)installer.wixobj;$(OutDir)$(TargetName)$(TargetExt)" Outputs="$(WixOutputPath)$(WixOutputName)$(WixOutputExt)">
     <Exec Command="&quot;$(WIX)bin\light.exe&quot; $(WixLightFlags) -out &quot;$(WixOutputPath)$(WixOutputName)$(WixOutputExt)&quot; &quot;$(IntDir)installer.wixobj&quot;" />
   </Target>
-  <Target Name="WixSign" DependsOnTargets="WixLink" Inputs="$(WixOutputPath)$(WixOutputName)$(WixOutputExt)" Outputs="$(IntDir)$(WixOutputName).sign">
-    <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 &quot;$(SigningCertificate)&quot; /fd sha256 /tr &quot;$(TimeStampServer)&quot; /td sha256 &quot;$(WixOutputPath)$(WixOutputName)$(WixOutputExt)&quot;" />
+  <Target Name="WixTestSign" Condition="$(SignMode)=='TestSign'" DependsOnTargets="WixLink" Inputs="$(WixOutputPath)$(WixOutputName)$(WixOutputExt)" Outputs="$(IntDir)$(WixOutputName).sign">
+    <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 &quot;$(TestCertificate)&quot; /fd sha256 &quot;$(WixOutputPath)$(WixOutputName)$(WixOutputExt)&quot;" />
+    <Touch Files="$(IntDir)$(WixOutputName).sign" AlwaysCreate="true" />
+  </Target>
+  <Target Name="WixProductionSign" Condition="$(SignMode)=='ProductionSign'" DependsOnTargets="WixLink" Inputs="$(WixOutputPath)$(WixOutputName)$(WixOutputExt)" Outputs="$(IntDir)$(WixOutputName).sign">
+    <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 &quot;$(ProductionCertificate)&quot; /fd sha256 /tr &quot;$(TimeStampServer)&quot; /td sha256 &quot;$(WixOutputPath)$(WixOutputName)$(WixOutputExt)&quot;" />
     <Touch Files="$(IntDir)$(WixOutputName).sign" AlwaysCreate="true" />
   </Target>
   <Target Name="WixClean">
