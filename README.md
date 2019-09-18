@@ -156,7 +156,7 @@ Wintun will abort reading the receive ring on invalid `Head` or `Tail` or on a b
 
 ## Building
 
-**Do not distribute drivers named "Wintun", as they will most certainly clash with official deployments. Instead distribute [the signed MSMs from Wintun.net](https://www.wintun.net/).**
+**Do not distribute drivers named "Wintun", as they will most certainly clash with official deployments. Instead distribute [the signed MSMs from Wintun.net](https://www.wintun.net/).** If you are unable to use MSMs, [consult the MSI creation instructions](msi-example/README.md).
 
 General requirements:
 
