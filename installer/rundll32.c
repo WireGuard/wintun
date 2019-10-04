@@ -42,15 +42,19 @@ static BOOL ElevateToSystem(VOID)
     TOKEN_PRIVILEGES Privileges = { .PrivilegeCount = 1, .Privileges = { { .Attributes = SE_PRIVILEGE_ENABLED } } };
     CHAR LocalSystemSid[0x400];
     DWORD RequiredBytes = sizeof(LocalSystemSid);
-
-    if (!CreateWellKnownSid(WinLocalSystemSid, NULL, &LocalSystemSid, &RequiredBytes))
-        goto cleanup;
     struct
     {
         TOKEN_USER MaybeLocalSystem;
         CHAR LargeEnoughForLocalSystem[0x400];
     } TokenUserBuffer;
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &CurrentProcessToken))
+
+    Ret = CreateWellKnownSid(WinLocalSystemSid, NULL, &LocalSystemSid, &RequiredBytes);
+    LastError = GetLastError();
+    if (!Ret)
+        goto cleanup;
+    Ret = OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &CurrentProcessToken);
+    LastError = GetLastError();
+    if (!Ret)
         goto cleanup;
     Ret =
         GetTokenInformation(CurrentProcessToken, TokenUser, &TokenUserBuffer, sizeof(TokenUserBuffer), &RequiredBytes);
@@ -60,41 +64,47 @@ static BOOL ElevateToSystem(VOID)
         goto cleanup;
     if (EqualSid(TokenUserBuffer.MaybeLocalSystem.User.Sid, LocalSystemSid))
         return TRUE;
-    if (!LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &Privileges.Privileges[0].Luid))
+    Ret = LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &Privileges.Privileges[0].Luid);
+    LastError = GetLastError();
+    if (!Ret)
         goto cleanup;
     ProcessSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    LastError = GetLastError();
     if (ProcessSnapshot == INVALID_HANDLE_VALUE)
         goto cleanup;
-    for (Ret = Process32First(ProcessSnapshot, &ProcessEntry); Ret;
-         LastError = GetLastError(), Ret = Process32Next(ProcessSnapshot, &ProcessEntry))
+    for (Ret = Process32First(ProcessSnapshot, &ProcessEntry); Ret; Ret = Process32Next(ProcessSnapshot, &ProcessEntry))
     {
         if (_tcsicmp(ProcessEntry.szExeFile, TEXT("winlogon.exe")))
             continue;
         RevertToSelf();
-        if (!ImpersonateSelf(SecurityImpersonation))
+        Ret = ImpersonateSelf(SecurityImpersonation);
+        LastError = GetLastError();
+        if (!Ret)
             continue;
-        if (!OpenThreadToken(GetCurrentThread(), TOKEN_ADJUST_PRIVILEGES, FALSE, &ThreadToken))
+        Ret = OpenThreadToken(GetCurrentThread(), TOKEN_ADJUST_PRIVILEGES, FALSE, &ThreadToken);
+        LastError = GetLastError();
+        if (!Ret)
             continue;
-        if (!AdjustTokenPrivileges(ThreadToken, FALSE, &Privileges, sizeof(Privileges), NULL, NULL))
-        {
-            LastError = GetLastError();
-            CloseHandle(ThreadToken);
-            continue;
-        }
+        Ret = AdjustTokenPrivileges(ThreadToken, FALSE, &Privileges, sizeof(Privileges), NULL, NULL);
+        LastError = GetLastError();
         CloseHandle(ThreadToken);
+        if (!Ret)
+            continue;
 
         WinlogonProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, ProcessEntry.th32ProcessID);
+        LastError = GetLastError();
         if (!WinlogonProcess)
             continue;
-        if (!OpenProcessToken(WinlogonProcess, TOKEN_IMPERSONATE | TOKEN_DUPLICATE, &WinlogonToken))
-            continue;
+        Ret = OpenProcessToken(WinlogonProcess, TOKEN_IMPERSONATE | TOKEN_DUPLICATE, &WinlogonToken);
+        LastError = GetLastError();
         CloseHandle(WinlogonProcess);
-        if (!DuplicateToken(WinlogonToken, SecurityImpersonation, &DuplicatedToken))
-        {
-            LastError = GetLastError();
+        if (!Ret)
             continue;
-        }
+        Ret = DuplicateToken(WinlogonToken, SecurityImpersonation, &DuplicatedToken);
+        LastError = GetLastError();
         CloseHandle(WinlogonToken);
+        if (!Ret)
+            continue;
         if (!GetTokenInformation(DuplicatedToken, TokenUser, &TokenUserBuffer, sizeof(TokenUserBuffer), &RequiredBytes))
             goto next;
         if (SetLastError(ERROR_ACCESS_DENIED), !EqualSid(TokenUserBuffer.MaybeLocalSystem.User.Sid, LocalSystemSid))

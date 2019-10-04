@@ -298,7 +298,7 @@ InstallWintun(BOOL UpdateExisting)
         Logger(LOG_WARN, TEXT("A reboot might be required, which really should not be the case"));
 
 cleanupDelete:
-    LastError = LastError ? LastError : GetLastError();
+    LastError = GetLastError();
     DeleteFile(CatPath);
     DeleteFile(SysPath);
     DeleteFile(InfPath);
@@ -410,8 +410,9 @@ ForceCloseWintunAdapterHandle(_In_ HDEVINFO DeviceInfoSet, _In_ SP_DEVINFO_DATA 
     TCHAR *InstanceId = calloc(sizeof(*InstanceId), RequiredBytes);
     if (!InstanceId)
         return FALSE;
+    BOOL Ret = FALSE;
     if (!SetupDiGetDeviceInstanceId(DeviceInfoSet, DeviceInfo, InstanceId, RequiredBytes, &RequiredBytes))
-        return FALSE;
+        goto out;
     TCHAR *InterfaceList = NULL;
     for (;;)
     {
@@ -419,22 +420,22 @@ ForceCloseWintunAdapterHandle(_In_ HDEVINFO DeviceInfoSet, _In_ SP_DEVINFO_DATA 
         if (CM_Get_Device_Interface_List_Size(
                 &RequiredBytes, (LPGUID)&GUID_DEVINTERFACE_NET, InstanceId, CM_GET_DEVICE_INTERFACE_LIST_PRESENT) !=
             CR_SUCCESS)
-            return FALSE;
+            goto out;
         InterfaceList = calloc(sizeof(*InterfaceList), RequiredBytes);
         if (!InterfaceList)
-            return FALSE;
-        CONFIGRET Ret = CM_Get_Device_Interface_List(
+            goto out;
+        CONFIGRET CRet = CM_Get_Device_Interface_List(
             (LPGUID)&GUID_DEVINTERFACE_NET,
             InstanceId,
             InterfaceList,
             RequiredBytes,
             CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
-        if (Ret == CR_SUCCESS)
+        if (CRet == CR_SUCCESS)
             break;
-        if (Ret != CR_BUFFER_SMALL)
+        if (CRet != CR_BUFFER_SMALL)
         {
             free(InterfaceList);
-            return FALSE;
+            goto out;
         }
     }
 
@@ -448,11 +449,13 @@ ForceCloseWintunAdapterHandle(_In_ HDEVINFO DeviceInfoSet, _In_ SP_DEVINFO_DATA 
         NULL);
     free(InterfaceList);
     if (NdisHandle == INVALID_HANDLE_VALUE)
-        return FALSE;
-    BOOL Ret = DeviceIoControl(NdisHandle, TUN_IOCTL_FORCE_CLOSE_HANDLES, NULL, 0, NULL, 0, &RequiredBytes, NULL);
+        goto out;
+    Ret = DeviceIoControl(NdisHandle, TUN_IOCTL_FORCE_CLOSE_HANDLES, NULL, 0, NULL, 0, &RequiredBytes, NULL);
     DWORD LastError = GetLastError();
     CloseHandle(NdisHandle);
     SetLastError(LastError);
+out:
+    free(InstanceId);
     return Ret;
 }
 
