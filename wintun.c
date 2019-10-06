@@ -122,7 +122,10 @@ typedef struct _TUN_CTX
 
     struct
     {
-        FILE_OBJECT *volatile Owner;
+        LIST_ENTRY Entry;
+        ERESOURCE RegistrationLock;
+        FILE_OBJECT *OwningFileObject;
+        HANDLE OwningProcessId;
         KEVENT Disconnected;
 
         struct
@@ -161,7 +164,8 @@ typedef struct _TUN_CTX
 static UINT NdisVersion;
 static NDIS_HANDLE NdisMiniportDriverHandle;
 static DRIVER_DISPATCH *NdisDispatchDeviceControl, *NdisDispatchClose;
-static ERESOURCE TunDispatchCtxGuard;
+static ERESOURCE TunDispatchCtxGuard, TunDispatchDeviceListLock;
+static RTL_STATIC_LIST_HEAD(TunDispatchDeviceList);
 static SECURITY_DESCRIPTOR *TunDispatchSecurityDescriptor;
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
@@ -542,11 +546,15 @@ _Must_inspect_result_
 static NTSTATUS
 TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
 {
-    NTSTATUS Status;
+    NTSTATUS Status = STATUS_ALREADY_INITIALIZED;
     IO_STACK_LOCATION *Stack = IoGetCurrentIrpStackLocation(Irp);
 
-    if (InterlockedCompareExchangePointer(&Ctx->Device.Owner, Stack->FileObject, NULL) != NULL)
-        return STATUS_ALREADY_INITIALIZED;
+    if (!ExAcquireResourceExclusiveLite(&Ctx->Device.RegistrationLock, FALSE))
+        return Status;
+
+    if (Ctx->Device.OwningFileObject)
+        goto cleanupMutex;
+    Ctx->Device.OwningFileObject = Stack->FileObject;
 
     ASSERT(InterlockedGet(&Ctx->Running));
 
@@ -631,6 +639,13 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
             &Ctx->Device.Receive.Thread, THREAD_ALL_ACCESS, &ObjectAttributes, NULL, NULL, TunProcessReceiveData, Ctx)))
         goto cleanupFlagsConnected;
 
+    Ctx->Device.OwningProcessId = PsGetCurrentProcessId();
+    InitializeListHead(&Ctx->Device.Entry);
+    ExAcquireResourceExclusiveLite(&TunDispatchDeviceListLock, TRUE);
+    InsertTailList(&TunDispatchDeviceList, &Ctx->Device.Entry);
+    ExReleaseResourceLite(&TunDispatchDeviceListLock);
+
+    ExReleaseResourceLite(&Ctx->Device.RegistrationLock);
     TunIndicateStatus(Ctx->MiniportAdapterHandle, MediaConnectStateConnected);
     return STATUS_SUCCESS;
 
@@ -652,16 +667,30 @@ cleanupSendMdl:
 cleanupSendTailMoved:
     ObDereferenceObject(Ctx->Device.Send.TailMoved);
 cleanupResetOwner:
-    InterlockedSetPointer(&Ctx->Device.Owner, NULL);
+    Ctx->Device.OwningFileObject = NULL;
+cleanupMutex:
+    ExReleaseResourceLite(&Ctx->Device.RegistrationLock);
     return Status;
 }
 
+#define TUN_FORCE_UNREGISTRATION ((FILE_OBJECT *)-1)
 _IRQL_requires_max_(PASSIVE_LEVEL)
 static VOID
 TunUnregisterBuffers(_Inout_ TUN_CTX *Ctx, _In_ FILE_OBJECT *Owner)
 {
-    if (InterlockedCompareExchangePointer(&Ctx->Device.Owner, NULL, Owner) != Owner)
+    if (!Owner)
         return;
+    ExAcquireResourceExclusiveLite(&Ctx->Device.RegistrationLock, TRUE);
+    if (!Ctx->Device.OwningFileObject || (Owner != TUN_FORCE_UNREGISTRATION && Ctx->Device.OwningFileObject != Owner))
+    {
+        ExReleaseResourceLite(&Ctx->Device.RegistrationLock);
+        return;
+    }
+    Ctx->Device.OwningFileObject = NULL;
+
+    ExAcquireResourceExclusiveLite(&TunDispatchDeviceListLock, TRUE);
+    RemoveEntryList(&Ctx->Device.Entry);
+    ExReleaseResourceLite(&TunDispatchDeviceListLock);
 
     TunIndicateStatus(Ctx->MiniportAdapterHandle, MediaConnectStateDisconnected);
 
@@ -688,10 +717,12 @@ TunUnregisterBuffers(_Inout_ TUN_CTX *Ctx, _In_ FILE_OBJECT *Owner)
     MmUnlockPages(Ctx->Device.Send.Mdl);
     IoFreeMdl(Ctx->Device.Send.Mdl);
     ObDereferenceObject(Ctx->Device.Send.TailMoved);
+
+    ExReleaseResourceLite(&Ctx->Device.RegistrationLock);
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
-static void
+static VOID
 TunForceHandlesClosed(_Inout_ DEVICE_OBJECT *DeviceObject)
 {
     NTSTATUS Status;
@@ -786,6 +817,30 @@ static NTSTATUS TunInitializeDispatchSecurityDescriptor(VOID)
     if (!NT_SUCCESS(Status))
         return Status;
     return STATUS_SUCCESS;
+}
+
+_IRQL_requires_max_(PASSIVE_LEVEL)
+static VOID
+TunProcessNotification(HANDLE ParentId, HANDLE ProcessId, BOOLEAN Create)
+{
+    if (Create)
+        return;
+    ExAcquireSharedStarveExclusive(&TunDispatchDeviceListLock, TRUE);
+    TUN_CTX *Ctx = NULL;
+    for (LIST_ENTRY *Entry = TunDispatchDeviceList.Flink; Entry != &TunDispatchDeviceList; Entry = Entry->Flink)
+    {
+        TUN_CTX *Candidate = CONTAINING_RECORD(Entry, TUN_CTX, Device.Entry);
+        if (Candidate->Device.OwningProcessId == ProcessId)
+        {
+            Ctx = Candidate;
+            break;
+        }
+    }
+    ExReleaseResourceLite(&TunDispatchDeviceListLock);
+    if (!Ctx)
+        return;
+
+    TunUnregisterBuffers(Ctx, TUN_FORCE_UNREGISTRATION);
 }
 
 _Dispatch_type_(IRP_MJ_DEVICE_CONTROL)
@@ -947,6 +1002,7 @@ TunInitializeEx(
     KeInitializeSpinLock(&Ctx->Device.Send.Lock);
     KeInitializeSpinLock(&Ctx->Device.Receive.Lock);
     KeInitializeEvent(&Ctx->Device.Receive.ActiveNbls.Empty, NotificationEvent, TRUE);
+    ExInitializeResourceLite(&Ctx->Device.RegistrationLock);
 
     NET_BUFFER_LIST_POOL_PARAMETERS NblPoolParameters = {
         .Header = { .Type = NDIS_OBJECT_TYPE_DEFAULT,
@@ -1063,6 +1119,8 @@ TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltAction)
 {
     TUN_CTX *Ctx = (TUN_CTX *)MiniportAdapterContext;
 
+    TunUnregisterBuffers(Ctx, TUN_FORCE_UNREGISTRATION);
+
     ExReleaseSpinLockExclusive(
         &Ctx->TransitionLock,
         ExAcquireSpinLockExclusive(&Ctx->TransitionLock)); /* Ensure above change is visible to all readers. */
@@ -1075,6 +1133,7 @@ TunHaltEx(NDIS_HANDLE MiniportAdapterContext, NDIS_HALT_ACTION HaltAction)
     ExAcquireResourceExclusiveLite(&TunDispatchCtxGuard, TRUE); /* Ensure above change is visible to all readers. */
     ExReleaseResourceLite(&TunDispatchCtxGuard);
     KeLeaveCriticalRegion();
+    ExDeleteResourceLite(&Ctx->Device.RegistrationLock);
     ExFreePoolWithTag(Ctx, TUN_MEMORY_TAG);
 }
 
@@ -1323,8 +1382,10 @@ _Use_decl_annotations_
 static VOID
 TunUnload(PDRIVER_OBJECT DriverObject)
 {
+    PsSetCreateProcessNotifyRoutine(TunProcessNotification, TRUE);
     NdisMDeregisterMiniportDriver(NdisMiniportDriverHandle);
     ExDeleteResourceLite(&TunDispatchCtxGuard);
+    ExDeleteResourceLite(&TunDispatchDeviceListLock);
     ExFreePoolWithTag(TunDispatchSecurityDescriptor, TUN_MEMORY_TAG);
 }
 
@@ -1345,6 +1406,7 @@ DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
         NdisVersion = NDIS_MINIPORT_VERSION_MAX;
 
     ExInitializeResourceLite(&TunDispatchCtxGuard);
+    ExInitializeResourceLite(&TunDispatchDeviceListLock);
 
     NDIS_MINIPORT_DRIVER_CHARACTERISTICS miniport = {
         .Header = { .Type = NDIS_OBJECT_TYPE_MINIPORT_DRIVER_CHARACTERISTICS,
@@ -1377,13 +1439,14 @@ DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
         .CancelDirectOidRequestHandler = TunCancelDirectOidRequest,
         .SynchronousOidRequestHandler = TunSynchronousOidRequest
     };
+
+    Status = PsSetCreateProcessNotifyRoutine(TunProcessNotification, FALSE);
+    if (!NT_SUCCESS(Status))
+        goto cleanupResources;
+
     Status = NdisMRegisterMiniportDriver(DriverObject, RegistryPath, NULL, &miniport, &NdisMiniportDriverHandle);
     if (!NT_SUCCESS(Status))
-    {
-        ExDeleteResourceLite(&TunDispatchCtxGuard);
-        ExFreePoolWithTag(TunDispatchSecurityDescriptor, TUN_MEMORY_TAG);
-        return Status;
-    }
+        goto cleanupNotifier;
 
     NdisDispatchDeviceControl = DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL];
     NdisDispatchClose = DriverObject->MajorFunction[IRP_MJ_CLOSE];
@@ -1391,4 +1454,12 @@ DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
     DriverObject->MajorFunction[IRP_MJ_CLOSE] = TunDispatchClose;
 
     return STATUS_SUCCESS;
+
+cleanupNotifier:
+    PsSetCreateProcessNotifyRoutine(TunProcessNotification, TRUE);
+cleanupResources:
+    ExDeleteResourceLite(&TunDispatchCtxGuard);
+    ExDeleteResourceLite(&TunDispatchDeviceListLock);
+    ExFreePoolWithTag(TunDispatchSecurityDescriptor, TUN_MEMORY_TAG);
+    return Status;
 }
