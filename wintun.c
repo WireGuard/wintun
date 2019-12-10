@@ -337,10 +337,8 @@ cleanupKeReleaseInStackQueuedSpinLock:
     KeReleaseInStackQueuedSpinLock(&LockHandle);
 skipNbl:
     for (NET_BUFFER_LIST *Nbl = NetBufferLists; Nbl; Nbl = NET_BUFFER_LIST_NEXT_NBL(Nbl))
-    {
         NET_BUFFER_LIST_STATUS(Nbl) = Status;
-        DiscardedPacketsCount += PacketsCount;
-    }
+    DiscardedPacketsCount += PacketsCount;
     ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
     NdisMSendNetBufferListsComplete(Ctx->MiniportAdapterHandle, NetBufferLists, 0);
 updateStatistics:
