@@ -192,6 +192,11 @@ TunIndicateStatus(_In_ NDIS_HANDLE MiniportAdapterHandle, _In_ NDIS_MEDIA_CONNEC
     NdisMIndicateStatusEx(MiniportAdapterHandle, &Indication);
 }
 
+/* Send: We should not modify NET_BUFFER_LIST_NEXT_NBL(Nbl) to prevent fragmented NBLs to separate.
+ * Receive: NDIS may change NET_BUFFER_LIST_NEXT_NBL(Nbl) at will between the NdisMIndicateReceiveNetBufferLists() and
+ * MINIPORT_RETURN_NET_BUFFER_LISTS calls. Therefore, we use our own ->Next pointer for book-keeping. */
+#define NET_BUFFER_LIST_NEXT_NBL_EX(Nbl) (NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[1])
+
 static VOID
 TunNblSetOffsetAndMarkActive(_Inout_ NET_BUFFER_LIST *Nbl, _In_ ULONG Offset)
 {
@@ -229,12 +234,10 @@ TunSendNetBufferLists(
     TUN_CTX *Ctx = (TUN_CTX *)MiniportAdapterContext;
     LONG64 SentPacketsCount = 0, SentPacketsSize = 0, ErrorPacketsCount = 0, DiscardedPacketsCount = 0;
 
-    for (NET_BUFFER_LIST *Nbl = NetBufferLists, *NextNbl; Nbl; Nbl = NextNbl)
+    /* Measure NBLs. */
+    ULONG PacketsCount = 0, RequiredRingSpace = 0;
+    for (NET_BUFFER_LIST *Nbl = NetBufferLists; Nbl; Nbl = NET_BUFFER_LIST_NEXT_NBL(Nbl))
     {
-        NextNbl = NET_BUFFER_LIST_NEXT_NBL(Nbl);
-
-        /* Measure NBL. */
-        ULONG PacketsCount = 0, RequiredRingSpace = 0;
         for (NET_BUFFER *Nb = NET_BUFFER_LIST_FIRST_NB(Nbl); Nb; Nb = NET_BUFFER_NEXT_NB(Nb))
         {
             PacketsCount++;
@@ -242,40 +245,43 @@ TunSendNetBufferLists(
             if (PacketSize <= TUN_MAX_IP_PACKET_SIZE)
                 RequiredRingSpace += TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize);
         }
+    }
 
-        KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
-        NDIS_STATUS Status;
-        if ((Status = NDIS_STATUS_PAUSED, !InterlockedGet(&Ctx->Running)) ||
-            (Status = NDIS_STATUS_MEDIA_DISCONNECTED, KeReadStateEvent(&Ctx->Device.Disconnected)))
-            goto skipNbl;
+    KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
+    NDIS_STATUS Status;
+    if ((Status = NDIS_STATUS_PAUSED, !InterlockedGet(&Ctx->Running)) ||
+        (Status = NDIS_STATUS_MEDIA_DISCONNECTED, KeReadStateEvent(&Ctx->Device.Disconnected)))
+        goto skipNbl;
 
-        TUN_RING *Ring = Ctx->Device.Send.Ring;
-        ULONG RingCapacity = Ctx->Device.Send.Capacity;
+    TUN_RING *Ring = Ctx->Device.Send.Ring;
+    ULONG RingCapacity = Ctx->Device.Send.Capacity;
 
-        /* Allocate space for packet(s) in the ring. */
-        ULONG RingHead = InterlockedGetU(&Ring->Head);
-        if (Status = NDIS_STATUS_ADAPTER_NOT_READY, RingHead >= RingCapacity)
-            goto skipNbl;
+    /* Allocate space for packets in the ring. */
+    ULONG RingHead = InterlockedGetU(&Ring->Head);
+    if (Status = NDIS_STATUS_ADAPTER_NOT_READY, RingHead >= RingCapacity)
+        goto skipNbl;
 
-        KLOCK_QUEUE_HANDLE LockHandle;
-        KeAcquireInStackQueuedSpinLock(&Ctx->Device.Send.Lock, &LockHandle);
+    KLOCK_QUEUE_HANDLE LockHandle;
+    KeAcquireInStackQueuedSpinLock(&Ctx->Device.Send.Lock, &LockHandle);
 
-        ULONG RingTail = Ctx->Device.Send.RingTail;
-        ASSERT(RingTail < RingCapacity);
+    ULONG RingTail = Ctx->Device.Send.RingTail;
+    ASSERT(RingTail < RingCapacity);
 
-        ULONG RingSpace = TUN_RING_WRAP(RingHead - RingTail - TUN_ALIGNMENT, RingCapacity);
-        if (Status = NDIS_STATUS_BUFFER_OVERFLOW, RingSpace < RequiredRingSpace)
-            goto cleanupKeReleaseInStackQueuedSpinLock;
+    ULONG RingSpace = TUN_RING_WRAP(RingHead - RingTail - TUN_ALIGNMENT, RingCapacity);
+    if (Status = NDIS_STATUS_BUFFER_OVERFLOW, RingSpace < RequiredRingSpace)
+        goto cleanupKeReleaseInStackQueuedSpinLock;
 
-        Ctx->Device.Send.RingTail = TUN_RING_WRAP(RingTail + RequiredRingSpace, RingCapacity);
-        TunNblSetOffsetAndMarkActive(Nbl, Ctx->Device.Send.RingTail);
-        *(Ctx->Device.Send.ActiveNbls.Head ? &NET_BUFFER_LIST_NEXT_NBL(Ctx->Device.Send.ActiveNbls.Tail)
-                                           : &Ctx->Device.Send.ActiveNbls.Head) = Nbl;
-        Ctx->Device.Send.ActiveNbls.Tail = Nbl;
+    Ctx->Device.Send.RingTail = TUN_RING_WRAP(RingTail + RequiredRingSpace, RingCapacity);
+    TunNblSetOffsetAndMarkActive(NetBufferLists, Ctx->Device.Send.RingTail);
+    *(Ctx->Device.Send.ActiveNbls.Head ? &NET_BUFFER_LIST_NEXT_NBL_EX(Ctx->Device.Send.ActiveNbls.Tail)
+                                       : &Ctx->Device.Send.ActiveNbls.Head) = NetBufferLists;
+    Ctx->Device.Send.ActiveNbls.Tail = NetBufferLists;
 
-        KeReleaseInStackQueuedSpinLock(&LockHandle);
+    KeReleaseInStackQueuedSpinLock(&LockHandle);
 
-        /* Copy packet(s). */
+    /* Copy packets. */
+    for (NET_BUFFER_LIST *Nbl = NetBufferLists; Nbl; Nbl = NET_BUFFER_LIST_NEXT_NBL(Nbl))
+    {
         for (NET_BUFFER *Nb = NET_BUFFER_LIST_FIRST_NB(Nbl); Nb; Nb = NET_BUFFER_NEXT_NB(Nb))
         {
             UINT PacketSize = NET_BUFFER_DATA_LENGTH(Nb);
@@ -291,6 +297,7 @@ TunSendNetBufferLists(
                  * fixing the gap in the ring. */
                 NdisZeroMemory(Packet->Data, PacketSize);
                 DiscardedPacketsCount++;
+                NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_FAILURE;
             }
             else
             {
@@ -307,35 +314,36 @@ TunSendNetBufferLists(
             ErrorPacketsCount++;
             NET_BUFFER_LIST_STATUS(Nbl) = Status;
         }
-        ASSERT(RingTail == TunNblGetOffset(Nbl));
+    }
+    ASSERT(RingTail == TunNblGetOffset(NetBufferLists));
+    TunNblMarkCompleted(NetBufferLists);
 
-        /* Adjust the ring tail. */
-        TunNblMarkCompleted(Nbl);
-        KeAcquireInStackQueuedSpinLock(&Ctx->Device.Send.Lock, &LockHandle);
-        while (Ctx->Device.Send.ActiveNbls.Head && TunNblIsCompleted(Ctx->Device.Send.ActiveNbls.Head))
-        {
-            NET_BUFFER_LIST *CompletedNbl = Ctx->Device.Send.ActiveNbls.Head;
-            Ctx->Device.Send.ActiveNbls.Head = NET_BUFFER_LIST_NEXT_NBL(CompletedNbl);
-            InterlockedSetU(&Ring->Tail, TunNblGetOffset(CompletedNbl));
-            KeSetEvent(Ctx->Device.Send.TailMoved, IO_NETWORK_INCREMENT, FALSE);
-            NET_BUFFER_LIST_NEXT_NBL(CompletedNbl) = NULL;
-            NdisMSendNetBufferListsComplete(
-                Ctx->MiniportAdapterHandle, CompletedNbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
-        }
-        KeReleaseInStackQueuedSpinLock(&LockHandle);
-        ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
-        continue;
+    /* Adjust the ring tail. */
+    KeAcquireInStackQueuedSpinLock(&Ctx->Device.Send.Lock, &LockHandle);
+    while (Ctx->Device.Send.ActiveNbls.Head && TunNblIsCompleted(Ctx->Device.Send.ActiveNbls.Head))
+    {
+        NET_BUFFER_LIST *CompletedNbl = Ctx->Device.Send.ActiveNbls.Head;
+        Ctx->Device.Send.ActiveNbls.Head = NET_BUFFER_LIST_NEXT_NBL_EX(CompletedNbl);
+        InterlockedSetU(&Ring->Tail, TunNblGetOffset(CompletedNbl));
+        KeSetEvent(Ctx->Device.Send.TailMoved, IO_NETWORK_INCREMENT, FALSE);
+        NdisMSendNetBufferListsComplete(
+            Ctx->MiniportAdapterHandle, CompletedNbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
+    }
+    KeReleaseInStackQueuedSpinLock(&LockHandle);
+    ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
+    goto updateStatistics;
 
-    cleanupKeReleaseInStackQueuedSpinLock:
-        KeReleaseInStackQueuedSpinLock(&LockHandle);
-    skipNbl:
+cleanupKeReleaseInStackQueuedSpinLock:
+    KeReleaseInStackQueuedSpinLock(&LockHandle);
+skipNbl:
+    for (NET_BUFFER_LIST *Nbl = NetBufferLists; Nbl; Nbl = NET_BUFFER_LIST_NEXT_NBL(Nbl))
+    {
         NET_BUFFER_LIST_STATUS(Nbl) = Status;
-        NET_BUFFER_LIST_NEXT_NBL(Nbl) = NULL;
-        NdisMSendNetBufferListsComplete(Ctx->MiniportAdapterHandle, Nbl, NDIS_SEND_COMPLETE_FLAGS_DISPATCH_LEVEL);
-        ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
         DiscardedPacketsCount += PacketsCount;
     }
-
+    ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
+    NdisMSendNetBufferListsComplete(Ctx->MiniportAdapterHandle, NetBufferLists, 0);
+updateStatistics:
     InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCOutOctets, SentPacketsSize);
     InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCOutUcastOctets, SentPacketsSize);
     InterlockedAdd64((LONG64 *)&Ctx->Statistics.ifHCOutUcastPkts, SentPacketsCount);
@@ -349,10 +357,6 @@ static VOID
 TunCancelSend(NDIS_HANDLE MiniportAdapterContext, PVOID CancelId)
 {
 }
-
-/* NDIS may change NET_BUFFER_LIST_NEXT_NBL(Nbl) at will between the NdisMIndicateReceiveNetBufferLists() and
- * MINIPORT_RETURN_NET_BUFFER_LISTS calls. Therefore, we use our own ->Next pointer for book-keeping. */
-#define NET_BUFFER_LIST_NEXT_NBL_EX(Nbl) (NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[1])
 
 static MINIPORT_RETURN_NET_BUFFER_LISTS TunReturnNetBufferLists;
 _Use_decl_annotations_
