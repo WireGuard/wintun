@@ -242,8 +242,9 @@ TunSendNetBufferLists(
         {
             PacketsCount++;
             UINT PacketSize = NET_BUFFER_DATA_LENGTH(Nb);
-            if (PacketSize <= TUN_MAX_IP_PACKET_SIZE)
-                RequiredRingSpace += TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize);
+            if (PacketSize > TUN_MAX_IP_PACKET_SIZE)
+                continue; /* The same condition holds down below, where we `goto skipPacket`. */
+            RequiredRingSpace += TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize);
         }
     }
 
