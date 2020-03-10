@@ -129,10 +129,12 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32' Or '$(Platform)'=='x64' Or '$(Configuration)'=='Debug'">HAVE_EV;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="Exists('..\$(WintunPlatform)\$(Configuration)\whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <ResourceCompile>
       <AdditionalIncludeDirectories>..\$(WintunPlatform)\$(Configuration);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32' Or '$(Platform)'=='x64' Or '$(Configuration)'=='Debug'">HAVE_EV;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="Exists('..\$(WintunPlatform)\$(Configuration)\whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>

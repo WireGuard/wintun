@@ -272,10 +272,16 @@ InstallWintun(BOOL UpdateExisting)
         goto cleanupFree;
 
     BOOL UseWHQL = FALSE;
-#ifdef HAVE_WHQL
+#if defined(HAVE_EV) && defined(HAVE_WHQL)
     DWORD MajorVersion;
     RtlGetNtVersionNumbers(&MajorVersion, NULL, NULL);
     UseWHQL = MajorVersion >= 10;
+#elif defined(HAVE_EV)
+    UseWHQL = FALSE;
+#elif defined(HAVE_WHQL)
+    UseWHQL = TRUE;
+#else
+    #error No driver available
 #endif
     if (!UseWHQL && !InstallWintunCertificate(TEXT("wintun.sys")))
         PrintError(LOG_WARN, TEXT("Unable to install code signing certificate"));
