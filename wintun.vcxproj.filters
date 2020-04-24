@@ -33,8 +33,5 @@
     <ClInclude Include="undocumented.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="atomic.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
 </Project>
