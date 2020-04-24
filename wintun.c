@@ -788,7 +788,7 @@ static NTSTATUS TunInitializeDispatchSecurityDescriptor(VOID)
     SID LocalSystem = { 0 };
     if (!NT_SUCCESS(Status = RtlInitializeSid(&LocalSystem, &NtAuthority, 1)))
         return Status;
-    LocalSystem.SubAuthority[0] = 18;
+    *RtlSubAuthoritySid(&LocalSystem, 0) = SECURITY_LOCAL_SYSTEM_RID;
     struct
     {
         ACL Dacl;
