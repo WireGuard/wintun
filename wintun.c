@@ -99,6 +99,25 @@ typedef struct _TUN_REGISTER_RINGS
     } Send, Receive;
 } TUN_REGISTER_RINGS;
 
+#ifdef _WIN64
+typedef struct _TUN_REGISTER_RINGS_32
+{
+    struct
+    {
+        /* Size of the ring */
+        ULONG RingSize;
+
+        /* 32-bit addres of client allocated ring */
+        ULONG Ring;
+
+        /* On send: An event created by the client the Wintun signals after it moves the Tail member of the send ring.
+         * On receive: An event created by the client the client will signal when it moves the Tail member of
+         * the receive ring if receive ring is alertable. */
+        ULONG TailMoved;
+    } Send, Receive;
+} TUN_REGISTER_RINGS_32;
+#endif
+
 /* Register rings hosted by the client.
  * The lpInBuffer and nInBufferSize parameters of DeviceIoControl() must point to an TUN_REGISTER_RINGS struct.
  * Client must wait for this IOCTL to finish before adding packets to the ring. */
@@ -558,19 +577,37 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         goto cleanupMutex;
     Ctx->Device.OwningFileObject = Stack->FileObject;
 
-    TUN_REGISTER_RINGS *Rrb = Irp->AssociatedIrp.SystemBuffer;
-    if (Status = STATUS_INVALID_PARAMETER, Stack->Parameters.DeviceIoControl.InputBufferLength != sizeof(*Rrb))
+    TUN_REGISTER_RINGS Rrb;
+    if (Stack->Parameters.DeviceIoControl.InputBufferLength == sizeof(Rrb))
+        NdisMoveMemory(&Rrb, Irp->AssociatedIrp.SystemBuffer, sizeof(Rrb));
+#ifdef _WIN64
+    else if (
+        IoIs32bitProcess(Irp) && Stack->Parameters.DeviceIoControl.InputBufferLength == sizeof(TUN_REGISTER_RINGS_32))
+    {
+        TUN_REGISTER_RINGS_32 *Rrb32 = Irp->AssociatedIrp.SystemBuffer;
+        Rrb.Send.RingSize = Rrb32->Send.RingSize;
+        Rrb.Send.Ring = (TUN_RING *)Rrb32->Send.Ring;
+        Rrb.Send.TailMoved = (HANDLE)Rrb32->Send.TailMoved;
+        Rrb.Receive.RingSize = Rrb32->Receive.RingSize;
+        Rrb.Receive.Ring = (TUN_RING *)Rrb32->Receive.Ring;
+        Rrb.Receive.TailMoved = (HANDLE)Rrb32->Receive.TailMoved;
+    }
+#endif
+    else
+    {
+        Status = STATUS_INVALID_PARAMETER;
         goto cleanupResetOwner;
+    }
 
-    Ctx->Device.Send.Capacity = TUN_RING_CAPACITY(Rrb->Send.RingSize);
+    Ctx->Device.Send.Capacity = TUN_RING_CAPACITY(Rrb.Send.RingSize);
     if (Status = STATUS_INVALID_PARAMETER,
         (Ctx->Device.Send.Capacity < TUN_MIN_RING_CAPACITY || Ctx->Device.Send.Capacity > TUN_MAX_RING_CAPACITY ||
-         !IS_POW2(Ctx->Device.Send.Capacity) || !Rrb->Send.TailMoved || !Rrb->Send.Ring))
+         !IS_POW2(Ctx->Device.Send.Capacity) || !Rrb.Send.TailMoved || !Rrb.Send.Ring))
         goto cleanupResetOwner;
 
     if (!NT_SUCCESS(
             Status = ObReferenceObjectByHandle(
-                Rrb->Send.TailMoved,
+                Rrb.Send.TailMoved,
                 /* We will not wait on send ring tail moved event. */
                 EVENT_MODIFY_STATE,
                 *ExEventObjectType,
@@ -579,7 +616,7 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
                 NULL)))
         goto cleanupResetOwner;
 
-    Ctx->Device.Send.Mdl = IoAllocateMdl(Rrb->Send.Ring, Rrb->Send.RingSize, FALSE, FALSE, NULL);
+    Ctx->Device.Send.Mdl = IoAllocateMdl(Rrb.Send.Ring, Rrb.Send.RingSize, FALSE, FALSE, NULL);
     if (Status = STATUS_INSUFFICIENT_RESOURCES, !Ctx->Device.Send.Mdl)
         goto cleanupSendTailMoved;
     try
@@ -598,15 +635,15 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     if (Status = STATUS_INVALID_PARAMETER, Ctx->Device.Send.RingTail >= Ctx->Device.Send.Capacity)
         goto cleanupSendUnlockPages;
 
-    Ctx->Device.Receive.Capacity = TUN_RING_CAPACITY(Rrb->Receive.RingSize);
+    Ctx->Device.Receive.Capacity = TUN_RING_CAPACITY(Rrb.Receive.RingSize);
     if (Status = STATUS_INVALID_PARAMETER,
         (Ctx->Device.Receive.Capacity < TUN_MIN_RING_CAPACITY || Ctx->Device.Receive.Capacity > TUN_MAX_RING_CAPACITY ||
-         !IS_POW2(Ctx->Device.Receive.Capacity) || !Rrb->Receive.TailMoved || !Rrb->Receive.Ring))
+         !IS_POW2(Ctx->Device.Receive.Capacity) || !Rrb.Receive.TailMoved || !Rrb.Receive.Ring))
         goto cleanupSendUnlockPages;
 
     if (!NT_SUCCESS(
             Status = ObReferenceObjectByHandle(
-                Rrb->Receive.TailMoved,
+                Rrb.Receive.TailMoved,
                 /* We need to clear receive ring TailMoved event on transition to non-alertable state. */
                 SYNCHRONIZE | EVENT_MODIFY_STATE,
                 *ExEventObjectType,
@@ -615,7 +652,7 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
                 NULL)))
         goto cleanupSendUnlockPages;
 
-    Ctx->Device.Receive.Mdl = IoAllocateMdl(Rrb->Receive.Ring, Rrb->Receive.RingSize, FALSE, FALSE, NULL);
+    Ctx->Device.Receive.Mdl = IoAllocateMdl(Rrb.Receive.Ring, Rrb.Receive.RingSize, FALSE, FALSE, NULL);
     if (Status = STATUS_INSUFFICIENT_RESOURCES, !Ctx->Device.Receive.Mdl)
         goto cleanupReceiveTailMoved;
     try
