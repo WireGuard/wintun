@@ -13,7 +13,7 @@
   <Import Project="wintun.vcxproj.user" Condition="exists('wintun.vcxproj.user')" />
 
   <Target Name="Build" DependsOnTargets="Driver-x86;Driver-amd64;Driver-arm64" />
-  <Target Name="MSM" DependsOnTargets="MSM-x86;MSM-amd64" />
+  <Target Name="MSM" DependsOnTargets="MSM-x86;MSM-amd64;MSM-arm64" />
   <Target Name="Clean">
     <RemoveDir Directories="x86\Release\" />
     <RemoveDir Directories="amd64\Release\" />
@@ -77,7 +77,7 @@
     Outputs="$(DistributionDir)wintun-amd64-$(WintunVersionStr).msm">
     <MSBuild Projects="installer\installer.vcxproj" Targets="MSM" Properties="Configuration=Release;Platform=x64" />
   </Target>
-  <Target Name="MSM-ARM64"
+  <Target Name="MSM-arm64"
     Outputs="$(DistributionDir)wintun-arm64-$(WintunVersionStr).msm">
     <MSBuild Projects="installer\installer.vcxproj" Targets="MSM" Properties="Configuration=Release;Platform=ARM64" />
   </Target>
