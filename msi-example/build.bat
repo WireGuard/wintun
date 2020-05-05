@@ -28,8 +28,8 @@ if exist .deps\prepared goto :build
 
 :build
 	set WIX=%BUILDDIR%.deps\wix\
-	call :msi x86 i686 x86 || goto :error
-	call :msi amd64 x86_64 x64 || goto :error
+	call :msi x86 x86 || goto :error
+	call :msi amd64 x64 || goto :error
 	if exist ..\sign.bat call ..\sign.bat
 	if "%SigningCertificate%"=="" goto :success
 	if "%TimestampServer%"=="" goto :success
@@ -50,7 +50,7 @@ if exist .deps\prepared goto :build
 :msi
 	if not exist "%~1" mkdir "%~1"
 	echo [+] Compiling %1
-	"%WIX%bin\candle" %WIX_CANDLE_FLAGS% -dEXAMPLETUN_PLATFORM="%~1" -out "%~1\exampletun.wixobj" -arch %3 exampletun.wxs || exit /b %errorlevel%
+	"%WIX%bin\candle" %WIX_CANDLE_FLAGS% -dEXAMPLETUN_PLATFORM="%~1" -out "%~1\exampletun.wixobj" -arch %2 exampletun.wxs || exit /b %errorlevel%
 	echo [+] Linking %1
 	"%WIX%bin\light" %WIX_LIGHT_FLAGS% -out "dist\exampletun-%~1.msi" "%~1\exampletun.wixobj" || exit /b %errorlevel%
 	goto :eof
