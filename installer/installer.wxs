@@ -10,7 +10,7 @@
       Id="c28309d9-1954-4f2d-a7d1-228850092460"
       Description="Wintun Userspace Tunnel"
       Manufacturer="WireGuard LLC"
-      InstallerVersion="200"
+      InstallerVersion="$(var.INSTALLER_VERSION_MIN)"
       InstallPrivileges="elevated"
       InstallScope="perMachine"
       ReadOnly="yes" />

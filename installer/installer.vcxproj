@@ -106,6 +106,10 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
+    <InstallerVersionMin>200</InstallerVersionMin>
+    <InstallerVersionMin Condition="'$(Platform)'=='ARM64'">500</InstallerVersionMin>
+  </PropertyGroup>
+  <PropertyGroup>
     <OutDir>..\$(WintunPlatform)\$(Configuration)\</OutDir>
     <IntDir>..\$(WintunPlatform)\$(Configuration)\installer-intermediate\</IntDir>
     <CodeAnalysisRuleSet>NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
@@ -116,7 +120,7 @@
     <WixArch Condition="'$(Platform)'=='Win32'">x86</WixArch>
     <WixArch Condition="'$(Platform)'=='x64'">x64</WixArch>
     <WixArch Condition="'$(Platform)'=='ARM64'">arm64</WixArch>
-    <WixCandleFlags>$(WixCandleFlags) -nologo -arch $(WixArch) -dWINTUN_PLATFORM=$(WintunPlatform) -dWINTUN_VERSION=$(WintunVersion) -sw1086</WixCandleFlags>
+    <WixCandleFlags>$(WixCandleFlags) -nologo -arch $(WixArch) -dWINTUN_PLATFORM=$(WintunPlatform) -dWINTUN_VERSION=$(WintunVersion) -dINSTALLER_VERSION_MIN=$(InstallerVersionMin) -sw1086</WixCandleFlags>
     <WixLightFlags>$(WixLightFlags) -nologo -b output_dir="$(OutDir.TrimEnd('\'))" -spdb -sw1076 -sw1079</WixLightFlags>
     <WixOutputPath>$(OutDir)</WixOutputPath>
     <WixOutputName>wintun</WixOutputName>
