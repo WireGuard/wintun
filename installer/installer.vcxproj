@@ -223,7 +223,7 @@
     <Exec Command="&quot;$(WIX)bin\candle.exe&quot; $(WixCandleFlags) -out &quot;$(IntDir)installer.wixobj&quot; installer.wxs" />
   </Target>
   <Target Name="WixLink" DependsOnTargets="Build;WixCompile" Inputs="$(IntDir)installer.wixobj;$(OutDir)$(TargetName)$(TargetExt)" Outputs="$(WixOutputPath)$(WixOutputName)$(WixOutputExt)">
-    <Exec Command="&quot;$(WIX)bin\light.exe&quot; $(WixLightFlags) -out &quot;$(WixOutputPath)$(WixOutputName)$(WixOutputExt)&quot; &quot;$(IntDir)installer.wixobj&quot;" />
+    <Exec Command="&quot;$(WIX)bin\light.exe&quot; $(WixLightFlags) -out &quot;$(WixOutputPath)$(WixOutputName)$(WixOutputExt)&quot; &quot;$(IntDir)installer.wixobj&quot;" IgnoreExitCode="true" />
   </Target>
   <Target Name="WixTestSign" Condition="$(SignMode)=='TestSign'" DependsOnTargets="WixLink" Inputs="$(WixOutputPath)$(WixOutputName)$(WixOutputExt)" Outputs="$(IntDir)$(WixOutputName).sign">
     <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 &quot;$(TestCertificate)&quot; /fd sha256 &quot;$(WixOutputPath)$(WixOutputName)$(WixOutputExt)&quot;" />
