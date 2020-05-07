@@ -17,7 +17,8 @@ if exist .deps\prepared goto :build
 	cd .deps || goto :error
 	call :download wintun-x86.msm https://www.wintun.net/builds/wintun-x86-{{{VERSION}}}.msm {{{32BIT HASH}}} || goto :error
 	call :download wintun-amd64.msm https://www.wintun.net/builds/wintun-amd64-{{{VERSION}}}.msm {{{64BIT HASH}}} || goto :error
-	call :download wix-binaries.zip http://wixtoolset.org/downloads/v3.14.0.2812/wix314-binaries.zip 923892298f37514622c58cbbd9c2cadf2822d9bb53df8ee83aaeb05280777611 || goto :error
+	call :download wintun-arm64.msm https://www.wintun.net/builds/wintun-arm64-{{{VERSION}}}.msm {{{64BIT HASH}}} || goto :error
+	call :download wix-binaries.zip https://wixtoolset.org/downloads/v3.14.0.3910/wix314-binaries.zip 0904a88a4bcd9dd3c2274caabe73989cd72767ee90c8fa0bf813d004eec90d32 || goto :error
 	echo [+] Extracting wix-binaries.zip
 	mkdir wix\bin || goto :error
 	tar -xf wix-binaries.zip -C wix\bin || goto :error
@@ -30,6 +31,7 @@ if exist .deps\prepared goto :build
 	set WIX=%BUILDDIR%.deps\wix\
 	call :msi x86 x86 || goto :error
 	call :msi amd64 x64 || goto :error
+	call :msi arm64 arm64 || goto :error
 	if exist ..\sign.bat call ..\sign.bat
 	if "%SigningCertificate%"=="" goto :success
 	if "%TimestampServer%"=="" goto :success

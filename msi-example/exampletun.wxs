@@ -5,9 +5,11 @@
 	Copyright (C) 2019 WireGuard LLC. All Rights Reserved.
 -->
 <?if $(var.EXAMPLETUN_PLATFORM) = "amd64"?>
-	<?define UpgradeCode = "{{{FIXED 64BIT UUID}}}"?>
+	<?define UpgradeCode = "{{{FIXED AMD64 UUID}}}"?>
+<?elseif $(var.EXAMPLETUN_PLATFORM) = "arm64"?>
+	<?define UpgradeCode = "{{{FIXED ARM64 UUID}}}"?>
 <?elseif $(var.EXAMPLETUN_PLATFORM) = "x86"?>
-	<?define UpgradeCode = "{{{FIXED 32BIT UUID}}}"?>
+	<?define UpgradeCode = "{{{FIXED X86 UUID}}}"?>
 <?else?>
 	<?error Unknown platform ?>
 <?endif?>
