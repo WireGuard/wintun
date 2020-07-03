@@ -8,3 +8,16 @@
 #include <Windows.h>
 
 extern HINSTANCE ResourceModule;
+
+_Check_return_
+HANDLE
+TakeNameMutex(_In_z_ LPCWSTR Pool);
+
+void
+ReleaseNameMutex(_In_ HANDLE Mutex);
+
+void
+NamespaceInit();
+
+void
+NamespaceCleanup();

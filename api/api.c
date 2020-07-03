@@ -16,9 +16,11 @@ DllMain(_In_ HINSTANCE hinstDLL, _In_ DWORD fdwReason, _In_ LPVOID lpvReserved)
     {
     case DLL_PROCESS_ATTACH:
         ResourceModule = hinstDLL;
-    case DLL_THREAD_ATTACH:
-    case DLL_THREAD_DETACH:
+        NamespaceInit();
+        break;
+
     case DLL_PROCESS_DETACH:
+        NamespaceCleanup();
         break;
     }
     return TRUE;
