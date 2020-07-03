@@ -4,6 +4,12 @@
 
   Copyright (C) 2018-2019 WireGuard LLC. All Rights Reserved.
 -->
+
+<?if $(var.WINTUN_PLATFORM) = "x86"?>
+  <?define PlatformSystemFolder = "SystemFolder"?>
+<?else?>
+  <?define PlatformSystemFolder = "System64Folder"?>
+<?endif?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Module Id="wintun" Language="0" Version="$(var.WINTUN_VERSION)">
     <Package
@@ -24,6 +30,12 @@
           Value="1"
           KeyPath="yes" />
       </Component>
+
+      <Directory Id="$(var.PlatformSystemFolder)">
+        <Component Guid="5dd2a342-6a4c-4af6-8ebc-b05411644b1c">
+          <File Id="wintun.dll" Name="wintun.dll" Source="!(bindpath.output_dir)wintun.dll" KeyPath="yes" />
+        </Component>
+      </Directory>
     </Directory>
 
     <Property Id="WintunInstallerHash" Value="$(var.INSTALLER_LIBRARY_HASH)" SuppressModularization="yes" />

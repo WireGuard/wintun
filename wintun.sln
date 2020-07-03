@@ -1,8 +1,9 @@
-
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.28922.388
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "api", "api\api.vcxproj", "{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}"
+EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "installer", "installer\installer.vcxproj", "{D19E6354-A643-4ACC-82D5-B2780BB83475}"
 	ProjectSection(ProjectDependencies) = postProject
 		{F7679B65-2FEC-469A-8BAC-B07BF4439422} = {F7679B65-2FEC-469A-8BAC-B07BF4439422}
@@ -28,6 +29,18 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}.Debug|amd64.ActiveCfg = Debug|x64
+		{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}.Debug|amd64.Build.0 = Debug|x64
+		{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}.Debug|arm64.ActiveCfg = Debug|ARM64
+		{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}.Debug|arm64.Build.0 = Debug|ARM64
+		{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}.Debug|x86.ActiveCfg = Debug|Win32
+		{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}.Debug|x86.Build.0 = Debug|Win32
+		{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}.Release|amd64.ActiveCfg = Release|x64
+		{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}.Release|amd64.Build.0 = Release|x64
+		{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}.Release|arm64.ActiveCfg = Release|ARM64
+		{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}.Release|arm64.Build.0 = Release|ARM64
+		{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}.Release|x86.ActiveCfg = Release|Win32
+		{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}.Release|x86.Build.0 = Release|Win32
 		{F7679B65-2FEC-469A-8BAC-B07BF4439422}.Debug|amd64.ActiveCfg = Debug|x64
 		{F7679B65-2FEC-469A-8BAC-B07BF4439422}.Debug|amd64.Build.0 = Debug|x64
 		{F7679B65-2FEC-469A-8BAC-B07BF4439422}.Debug|arm64.ActiveCfg = Debug|ARM64
@@ -55,9 +68,6 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(NestedProjects) = preSolution
-		{2B5DA7D8-C56A-4E93-BE93-79388A8007AF} = {3A98F138-EE02-4488-B856-B3C48500BEA8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {254563AF-E0B3-48F0-B564-A45AEC95591F}

@@ -28,11 +28,11 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
-    <ProjectGuid>{D19E6354-A643-4ACC-82D5-B2780BB83475}</ProjectGuid>
+    <ProjectGuid>{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>installer</RootNamespace>
+    <RootNamespace>api</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>installer</ProjectName>
+    <ProjectName>api</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -106,44 +106,21 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <InstallerVersionMin>200</InstallerVersionMin>
-    <InstallerVersionMin Condition="'$(Platform)'=='ARM64'">500</InstallerVersionMin>
-  </PropertyGroup>
-  <PropertyGroup>
     <OutDir>..\$(WintunPlatform)\$(Configuration)\</OutDir>
     <IntDir>..\$(WintunPlatform)\$(Configuration)\$(ProjectName)-intermediate\</IntDir>
+    <TargetName>wintun</TargetName>
     <CodeAnalysisRuleSet>NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <RunCodeAnalysis>true</RunCodeAnalysis>
-    <LocalDebuggerCommand>rundll32.exe</LocalDebuggerCommand>
-    <LocalDebuggerCommandArguments>$(OutDir)$(TargetName)$(TargetExt),InstallWintun</LocalDebuggerCommandArguments>
-    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <WixArch Condition="'$(Platform)'=='Win32'">x86</WixArch>
-    <WixArch Condition="'$(Platform)'=='x64'">x64</WixArch>
-    <WixArch Condition="'$(Platform)'=='ARM64'">arm64</WixArch>
-    <WixCandleFlags>$(WixCandleFlags) -nologo -arch $(WixArch) -dWINTUN_PLATFORM=$(WintunPlatform) -dWINTUN_VERSION=$(WintunVersion) -dINSTALLER_VERSION_MIN=$(InstallerVersionMin) -sw1086</WixCandleFlags>
-    <WixLightFlags>$(WixLightFlags) -nologo -b output_dir="$(OutDir.TrimEnd('\'))" -spdb -sw1076 -sw1079</WixLightFlags>
-    <WixOutputPath>$(OutDir)</WixOutputPath>
-    <WixOutputName>wintun</WixOutputName>
-    <WixOutputExt>.msm</WixOutputExt>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)'=='Release'">
-    <WixOutputPath>..\$(DistributionDir)</WixOutputPath>
-    <WixOutputName>wintun-$(WintunPlatform)-$(WintunVersionStr)</WixOutputName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32' Or '$(Platform)'=='x64' Or '$(Configuration)'=='Debug'">HAVE_EV;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="Exists('..\$(WintunPlatform)\$(Configuration)\whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <ResourceCompile>
       <AdditionalIncludeDirectories>..\$(WintunPlatform)\$(Configuration);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32' Or '$(Platform)'=='x64' Or '$(Configuration)'=='Debug'">HAVE_EV;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="Exists('..\$(WintunPlatform)\$(Configuration)\whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
       <ModuleDefinitionFile>exports.def</ModuleDefinitionFile>
-      <AdditionalDependencies>newdev.lib;ntdll.lib;Crypt32.lib;Msi.lib;Setupapi.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
     </Link>
   </ItemDefinitionGroup>
@@ -170,71 +147,33 @@
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'" />
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'" />
-  <ItemGroup>
-    <ClCompile Include="installation.c" />
-    <ClCompile Include="msi.c" />
-    <ClCompile Include="rundll32.c" />
-  </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="resources.rc" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="installation.h" />
+    <None Include="exports.def" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="exports.def" />
-    <None Include="installer.wxs" />
+    <ClInclude Include="api.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="api.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
   <Import Project="..\wintun.vcxproj.user" Condition="exists('..\wintun.vcxproj.user')" />
   <PropertyGroup>
-    <BuildDependsOn>$(BuildDependsOn);TestSignTarget;ProductionSignTarget</BuildDependsOn>
-    <MSMDependsOn>$(MSMDependsOn);WixCompile;WixLink;WixTestSign;WixProductionSign</MSMDependsOn>
-    <CleanDependsOn>CleanSignTarget;WixClean;$(CleanDependsOn)</CleanDependsOn>
+    <BuildDependsOn>$(BuildDependsOn);SignTarget</BuildDependsOn>
+    <CleanDependsOn>CleanSignTarget;$(CleanDependsOn)</CleanDependsOn>
+    <SignTargetCommandLine Condition="$(SignMode)=='TestSign'">"$(SignToolPath)" sign /sha1 "$(TestCertificate)" /fd sha256 "$(TargetPath)"</SignTargetCommandLine>
+    <SignTargetCommandLine Condition="$(SignMode)=='ProductionSign'">"$(SignToolPath)" sign /sha1 "$(ProductionCertificate)" /fd sha256 /tr "$(TimeStampServer)" /td sha256 "$(TargetPath)"</SignTargetCommandLine>
   </PropertyGroup>
-  <Target Name="TestSignTarget" Condition="$(SignMode)=='TestSign'" Inputs="$(TargetPath)" Outputs="$(IntermediateOutputPath)$(TargetName).sign">
-    <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 &quot;$(TestCertificate)&quot; /fd sha256 &quot;$(TargetPath)&quot;" />
-    <Touch Files="$(IntermediateOutputPath)$(TargetName).sign" AlwaysCreate="true" />
-  </Target>
-  <Target Name="ProductionSignTarget" Condition="$(SignMode)=='ProductionSign'" Inputs="$(TargetPath)" Outputs="$(IntermediateOutputPath)$(TargetName).sign">
-    <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 &quot;$(ProductionCertificate)&quot; /fd sha256 /tr &quot;$(TimeStampServer)&quot; /td sha256 &quot;$(TargetPath)&quot;" />
+  <Target Name="SignTarget" Condition="'$(SignTargetCommandLine)'!=''" Inputs="$(TargetPath)" Outputs="$(IntermediateOutputPath)$(TargetName).sign">
+    <Exec Command="$(SignTargetCommandLine)" />
     <Touch Files="$(IntermediateOutputPath)$(TargetName).sign" AlwaysCreate="true" />
   </Target>
   <Target Name="CleanSignTarget">
     <Delete Files="$(IntermediateOutputPath)$(TargetName).sign" />
   </Target>
-  <Target Name="HashInstallerLibrary" DependsOnTargets="Build">
-    <GetFileHash Files="$(OutDir)$(TargetName)$(TargetExt)" Algorithm="SHA256" HashEncoding="hex">
-      <Output TaskParameter="Items" ItemName="InstallerLibraryHash" />
-    </GetFileHash>
-    <PropertyGroup>
-      <WixCandleFlags>$(WixCandleFlags) -dINSTALLER_LIBRARY_HASH=@(InstallerLibraryHash->Metadata('FileHash')) -dINSTALLER_LIBRARY_TIME=$([System.IO.File]::GetLastWriteTime('$(OutDir)$(TargetName)$(TargetExt)').Ticks)</WixCandleFlags>
-    </PropertyGroup>
-  </Target>
-  <Target Name="WixCompile" DependsOnTargets="HashInstallerLibrary" Inputs="installer.wxs" Outputs="$(IntDir)installer.wixobj">
-    <Exec Command="&quot;$(WIX)bin\candle.exe&quot; $(WixCandleFlags) -out &quot;$(IntDir)installer.wixobj&quot; installer.wxs" />
-  </Target>
-  <Target Name="WixLink" DependsOnTargets="Build;WixCompile" Inputs="$(IntDir)installer.wixobj;$(OutDir)$(TargetName)$(TargetExt)" Outputs="$(WixOutputPath)$(WixOutputName)$(WixOutputExt)">
-    <Exec Command="&quot;$(WIX)bin\light.exe&quot; $(WixLightFlags) -out &quot;$(WixOutputPath)$(WixOutputName)$(WixOutputExt)&quot; &quot;$(IntDir)installer.wixobj&quot;" IgnoreExitCode="true" />
-  </Target>
-  <Target Name="WixTestSign" Condition="$(SignMode)=='TestSign'" DependsOnTargets="WixLink" Inputs="$(WixOutputPath)$(WixOutputName)$(WixOutputExt)" Outputs="$(IntDir)$(WixOutputName).sign">
-    <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 &quot;$(TestCertificate)&quot; /fd sha256 &quot;$(WixOutputPath)$(WixOutputName)$(WixOutputExt)&quot;" />
-    <Touch Files="$(IntDir)$(WixOutputName).sign" AlwaysCreate="true" />
-  </Target>
-  <Target Name="WixProductionSign" Condition="$(SignMode)=='ProductionSign'" DependsOnTargets="WixLink" Inputs="$(WixOutputPath)$(WixOutputName)$(WixOutputExt)" Outputs="$(IntDir)$(WixOutputName).sign">
-    <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 &quot;$(ProductionCertificate)&quot; /fd sha256 /tr &quot;$(TimeStampServer)&quot; /td sha256 &quot;$(WixOutputPath)$(WixOutputName)$(WixOutputExt)&quot;" />
-    <Touch Files="$(IntDir)$(WixOutputName).sign" AlwaysCreate="true" />
-  </Target>
-  <Target Name="WixClean">
-    <Delete Files="$(IntDir)installer.wixobj;$(WixOutputPath)$(WixOutputName)$(WixOutputExt);$(IntDir)$(WixOutputName).sign" />
-  </Target>
-  <Target Name="MSM" DependsOnTargets="$(MSMDependsOn)" />
 </Project>
