@@ -36,3 +36,21 @@ NciInit();
 
 void
 NciCleanup();
+
+#define MAX_POOL 256
+#define MAX_INSTANCE_ID MAX_PATH /* TODO: Is MAX_PATH always enough? */
+
+typedef struct _WINTUN_ADAPTER
+{
+    GUID CfgInstanceID;
+    WCHAR DevInstanceID[MAX_INSTANCE_ID];
+    DWORD LuidIndex;
+    DWORD IfType;
+    WCHAR Pool[MAX_POOL];
+} WINTUN_ADAPTER;
+
+VOID WINAPI
+WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter);
+
+_Return_type_success_(return == 0) DWORD WINAPI
+    WintunGetAdapter(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _In_z_ LPCWSTR IfName, _Out_ WINTUN_ADAPTER **Adapter);

@@ -36,6 +36,9 @@
     <ClCompile Include="namespace.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="devmgmt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="nci.c">
       <Filter>Source Files</Filter>
     </ClCompile>
