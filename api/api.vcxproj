@@ -160,6 +160,7 @@
   <ItemGroup>
     <ClCompile Include="api.c" />
     <ClCompile Include="namespace.c" />
+    <ClCompile Include="nci.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

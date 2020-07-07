@@ -21,3 +21,18 @@ NamespaceInit();
 
 void
 NamespaceCleanup();
+
+_Return_type_success_(return ==
+                             0) extern DWORD(WINAPI *NciSetConnectionName)(_In_ LPCGUID Guid, _In_z_ LPCWSTR NewName);
+
+_Return_type_success_(return == 0) extern DWORD(WINAPI *NciGetConnectionName)(
+    _In_ LPCGUID Guid,
+    _Out_z_bytecap_(InDestNameBytes) LPWSTR Name,
+    _In_ DWORD InDestNameBytes,
+    _Out_opt_ DWORD *OutDestNameBytes);
+
+void
+NciInit();
+
+void
+NciCleanup();
