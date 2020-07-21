@@ -7,9 +7,9 @@
 
 static HMODULE NciModule;
 
-WINSTATUS(WINAPI *NciSetConnectionName)(_In_ LPCGUID Guid, _In_z_ LPCWSTR NewName);
+DWORD(WINAPI *NciSetConnectionName)(_In_ LPCGUID Guid, _In_z_ LPCWSTR NewName);
 
-WINSTATUS(WINAPI *NciGetConnectionName)
+DWORD(WINAPI *NciGetConnectionName)
 (_In_ LPCGUID Guid,
  _Out_z_bytecap_(InDestNameBytes) LPWSTR Name,
  _In_ DWORD InDestNameBytes,

@@ -7,7 +7,7 @@
 #include <string.h>
 #include <wchar.h>
 
-static WINSTATUS
+static WINTUN_STATUS
 OpenKeyWait(_In_ HKEY Key, _Inout_z_ LPWSTR Path, _In_ DWORD Access, _In_ ULONGLONG Deadline, _Out_ HKEY *KeyOut)
 {
     DWORD Result;
@@ -65,7 +65,7 @@ OpenKeyWait(_In_ HKEY Key, _Inout_z_ LPWSTR Path, _In_ DWORD Access, _In_ ULONGL
  *
  * @return ERROR_SUCCESS on success; WAIT_TIMEOUT on timeout; error code otherwise
  */
-WINSTATUS
+WINTUN_STATUS
 RegistryOpenKeyWait(
     _In_ HKEY Key,
     _In_z_count_c_(MAX_PATH) LPCWSTR Path,
@@ -78,7 +78,7 @@ RegistryOpenKeyWait(
     return OpenKeyWait(Key, Buf, Access, GetTickCount64() + Timeout, KeyOut);
 }
 
-WINSTATUS
+WINTUN_STATUS
 RegistryWaitForKey(_In_ HKEY Key, _In_z_count_c_(MAX_PATH) LPCWSTR Path, _In_ DWORD Timeout)
 {
     HKEY k;
@@ -104,7 +104,7 @@ RegistryWaitForKey(_In_ HKEY Key, _In_z_count_c_(MAX_PATH) LPCWSTR Path, _In_ DW
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-WINSTATUS
+WINTUN_STATUS
 RegistryGetString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType)
 {
     HANDLE Heap = GetProcessHeap();
@@ -168,7 +168,7 @@ RegistryGetString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType)
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-WINSTATUS
+WINTUN_STATUS
 RegistryGetMultiString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType)
 {
     HANDLE Heap = GetProcessHeap();
@@ -241,7 +241,7 @@ RegistryGetMultiString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static WINSTATUS
+static WINTUN_STATUS
 RegistryQuery(
     _In_ HKEY Key,
     _In_opt_z_ LPCWSTR Name,
@@ -279,7 +279,7 @@ RegistryQuery(
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-WINSTATUS
+WINTUN_STATUS
 RegistryQueryString(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ LPWSTR *Value)
 {
     DWORD ValueType, Size = 256 * sizeof(WCHAR);
@@ -318,7 +318,7 @@ RegistryQueryString(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ LPWSTR *Value)
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-WINSTATUS
+WINTUN_STATUS
 RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _In_ DWORD Timeout, _Out_ LPWSTR *Value)
 {
     DWORD Result;
@@ -356,7 +356,7 @@ RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _In_ DWORD Timeo
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-WINSTATUS
+WINTUN_STATUS
 RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ DWORD *Value)
 {
     DWORD ValueType, Size = sizeof(DWORD);
@@ -384,7 +384,7 @@ RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ DWORD *Value)
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-WINSTATUS
+WINTUN_STATUS
 RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _In_ DWORD Timeout, _Out_ DWORD *Value)
 {
     DWORD Result;

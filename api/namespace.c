@@ -46,7 +46,7 @@ Bin2Hex(_In_bytecount_(Size) const void *Source, size_t Size, _Out_capcount_(Siz
     }
 }
 
-static DWORD
+static WINTUN_STATUS
 NamespaceRuntimeInit()
 {
     DWORD Result;

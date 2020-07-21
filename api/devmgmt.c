@@ -23,7 +23,7 @@ const static GUID ADAPTER_NET_GUID = { 0xcac88484L,
 /**
  * Returns the version of the Wintun driver and NDIS system currently loaded.
  */
-WINSTATUS WINAPI
+WINTUN_STATUS WINAPI
 WintunGetVersion(
     _Out_ DWORD *DriverVersionMaj,
     _Out_ DWORD *DriverVersionMin,
@@ -72,7 +72,7 @@ cleanupKey:
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static WINSTATUS
+static WINTUN_STATUS
 GetDeviceRegistryProperty(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
@@ -122,7 +122,7 @@ GetDeviceRegistryProperty(
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static WINSTATUS
+static WINTUN_STATUS
 GetDeviceRegistryString(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
@@ -164,7 +164,7 @@ GetDeviceRegistryString(
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static WINSTATUS
+static WINTUN_STATUS
 GetDeviceRegistryMultiString(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
@@ -246,7 +246,7 @@ GetPoolDeviceTypeName(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _Out_cap_c_(MAX_POO
 /**
  * Checks if SPDRP_DEVICEDESC or SPDRP_FRIENDLYNAME match device type name.
  */
-static WINSTATUS
+static WINTUN_STATUS
 IsPoolMember(
     _In_z_count_c_(MAX_POOL) LPCWSTR Pool,
     _In_ HDEVINFO DevInfo,
@@ -300,7 +300,7 @@ cleanupDeviceDesc:
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static WINSTATUS
+static WINTUN_STATUS
 GetDriverInfoDetail(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
@@ -330,7 +330,7 @@ GetDriverInfoDetail(
 /**
  * Check if the device is using Wintun driver.
  */
-static WINSTATUS
+static WINTUN_STATUS
 IsUsingOurDriver(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ BOOL *IsOurDriver)
 {
     if (!SetupDiBuildDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER))
@@ -378,7 +378,7 @@ IsUsingOurDriver(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static WINSTATUS
+static WINTUN_STATUS
 GetNetCfgInstanceId(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ GUID *CfgInstanceID)
 {
     HKEY Key = SetupDiOpenDevRegKey(DevInfo, DevInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_QUERY_VALUE);
@@ -410,7 +410,7 @@ cleanupKey:
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static WINSTATUS
+static WINTUN_STATUS
 CreateAdapterData(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
@@ -508,7 +508,7 @@ GetTcpipAdapterRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_PATH)
 /**
  * Returns the interface-specific TCP/IP network registry key path.
  */
-static WINSTATUS
+static WINTUN_STATUS
 GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_PATH) LPWSTR Path)
 {
     DWORD Result;
@@ -560,7 +560,7 @@ WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
  * ERROR_FILE_NOT_FOUND if adapter with given name is not found;
  * ERROR_ALREADY_EXISTS if adapter is found but not a Wintun-class or not a member of the pool
  */
-WINSTATUS WINAPI
+WINTUN_STATUS WINAPI
 WintunGetAdapter(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _In_z_ LPCWSTR Name, _Out_ WINTUN_ADAPTER **Adapter)
 {
     DWORD Result;
@@ -648,13 +648,13 @@ cleanupMutex:
 /**
  * Returns the name of the Wintun interface.
  */
-WINSTATUS WINAPI
+WINTUN_STATUS WINAPI
 WintunGetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_ADAPTER_NAME) LPWSTR Name)
 {
     return NciGetConnectionName(&Adapter->CfgInstanceID, Name, MAX_ADAPTER_NAME * sizeof(WCHAR), NULL);
 }
 
-static WINSTATUS
+static WINTUN_STATUS
 InterfaceGuidFromAlias(_In_z_ LPCWSTR Alias, _Out_ GUID *Guid)
 {
     NET_LUID Luid;
@@ -667,7 +667,7 @@ InterfaceGuidFromAlias(_In_z_ LPCWSTR Alias, _Out_ GUID *Guid)
 /**
  * Sets name of the Wintun interface.
  */
-WINSTATUS WINAPI
+WINTUN_STATUS WINAPI
 WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAPTER_NAME) LPCWSTR Name)
 {
     DWORD Result;
@@ -759,7 +759,7 @@ WintunGetAdapterLUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ LUID *Luid)
 /**
  * Returns a handle to the adapter device object.
  */
-WINSTATUS WINAPI
+WINTUN_STATUS WINAPI
 WintunGetAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *Handle)
 {
     HANDLE Heap = GetProcessHeap();
@@ -800,7 +800,7 @@ cleanupBuf:
 /**
  * Sets device install parameters for a quiet installation.
  */
-static WINSTATUS
+static WINTUN_STATUS
 SetQuietInstall(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
 {
     SP_DEVINSTALL_PARAMS_W DevInstallParams = { .cbSize = sizeof(SP_DEVINSTALL_PARAMS_W) };
@@ -870,7 +870,7 @@ CheckReboot(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-WINSTATUS WINAPI
+WINTUN_STATUS WINAPI
 WintunCreateAdapter(
     _In_z_count_c_(MAX_POOL) LPCWSTR Pool,
     _In_z_ LPCWSTR Name,
@@ -1118,7 +1118,7 @@ cleanupMutex:
  * Returns TUN device info list handle and interface device info data. The device info list handle must be closed after
  * use. In case the device is not found, ERROR_OBJECT_NOT_FOUND is returned.
  */
-static WINSTATUS
+static WINTUN_STATUS
 GetDevInfoData(_In_ const GUID *CfgInstanceID, _Out_ HDEVINFO *DevInfo, _Out_ SP_DEVINFO_DATA *DevInfoData)
 {
     DWORD Result;
@@ -1163,7 +1163,7 @@ GetDevInfoData(_In_ const GUID *CfgInstanceID, _Out_ HDEVINFO *DevInfo, _Out_ SP
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise. This function succeeds if the interface was not found.
  */
-WINSTATUS WINAPI
+WINTUN_STATUS WINAPI
 WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired)
 {
     HDEVINFO DevInfo;
@@ -1198,7 +1198,7 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequ
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-WINSTATUS WINAPI
+WINTUN_STATUS WINAPI
 WintunEnumAdapters(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _In_ WINTUN_ENUMPROC Func, _In_ LPARAM Param)
 {
     DWORD Result;
