@@ -13,7 +13,7 @@ extern HINSTANCE ResourceModule;
 
 _Check_return_
 HANDLE
-TakeNameMutex(_In_z_ LPCWSTR Pool);
+TakeNameMutex(_In_z_ const WCHAR *Pool);
 
 void
 ReleaseNameMutex(_In_ HANDLE Mutex);
@@ -24,11 +24,11 @@ NamespaceInit();
 void
 NamespaceCleanup();
 
-extern DWORD(WINAPI *NciSetConnectionName)(_In_ LPCGUID Guid, _In_z_ LPCWSTR NewName);
+extern DWORD(WINAPI *NciSetConnectionName)(_In_ const GUID *Guid, _In_z_ const WCHAR *NewName);
 
 extern DWORD(WINAPI *NciGetConnectionName)(
-    _In_ LPCGUID Guid,
-    _Out_z_bytecap_(InDestNameBytes) LPWSTR Name,
+    _In_ const GUID *Guid,
+    _Out_z_bytecap_(InDestNameBytes) WCHAR *Name,
     _In_ DWORD InDestNameBytes,
     _Out_opt_ DWORD *OutDestNameBytes);
 
@@ -41,31 +41,31 @@ NciCleanup();
 WINTUN_STATUS
 RegistryOpenKeyWait(
     _In_ HKEY Key,
-    _In_z_count_c_(MAX_PATH) LPCWSTR Path,
+    _In_z_count_c_(MAX_PATH) const WCHAR *Path,
     _In_ DWORD Access,
     _In_ DWORD Timeout,
     _Out_ HKEY *KeyOut);
 
 WINTUN_STATUS
-RegistryWaitForKey(_In_ HKEY Key, _In_z_count_c_(MAX_PATH) LPCWSTR Path, _In_ DWORD Timeout);
+RegistryWaitForKey(_In_ HKEY Key, _In_z_count_c_(MAX_PATH) const WCHAR *Path, _In_ DWORD Timeout);
 
 WINTUN_STATUS
-RegistryGetString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType);
+RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType);
 
 WINTUN_STATUS
-RegistryGetMultiString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType);
+RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType);
 
 WINTUN_STATUS
-RegistryQueryString(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ LPWSTR *Value);
+RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ WCHAR **Value);
 
 WINTUN_STATUS
-RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _In_ DWORD Timeout, _Out_ LPWSTR *Value);
+RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout, _Out_ WCHAR **Value);
 
 WINTUN_STATUS
-RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ DWORD *Value);
+RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ DWORD *Value);
 
 WINTUN_STATUS
-RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _In_ DWORD Timeout, _Out_ DWORD *Value);
+RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout, _Out_ DWORD *Value);
 
 WINTUN_STATUS WINAPI
 WintunGetVersion(
@@ -86,17 +86,17 @@ typedef struct _WINTUN_ADAPTER
     WCHAR Pool[MAX_POOL];
 } WINTUN_ADAPTER;
 
-VOID WINAPI
+void WINAPI
 WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter);
 
 WINTUN_STATUS WINAPI
-WintunGetAdapter(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _In_z_ LPCWSTR Name, _Out_ WINTUN_ADAPTER **Adapter);
+WintunGetAdapter(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_z_ const WCHAR *Name, _Out_ WINTUN_ADAPTER **Adapter);
 
 WINTUN_STATUS WINAPI
-WintunGetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_ADAPTER_NAME) LPWSTR Name);
+WintunGetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_ADAPTER_NAME) WCHAR *Name);
 
 WINTUN_STATUS WINAPI
-WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAPTER_NAME) LPCWSTR Name);
+WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name);
 
 void WINAPI
 WintunGetAdapterGUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ GUID *Guid);
@@ -109,8 +109,8 @@ WintunGetAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *H
 
 WINTUN_STATUS WINAPI
 WintunCreateAdapter(
-    _In_z_count_c_(MAX_POOL) LPCWSTR Pool,
-    _In_z_ LPCWSTR Name,
+    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
+    _In_z_ const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER **Adapter,
     _Inout_ BOOL *RebootRequired);
@@ -121,4 +121,4 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequ
 typedef BOOL(CALLBACK *WINTUN_ENUMPROC)(_In_ const WINTUN_ADAPTER *Adapter, _In_ LPARAM Param);
 
 WINTUN_STATUS WINAPI
-WintunEnumAdapters(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _In_ WINTUN_ENUMPROC Func, _In_ LPARAM Param);
+WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUMPROC Func, _In_ LPARAM Param);

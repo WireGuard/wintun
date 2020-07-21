@@ -6,10 +6,10 @@
 #include "pch.h"
 
 static WINTUN_STATUS
-OpenKeyWait(_In_ HKEY Key, _Inout_z_ LPWSTR Path, _In_ DWORD Access, _In_ ULONGLONG Deadline, _Out_ HKEY *KeyOut)
+OpenKeyWait(_In_ HKEY Key, _Inout_z_ WCHAR *Path, _In_ DWORD Access, _In_ ULONGLONG Deadline, _Out_ HKEY *KeyOut)
 {
     DWORD Result;
-    LPWSTR PathNext = wcschr(Path, L'\\');
+    WCHAR *PathNext = wcschr(Path, L'\\');
     if (PathNext)
         *PathNext = 0;
 
@@ -66,7 +66,7 @@ OpenKeyWait(_In_ HKEY Key, _Inout_z_ LPWSTR Path, _In_ DWORD Access, _In_ ULONGL
 WINTUN_STATUS
 RegistryOpenKeyWait(
     _In_ HKEY Key,
-    _In_z_count_c_(MAX_PATH) LPCWSTR Path,
+    _In_z_count_c_(MAX_PATH) const WCHAR *Path,
     _In_ DWORD Access,
     _In_ DWORD Timeout,
     _Out_ HKEY *KeyOut)
@@ -77,7 +77,7 @@ RegistryOpenKeyWait(
 }
 
 WINTUN_STATUS
-RegistryWaitForKey(_In_ HKEY Key, _In_z_count_c_(MAX_PATH) LPCWSTR Path, _In_ DWORD Timeout)
+RegistryWaitForKey(_In_ HKEY Key, _In_z_count_c_(MAX_PATH) const WCHAR *Path, _In_ DWORD Timeout)
 {
     HKEY k;
     DWORD Result = RegistryOpenKeyWait(Key, Path, KEY_NOTIFY, Timeout, &k);
@@ -103,14 +103,14 @@ RegistryWaitForKey(_In_ HKEY Key, _In_z_count_c_(MAX_PATH) LPCWSTR Path, _In_ DW
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
 WINTUN_STATUS
-RegistryGetString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType)
+RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
 {
     HANDLE Heap = GetProcessHeap();
 
     if (wcsnlen(*Buf, Len) >= Len)
     {
         /* String is missing zero-terminator. */
-        LPWSTR BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
+        WCHAR *BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
         if (!BufZ)
             return ERROR_OUTOFMEMORY;
         wmemcpy(BufZ, *Buf, Len);
@@ -130,7 +130,7 @@ RegistryGetString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType)
     Len = Len * 2 + 64;
     for (;;)
     {
-        LPWSTR Expanded = HeapAlloc(Heap, 0, Len * sizeof(WCHAR));
+        WCHAR *Expanded = HeapAlloc(Heap, 0, Len * sizeof(WCHAR));
         if (!Expanded)
             return ERROR_OUTOFMEMORY;
         DWORD Result = ExpandEnvironmentStringsW(*Buf, Expanded, Len);
@@ -167,7 +167,7 @@ RegistryGetString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType)
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
 WINTUN_STATUS
-RegistryGetMultiString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType)
+RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
 {
     HANDLE Heap = GetProcessHeap();
 
@@ -178,7 +178,7 @@ RegistryGetMultiString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType
             if (i > Len)
             {
                 /* Missing string and list terminators. */
-                LPWSTR BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 2) * sizeof(WCHAR));
+                WCHAR *BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 2) * sizeof(WCHAR));
                 if (!BufZ)
                     return ERROR_OUTOFMEMORY;
                 wmemcpy(BufZ, *Buf, Len);
@@ -191,7 +191,7 @@ RegistryGetMultiString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType
             if (i == Len)
             {
                 /* Missing list terminator. */
-                LPWSTR BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
+                WCHAR *BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
                 if (!BufZ)
                     return ERROR_OUTOFMEMORY;
                 wmemcpy(BufZ, *Buf, Len);
@@ -210,7 +210,7 @@ RegistryGetMultiString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType
     if (Result != ERROR_SUCCESS)
         return Result;
     Len = (DWORD)wcslen(*Buf) + 1;
-    LPWSTR BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
+    WCHAR *BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
     if (!BufZ)
         return ERROR_OUTOFMEMORY;
     wmemcpy(BufZ, *Buf, Len);
@@ -242,7 +242,7 @@ RegistryGetMultiString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType
 static WINTUN_STATUS
 RegistryQuery(
     _In_ HKEY Key,
-    _In_opt_z_ LPCWSTR Name,
+    _In_opt_z_ const WCHAR *Name,
     _Out_opt_ DWORD *ValueType,
     _Out_ void **Buf,
     _Inout_ DWORD *BufLen)
@@ -278,7 +278,7 @@ RegistryQuery(
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
 WINTUN_STATUS
-RegistryQueryString(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ LPWSTR *Value)
+RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ WCHAR **Value)
 {
     DWORD ValueType, Size = 256 * sizeof(WCHAR);
     DWORD Result = RegistryQuery(Key, Name, &ValueType, Value, &Size);
@@ -317,7 +317,7 @@ RegistryQueryString(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ LPWSTR *Value)
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
 WINTUN_STATUS
-RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _In_ DWORD Timeout, _Out_ LPWSTR *Value)
+RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout, _Out_ WCHAR **Value)
 {
     DWORD Result;
     ULONGLONG Deadline = GetTickCount64() + Timeout;
@@ -355,7 +355,7 @@ RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _In_ DWORD Timeo
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
 WINTUN_STATUS
-RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ DWORD *Value)
+RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ DWORD *Value)
 {
     DWORD ValueType, Size = sizeof(DWORD);
     DWORD Result = RegQueryValueExW(Key, Name, NULL, &ValueType, (BYTE *)Value, &Size);
@@ -383,7 +383,7 @@ RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ DWORD *Value)
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
 WINTUN_STATUS
-RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _In_ DWORD Timeout, _Out_ DWORD *Value)
+RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout, _Out_ DWORD *Value)
 {
     DWORD Result;
     ULONGLONG Deadline = GetTickCount64() + Timeout;

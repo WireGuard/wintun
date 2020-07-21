@@ -7,6 +7,36 @@
 
 HINSTANCE ResourceModule;
 
+/**
+ * Returns the version of the Wintun driver and NDIS system currently loaded.
+ */
+WINTUN_STATUS WINAPI
+WintunGetVersion(
+    _Out_ DWORD *DriverVersionMaj,
+    _Out_ DWORD *DriverVersionMin,
+    _Out_ DWORD *NdisVersionMaj,
+    _Out_ DWORD *NdisVersionMin)
+{
+    HKEY Key;
+    DWORD Result =
+        RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Services\\Wintun", 0, KEY_QUERY_VALUE, &Key);
+    if (Result != ERROR_SUCCESS)
+        return Result;
+    Result = RegistryQueryDWORD(Key, L"DriverMajorVersion", DriverVersionMaj);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupKey;
+    Result = RegistryQueryDWORD(Key, L"DriverMinorVersion", DriverVersionMin);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupKey;
+    Result = RegistryQueryDWORD(Key, L"NdisMajorVersion", NdisVersionMaj);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupKey;
+    Result = RegistryQueryDWORD(Key, L"NdisMinorVersion", NdisVersionMin);
+cleanupKey:
+    RegCloseKey(Key);
+    return Result;
+}
+
 BOOL APIENTRY
 DllMain(_In_ HINSTANCE hinstDLL, _In_ DWORD fdwReason, _In_ LPVOID lpvReserved)
 {

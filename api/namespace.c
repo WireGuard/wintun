@@ -10,10 +10,10 @@ static BOOL HasInitialized = FALSE;
 static CRITICAL_SECTION Initializing;
 static BCRYPT_ALG_HANDLE AlgProvider;
 
-static LPWSTR
-NormalizeStringAlloc(_In_ NORM_FORM NormForm, _In_z_ LPCWSTR Source)
+static WCHAR *
+NormalizeStringAlloc(_In_ NORM_FORM NormForm, _In_z_ const WCHAR *Source)
 {
-    LPWSTR Result = NULL;
+    WCHAR *Result = NULL;
     HANDLE Heap = GetProcessHeap();
     int Len = NormalizeString(NormForm, Source, -1, NULL, 0);
     for (int i = 0; i < 10; ++i)
@@ -34,7 +34,7 @@ NormalizeStringAlloc(_In_ NORM_FORM NormForm, _In_z_ LPCWSTR Source)
 }
 
 static void
-Bin2Hex(_In_bytecount_(Size) const void *Source, size_t Size, _Out_capcount_(Size * 2) LPWSTR Destination)
+Bin2Hex(_In_bytecount_(Size) const void *Source, size_t Size, _Out_capcount_(Size * 2) WCHAR *Destination)
 {
     for (size_t i = 0; i < Size; ++i)
     {
@@ -122,7 +122,7 @@ cleanupLeaveCriticalSection:
 
 _Check_return_
 HANDLE
-TakeNameMutex(_In_z_ LPCWSTR Pool)
+TakeNameMutex(_In_z_ const WCHAR *Pool)
 {
     HANDLE Mutex = NULL;
 
@@ -137,7 +137,7 @@ TakeNameMutex(_In_z_ LPCWSTR Pool)
     static const char mutex_label[] = "WireGuard Adapter Name Mutex Stable Suffix v1 jason@zx2c4.com";
     if (!BCRYPT_SUCCESS(BCryptHashData(Sha256, (PUCHAR)mutex_label, sizeof(mutex_label) - sizeof(char), 0)))
         goto cleanupSha256;
-    LPWSTR PoolNorm = NormalizeStringAlloc(NormalizationC, Pool);
+    WCHAR *PoolNorm = NormalizeStringAlloc(NormalizationC, Pool);
     if (!PoolNorm)
         goto cleanupSha256;
     /* TODO: wireguard-go hashes UTF-8 normalized pool name. We hash UTF-16 here. */

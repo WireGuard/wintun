@@ -7,11 +7,11 @@
 
 static HMODULE NciModule;
 
-DWORD(WINAPI *NciSetConnectionName)(_In_ LPCGUID Guid, _In_z_ LPCWSTR NewName);
+DWORD(WINAPI *NciSetConnectionName)(_In_ const GUID *Guid, _In_z_ const WCHAR *NewName);
 
 DWORD(WINAPI *NciGetConnectionName)
-(_In_ LPCGUID Guid,
- _Out_z_bytecap_(InDestNameBytes) LPWSTR Name,
+(_In_ const GUID *Guid,
+ _Out_z_bytecap_(InDestNameBytes) WCHAR *Name,
  _In_ DWORD InDestNameBytes,
  _Out_opt_ DWORD *OutDestNameBytes);
 
@@ -21,9 +21,10 @@ NciInit()
     NciModule = LoadLibraryW(L"nci.dll");
     if (!NciModule)
         return;
-    NciSetConnectionName = (DWORD(WINAPI *)(LPCGUID, LPCWSTR))GetProcAddress(NciModule, "NciSetConnectionName");
+    NciSetConnectionName =
+        (DWORD(WINAPI *)(const GUID *, const WCHAR *))GetProcAddress(NciModule, "NciSetConnectionName");
     NciGetConnectionName =
-        (DWORD(WINAPI *)(LPCGUID, LPWSTR, DWORD, DWORD *))GetProcAddress(NciModule, "NciGetConnectionName");
+        (DWORD(WINAPI *)(const GUID *, WCHAR *, DWORD, DWORD *))GetProcAddress(NciModule, "NciGetConnectionName");
 }
 
 void
