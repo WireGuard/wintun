@@ -120,7 +120,7 @@
       <AdditionalIncludeDirectories>..\$(WintunPlatform)\$(Configuration);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>Bcrypt.lib;Setupapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Bcrypt.lib;Cfgmgr32.lib;Iphlpapi.lib;Setupapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>exports.def</ModuleDefinitionFile>
       <SubSystem>Windows</SubSystem>
     </Link>
@@ -162,6 +162,7 @@
     <ClCompile Include="devmgmt.c" />
     <ClCompile Include="namespace.c" />
     <ClCompile Include="nci.c" />
+    <ClCompile Include="registry.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

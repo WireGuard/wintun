@@ -4,12 +4,15 @@
  */
 
 #include "api.h"
+#include <cfgmgr32.h>
+#include <iphlpapi.h>
 #include <objbase.h>
 #include <SetupAPI.h>
 #include <wchar.h>
 
 #define WINTUN_HWID L"Wintun"
 #define WAIT_FOR_REGISTRY_TIMEOUT 10000 /* ms */
+#define MAX_POOL_DEVICE_TYPE (MAX_POOL + 0x100)
 
 const static GUID CLASS_NET_GUID = { 0x4d36e972L, 0xe325, 0x11ce, { 0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18 } };
 const static GUID ADAPTER_NET_GUID = { 0xcac88484L,
@@ -18,214 +21,33 @@ const static GUID ADAPTER_NET_GUID = { 0xcac88484L,
                                        { 0x82, 0xe6, 0x71, 0xa8, 0x7a, 0xba, 0xc3, 0x61 } };
 
 /**
- * Validate and/or sanitize string value read from registry.
- *
- * @param Buf           On input, it contains pointer to pointer where the data is stored. The data must be
- *                      allocated using HeapAlloc(GetProcessHeap(), 0).
- *                      On output, it contains pointer to pointer where the sanitized data is stored. It must be
- *                      released with HeapFree(GetProcessHeap(), 0, *Buf) after use.
- *
- * @param Len           Length of data string in wide characters
- *
- * @param ValueType     Type of data. Must be either REG_SZ or REG_EXPAND_SZ.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise
+ * Returns the version of the Wintun driver and NDIS system currently loaded.
  */
-static WINSTATUS
-GetRegString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType)
+WINSTATUS WINAPI
+WintunGetVersion(
+    _Out_ DWORD *DriverVersionMaj,
+    _Out_ DWORD *DriverVersionMin,
+    _Out_ DWORD *NdisVersionMaj,
+    _Out_ DWORD *NdisVersionMin)
 {
-    HANDLE Heap = GetProcessHeap();
-
-    if (wcsnlen(*Buf, Len) >= Len)
-    {
-        /* String is missing zero-terminator. */
-        LPWSTR BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
-        if (!BufZ)
-            return ERROR_OUTOFMEMORY;
-        wmemcpy(BufZ, *Buf, Len);
-        BufZ[Len] = 0;
-        HeapFree(Heap, 0, *Buf);
-        *Buf = BufZ;
-    }
-
-    if (ValueType != REG_EXPAND_SZ)
-        return ERROR_SUCCESS;
-
-    /* ExpandEnvironmentStringsW() returns strlen on success or 0 on error. Bail out on empty input strings to
-     * disambiguate. */
-    if (!(*Buf)[0])
-        return ERROR_SUCCESS;
-
-    Len = Len * 2 + 64;
-    for (;;)
-    {
-        LPWSTR Expanded = HeapAlloc(Heap, 0, Len * sizeof(WCHAR));
-        if (!Expanded)
-            return ERROR_OUTOFMEMORY;
-        DWORD Result = ExpandEnvironmentStringsW(*Buf, Expanded, Len);
-        if (!Result)
-        {
-            Result = GetLastError();
-            HeapFree(Heap, 0, Expanded);
-            return Result;
-        }
-        if (Result > Len)
-        {
-            HeapFree(Heap, 0, Expanded);
-            Len = Result;
-            continue;
-        }
-        HeapFree(Heap, 0, *Buf);
-        *Buf = Expanded;
-        return ERROR_SUCCESS;
-    }
-}
-
-/**
- * Validate and/or sanitize multi-string value read from registry.
- *
- * @param Buf           On input, it contains pointer to pointer where the data is stored. The data must be
- *                      allocated using HeapAlloc(GetProcessHeap(), 0).
- *                      On output, it contains pointer to pointer where the sanitized data is stored. It must be
- *                      released with HeapFree(GetProcessHeap(), 0, *Buf) after use.
- *
- * @param Len           Length of data string in wide characters
- *
- * @param ValueType     Type of data. Must be one of REG_MULTI_SZ, REG_SZ or REG_EXPAND_SZ.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise
- */
-static WINSTATUS
-GetRegMultiString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType)
-{
-    HANDLE Heap = GetProcessHeap();
-
-    if (ValueType == REG_MULTI_SZ)
-    {
-        for (size_t i = 0;; i += wcsnlen(*Buf + i, Len - i) + 1)
-        {
-            if (i > Len)
-            {
-                /* Missing string and list terminators. */
-                LPWSTR BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 2) * sizeof(WCHAR));
-                if (!BufZ)
-                    return ERROR_OUTOFMEMORY;
-                wmemcpy(BufZ, *Buf, Len);
-                BufZ[Len] = 0;
-                BufZ[Len + 1] = 0;
-                HeapFree(Heap, 0, *Buf);
-                *Buf = BufZ;
-                return ERROR_SUCCESS;
-            }
-            if (i == Len)
-            {
-                /* Missing list terminator. */
-                LPWSTR BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
-                if (!BufZ)
-                    return ERROR_OUTOFMEMORY;
-                wmemcpy(BufZ, *Buf, Len);
-                BufZ[Len] = 0;
-                HeapFree(Heap, 0, *Buf);
-                *Buf = BufZ;
-                return ERROR_SUCCESS;
-            }
-            if (!(*Buf)[i])
-                return ERROR_SUCCESS;
-        }
-    }
-
-    /* Sanitize REG_SZ/REG_EXPAND_SZ and append a list terminator to make a multi-string. */
-    DWORD Result = GetRegString(Buf, Len, ValueType);
+    HKEY Key;
+    DWORD Result =
+        RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Services\\Wintun", 0, KEY_QUERY_VALUE, &Key);
     if (Result != ERROR_SUCCESS)
         return Result;
-    Len = (DWORD)wcslen(*Buf) + 1;
-    LPWSTR BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
-    if (!BufZ)
-        return ERROR_OUTOFMEMORY;
-    wmemcpy(BufZ, *Buf, Len);
-    BufZ[Len] = 0;
-    HeapFree(Heap, 0, *Buf);
-    *Buf = BufZ;
-    return ERROR_SUCCESS;
-}
-
-/**
- * Reads string value from registry key.
- *
- * @param Key           Handle of the registry key to read from. Must be opened with read
- *                      access.
- *
- * @param Name          Name of the value to read
- *
- * @param Value         Pointer to string to retrieve registry value. If the value type is
- *                      REG_EXPAND_SZ the value is expanded using ExpandEnvironmentStrings().
- *                      The string must be released with HeapFree(GetProcessHeap(), 0, Value)
- *                      after use.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise
- */
-static WINSTATUS
-RegQueryString(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ LPWSTR *Value)
-{
-    HANDLE Heap = GetProcessHeap();
-    DWORD Size = 256;
-    for (;;)
-    {
-        *Value = HeapAlloc(Heap, 0, Size);
-        if (!*Value)
-            return ERROR_OUTOFMEMORY;
-        DWORD ValueType;
-        DWORD Result = RegQueryValueExW(Key, Name, NULL, &ValueType, (BYTE *)*Value, &Size);
-        if (Result == ERROR_MORE_DATA)
-        {
-            HeapFree(Heap, 0, *Value);
-            continue;
-        }
-        if (Result != ERROR_SUCCESS)
-        {
-            HeapFree(Heap, 0, *Value);
-            return Result;
-        }
-
-        switch (ValueType)
-        {
-        case REG_SZ:
-        case REG_EXPAND_SZ:
-            Result = GetRegString(Value, Size / sizeof(WCHAR), ValueType);
-            if (Result != ERROR_SUCCESS)
-                HeapFree(Heap, 0, *Value);
-            return Result;
-        default:
-            HeapFree(Heap, 0, *Value);
-            return ERROR_INVALID_DATATYPE;
-        }
-    }
-}
-
-/**
- * Reads a 32-bit DWORD value from registry key.
- *
- * @param Key           Handle of the registry key to read from. Must be opened with read
- *                      access.
- *
- * @param Name          Name of the value to read
- *
- * @param Value         Pointer to DWORD to retrieve registry value
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise
- */
-static WINSTATUS
-RegQueryDWORD(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ DWORD *Value)
-{
-    DWORD ValueType, Size = sizeof(DWORD);
-    DWORD Result = RegQueryValueExW(Key, Name, NULL, &ValueType, (BYTE *)Value, &Size);
+    Result = RegistryQueryDWORD(Key, L"DriverMajorVersion", DriverVersionMaj);
     if (Result != ERROR_SUCCESS)
-        return Result;
-    if (ValueType != REG_DWORD)
-        return ERROR_INVALID_DATATYPE;
-    if (Size != sizeof(DWORD))
-        return ERROR_INVALID_DATA;
-    return ERROR_SUCCESS;
+        goto cleanupKey;
+    Result = RegistryQueryDWORD(Key, L"DriverMinorVersion", DriverVersionMin);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupKey;
+    Result = RegistryQueryDWORD(Key, L"NdisMajorVersion", NdisVersionMaj);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupKey;
+    Result = RegistryQueryDWORD(Key, L"NdisMinorVersion", NdisVersionMin);
+cleanupKey:
+    RegCloseKey(Key);
+    return Result;
 }
 
 /**
@@ -316,7 +138,8 @@ GetDeviceRegistryString(
     {
     case REG_SZ:
     case REG_EXPAND_SZ:
-        Result = GetRegString(PropertyBuffer, Size / sizeof(WCHAR), ValueType);
+    case REG_MULTI_SZ:
+        Result = RegistryGetString(PropertyBuffer, Size / sizeof(WCHAR), ValueType);
         if (Result != ERROR_SUCCESS)
             HeapFree(GetProcessHeap(), 0, *PropertyBuffer);
         return Result;
@@ -358,7 +181,7 @@ GetDeviceRegistryMultiString(
     case REG_SZ:
     case REG_EXPAND_SZ:
     case REG_MULTI_SZ:
-        Result = GetRegMultiString(PropertyBuffer, Size / sizeof(WCHAR), ValueType);
+        Result = RegistryGetMultiString(PropertyBuffer, Size / sizeof(WCHAR), ValueType);
         if (Result != ERROR_SUCCESS)
             HeapFree(GetProcessHeap(), 0, *PropertyBuffer);
         return Result;
@@ -372,27 +195,27 @@ GetDeviceRegistryMultiString(
  * Removes numbered suffix from adapter name.
  */
 static void
-RemoveNumberedSuffix(_In_z_ LPCWSTR IfName, _Out_ LPWSTR Removed)
+RemoveNumberedSuffix(_In_z_ LPCWSTR Name, _Out_ LPWSTR Removed)
 {
-    size_t Len = wcslen(IfName);
-    if (Len && IfName[Len - 1] < L'0' || IfName[Len - 1] > L'9')
+    size_t Len = wcslen(Name);
+    if (Len && Name[Len - 1] < L'0' || Name[Len - 1] > L'9')
     {
-        wmemcpy(Removed, IfName, Len + 1);
+        wmemcpy(Removed, Name, Len + 1);
         return;
     }
     for (size_t i = Len; i--;)
     {
-        if (IfName[i] >= L'0' && IfName[i] <= L'9')
+        if (Name[i] >= L'0' && Name[i] <= L'9')
             continue;
-        if (IfName[i] == L' ')
+        if (Name[i] == L' ')
         {
-            wmemcpy(Removed, IfName, i);
+            wmemcpy(Removed, Name, i);
             Removed[i] = 0;
             return;
         }
         break;
     }
-    wmemcpy(Removed, IfName, Len + 1);
+    wmemcpy(Removed, Name, Len + 1);
 }
 
 /**
@@ -414,24 +237,10 @@ IsOurHardwareID(_In_z_ LPWSTR Hwids)
 /**
  * Returns pool-specific device type name.
  */
-static WINSTATUS
-GetPoolDeviceTypeName(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _Out_ LPWSTR *Name)
+static void
+GetPoolDeviceTypeName(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _Out_cap_c_(MAX_POOL_DEVICE_TYPE) LPWSTR Name)
 {
-    HANDLE Heap = GetProcessHeap();
-    int Len = 256;
-    for (;;)
-    {
-        *Name = HeapAlloc(Heap, 0, Len * sizeof(WCHAR));
-        if (!*Name)
-            return ERROR_OUTOFMEMORY;
-        if (_snwprintf_s(*Name, Len, _TRUNCATE, L"%s Tunnel", Pool) < 0)
-        {
-            HeapFree(Heap, 0, *Name);
-            Len *= 2;
-            continue;
-        }
-        return ERROR_SUCCESS;
-    }
+    _snwprintf_s(Name, MAX_POOL_DEVICE_TYPE, _TRUNCATE, L"%.*s Tunnel", MAX_POOL, Pool);
 }
 
 /**
@@ -445,31 +254,28 @@ IsPoolMember(
     _Out_ BOOL *IsMember)
 {
     HANDLE Heap = GetProcessHeap();
-    LPWSTR DeviceDesc, FriendlyName, PoolDeviceTypeName;
+    LPWSTR DeviceDesc, FriendlyName;
     DWORD Result = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_DEVICEDESC, &DeviceDesc);
     if (Result != ERROR_SUCCESS)
         return Result;
     Result = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_FRIENDLYNAME, &FriendlyName);
     if (Result != ERROR_SUCCESS)
         goto cleanupDeviceDesc;
-    Result = GetPoolDeviceTypeName(Pool, &PoolDeviceTypeName);
-    if (Result != ERROR_SUCCESS)
-        goto cleanupFriendlyName;
+    WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
+    GetPoolDeviceTypeName(Pool, PoolDeviceTypeName);
     if (!_wcsicmp(FriendlyName, PoolDeviceTypeName) || !_wcsicmp(DeviceDesc, PoolDeviceTypeName))
     {
         *IsMember = TRUE;
-        goto cleanupPoolDeviceTypeName;
+        goto cleanupFriendlyName;
     }
     RemoveNumberedSuffix(FriendlyName, FriendlyName);
     RemoveNumberedSuffix(DeviceDesc, DeviceDesc);
     if (!_wcsicmp(FriendlyName, PoolDeviceTypeName) || !_wcsicmp(DeviceDesc, PoolDeviceTypeName))
     {
         *IsMember = TRUE;
-        goto cleanupPoolDeviceTypeName;
+        goto cleanupFriendlyName;
     }
     *IsMember = FALSE;
-cleanupPoolDeviceTypeName:
-    HeapFree(Heap, 0, PoolDeviceTypeName);
 cleanupFriendlyName:
     HeapFree(Heap, 0, FriendlyName);
 cleanupDeviceDesc:
@@ -502,7 +308,7 @@ GetDriverInfoDetail(
     _Out_ SP_DRVINFO_DETAIL_DATA_W **DriverDetailData)
 {
     HANDLE Heap = GetProcessHeap();
-    DWORD Size = 2048;
+    DWORD Size = sizeof(SP_DRVINFO_DETAIL_DATA_W) + 0x100;
     for (;;)
     {
         *DriverDetailData = HeapAlloc(Heap, 0, Size);
@@ -567,16 +373,49 @@ IsUsingOurDriver(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_
  *
  * @param Pool          Name of the adapter pool
  *
- * @param Adapter       A pointer to a Wintun adapter descriptor
+ * @param Adapter       Pointer to a handle to receive the adapter descriptor. Must be released with
+ *                      HeapFree(GetProcessHeap(), 0, *Adapter).
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
 static WINSTATUS
-InitAdapterData(
+GetNetCfgInstanceId(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ GUID *CfgInstanceID)
+{
+    HKEY Key = SetupDiOpenDevRegKey(DevInfo, DevInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_QUERY_VALUE);
+    if (Key == INVALID_HANDLE_VALUE)
+        return GetLastError();
+    LPWSTR ValueStr;
+    DWORD Result = RegistryQueryString(Key, L"NetCfgInstanceId", &ValueStr);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupKey;
+    Result = SUCCEEDED(CLSIDFromString(ValueStr, CfgInstanceID)) ? ERROR_SUCCESS : ERROR_INVALID_DATA;
+    HeapFree(GetProcessHeap(), 0, ValueStr);
+cleanupKey:
+    RegCloseKey(Key);
+    return Result;
+}
+
+/**
+ * Creates a Wintun interface descriptor and populates it from the device's registry key.
+ *
+ * @param DevInfo       A handle to the device information set that contains a device information element that
+ *                      represents the device for which to open a registry key.
+ *
+ * @param DevInfoData   A pointer to a structure that specifies the device information element in DeviceInfoSet.
+ *
+ * @param Pool          Name of the adapter pool
+ *
+ * @param Adapter       Pointer to a handle to receive the adapter descriptor. Must be released with
+ *                      HeapFree(GetProcessHeap(), 0, *Adapter).
+ *
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise
+ */
+static WINSTATUS
+CreateAdapterData(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
     _In_z_count_c_(MAX_POOL) LPCWSTR Pool,
-    _Out_ WINTUN_ADAPTER *Adapter)
+    _Out_ WINTUN_ADAPTER **Adapter)
 {
     DWORD Result;
 
@@ -585,42 +424,114 @@ InitAdapterData(
     if (Key == INVALID_HANDLE_VALUE)
         return GetLastError();
 
+    HANDLE Heap = GetProcessHeap();
+    *Adapter = HeapAlloc(Heap, 0, sizeof(WINTUN_ADAPTER));
+    if (!*Adapter)
+    {
+        Result = ERROR_OUTOFMEMORY;
+        goto cleanupKey;
+    }
+
     /* Read the NetCfgInstanceId value and convert to GUID. */
     LPWSTR ValueStr;
-    Result = RegQueryString(Key, L"NetCfgInstanceId", &ValueStr);
+    Result = RegistryQueryString(Key, L"NetCfgInstanceId", &ValueStr);
     if (Result != ERROR_SUCCESS)
-        goto cleanupKey;
-    if (FAILED(CLSIDFromString(ValueStr, &Adapter->CfgInstanceID)))
+        goto cleanupAdapter;
+    if (FAILED(CLSIDFromString(ValueStr, &(*Adapter)->CfgInstanceID)))
     {
         HeapFree(GetProcessHeap(), 0, ValueStr);
         Result = ERROR_INVALID_DATA;
-        goto cleanupKey;
+        goto cleanupAdapter;
     }
     HeapFree(GetProcessHeap(), 0, ValueStr);
 
     /* Read the NetLuidIndex value. */
-    Result = RegQueryDWORD(Key, L"NetLuidIndex", &Adapter->LuidIndex);
+    Result = RegistryQueryDWORD(Key, L"NetLuidIndex", &(*Adapter)->LuidIndex);
     if (Result != ERROR_SUCCESS)
-        goto cleanupKey;
+        goto cleanupAdapter;
 
     /* Read the NetLuidIndex value. */
-    Result = RegQueryDWORD(Key, L"*IfType", &Adapter->IfType);
+    Result = RegistryQueryDWORD(Key, L"*IfType", &(*Adapter)->IfType);
     if (Result != ERROR_SUCCESS)
-        goto cleanupKey;
+        goto cleanupAdapter;
 
     DWORD Size;
     if (!SetupDiGetDeviceInstanceIdW(
-            DevInfo, DevInfoData, Adapter->DevInstanceID, _countof(Adapter->DevInstanceID), &Size))
+            DevInfo, DevInfoData, (*Adapter)->DevInstanceID, _countof((*Adapter)->DevInstanceID), &Size))
     {
         Result = GetLastError();
-        goto cleanupKey;
+        goto cleanupAdapter;
     }
 
-    wcscpy_s(Adapter->Pool, _countof(Adapter->Pool), Pool);
+    wcscpy_s((*Adapter)->Pool, _countof((*Adapter)->Pool), Pool);
     Result = ERROR_SUCCESS;
 
+cleanupAdapter:
+    if (Result != ERROR_SUCCESS)
+        HeapFree(Heap, 0, *Adapter);
 cleanupKey:
     RegCloseKey(Key);
+    return Result;
+}
+
+/**
+ * Returns the device-level registry key path.
+ */
+static void
+GetDeviceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_PATH + MAX_INSTANCE_ID) LPWSTR Path)
+{
+    _snwprintf_s(
+        Path,
+        MAX_PATH + MAX_INSTANCE_ID,
+        _TRUNCATE,
+        L"SYSTEM\\CurrentControlSet\\Enum\\%.*s",
+        MAX_INSTANCE_ID,
+        Adapter->DevInstanceID);
+}
+
+/**
+ * Returns the adapter-specific TCP/IP network registry key path.
+ */
+static void
+GetTcpipAdapterRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_PATH) LPWSTR Path)
+{
+    WCHAR Guid[MAX_GUID_STRING_LEN];
+    _snwprintf_s(
+        Path,
+        MAX_PATH,
+        _TRUNCATE,
+        L"SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Adapters\\%.*s",
+        StringFromGUID2(&Adapter->CfgInstanceID, Guid, _countof(Guid)),
+        Guid);
+}
+
+/**
+ * Returns the interface-specific TCP/IP network registry key path.
+ */
+static WINSTATUS
+GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_PATH) LPWSTR Path)
+{
+    DWORD Result;
+    HKEY TcpipAdapterRegKey;
+    WCHAR TcpipAdapterRegPath[MAX_PATH];
+    GetTcpipAdapterRegPath(Adapter, TcpipAdapterRegPath);
+    Result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, TcpipAdapterRegPath, 0, KEY_QUERY_VALUE, &TcpipAdapterRegKey);
+    if (Result != ERROR_SUCCESS)
+        return Result;
+    LPWSTR Paths;
+    Result = RegistryQueryString(TcpipAdapterRegKey, L"IpConfig", &Paths);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupTcpipAdapterRegKey;
+    if (!Paths[0])
+    {
+        Result = ERROR_NETWORK_NOT_AVAILABLE;
+        goto cleanupPaths;
+    }
+    _snwprintf_s(Path, MAX_PATH, _TRUNCATE, L"SYSTEM\\CurrentControlSet\\Services\\%s", Paths);
+cleanupPaths:
+    HeapFree(GetProcessHeap(), 0, Paths);
+cleanupTcpipAdapterRegKey:
+    RegCloseKey(TcpipAdapterRegKey);
     return Result;
 }
 
@@ -640,7 +551,7 @@ WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
  *
  * @param Pool          Name of the adapter pool
  *
- * @param IfName        Adapter name
+ * @param Name          Adapter name
  *
  * @param Adapter       Pointer to a handle to receive the adapter handle. Must be released with
  *                      WintunFreeAdapter.
@@ -650,7 +561,7 @@ WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
  * ERROR_ALREADY_EXISTS if adapter is found but not a Wintun-class or not a member of the pool
  */
 WINSTATUS WINAPI
-WintunGetAdapter(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _In_z_ LPCWSTR IfName, _Out_ WINTUN_ADAPTER **Adapter)
+WintunGetAdapter(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _In_z_ LPCWSTR Name, _Out_ WINTUN_ADAPTER **Adapter)
 {
     DWORD Result;
     HANDLE Mutex = TakeNameMutex(Pool);
@@ -676,31 +587,17 @@ WintunGetAdapter(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _In_z_ LPCWSTR IfName, _
         }
 
         GUID CfgInstanceID;
-        HKEY Key = SetupDiOpenDevRegKey(DevInfo, &DevInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_QUERY_VALUE);
-        if (Key != INVALID_HANDLE_VALUE)
-        {
-            LPWSTR CfgInstanceIDStr;
-            Result = RegQueryString(Key, L"NetCfgInstanceId", &CfgInstanceIDStr);
-            if (Result == ERROR_SUCCESS)
-            {
-                Result =
-                    SUCCEEDED(CLSIDFromString(CfgInstanceIDStr, &CfgInstanceID)) ? ERROR_SUCCESS : ERROR_INVALID_DATA;
-                HeapFree(Heap, 0, CfgInstanceIDStr);
-            }
-            RegCloseKey(Key);
-        }
-        else
-            Result = GetLastError();
+        Result = GetNetCfgInstanceId(DevInfo, &DevInfoData, &CfgInstanceID);
         if (Result != ERROR_SUCCESS)
             continue;
 
         /* TODO: is there a better way than comparing ifnames? */
-        WCHAR IfName2[0x400], IfName3[0x400]; /* TODO: Make dynamic. */
-        if (NciGetConnectionName(&CfgInstanceID, IfName2, sizeof(IfName2), NULL) != ERROR_SUCCESS)
+        WCHAR Name2[MAX_ADAPTER_NAME], Name3[MAX_ADAPTER_NAME];
+        if (NciGetConnectionName(&CfgInstanceID, Name2, sizeof(Name2), NULL) != ERROR_SUCCESS)
             continue;
-        IfName2[_countof(IfName2) - 1] = 0;
-        RemoveNumberedSuffix(IfName2, IfName3);
-        if (_wcsicmp(IfName, IfName2) && _wcsicmp(IfName, IfName3))
+        Name2[_countof(Name2) - 1] = 0;
+        RemoveNumberedSuffix(Name2, Name3);
+        if (_wcsicmp(Name, Name2) && _wcsicmp(Name, Name3))
             continue;
 
         /* Check the Hardware ID to make sure it's a real Wintun device. This avoids doing slow operations on non-Wintun
@@ -737,19 +634,638 @@ WintunGetAdapter(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _In_z_ LPCWSTR IfName, _
             goto cleanupDevInfo;
         }
 
-        *Adapter = HeapAlloc(Heap, 0, sizeof(WINTUN_ADAPTER));
-        if (!*Adapter)
-        {
-            Result = ERROR_OUTOFMEMORY;
-            goto cleanupDevInfo;
-        }
-        Result = InitAdapterData(DevInfo, &DevInfoData, Pool, *Adapter);
-        if (Result != ERROR_SUCCESS)
-            HeapFree(Heap, 0, *Adapter);
+        Result = CreateAdapterData(DevInfo, &DevInfoData, Pool, Adapter);
         goto cleanupDevInfo;
     }
     Result = ERROR_FILE_NOT_FOUND;
 cleanupDevInfo:
+    SetupDiDestroyDeviceInfoList(DevInfo);
+cleanupMutex:
+    ReleaseNameMutex(Mutex);
+    return Result;
+}
+
+/**
+ * Returns the name of the Wintun interface.
+ */
+WINSTATUS WINAPI
+WintunGetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_ADAPTER_NAME) LPWSTR Name)
+{
+    return NciGetConnectionName(&Adapter->CfgInstanceID, Name, MAX_ADAPTER_NAME * sizeof(WCHAR), NULL);
+}
+
+static WINSTATUS
+InterfaceGuidFromAlias(_In_z_ LPCWSTR Alias, _Out_ GUID *Guid)
+{
+    NET_LUID Luid;
+    DWORD Result = ConvertInterfaceAliasToLuid(Alias, &Luid);
+    if (Result != NO_ERROR)
+        return Result;
+    return ConvertInterfaceLuidToGuid(&Luid, Guid);
+}
+
+/**
+ * Sets name of the Wintun interface.
+ */
+WINSTATUS WINAPI
+WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAPTER_NAME) LPCWSTR Name)
+{
+    DWORD Result;
+    const int MaxSuffix = 1000;
+    WCHAR AvailableName[MAX_ADAPTER_NAME];
+    wcscpy_s(AvailableName, _countof(AvailableName), Name);
+    for (int i = 0;; ++i)
+    {
+        Result = NciSetConnectionName(&Adapter->CfgInstanceID, AvailableName);
+        if (Result == ERROR_DUP_NAME)
+        {
+            GUID Guid2;
+            DWORD Result2 = InterfaceGuidFromAlias(AvailableName, &Guid2);
+            if (Result2 == ERROR_SUCCESS)
+            {
+                for (int j = 0; j < MaxSuffix; ++j)
+                {
+                    WCHAR Proposal[MAX_ADAPTER_NAME];
+                    _snwprintf_s(Proposal, _countof(Proposal), _TRUNCATE, L"%.*s %d", MAX_ADAPTER_NAME, Name, j + 1);
+                    if (_wcsnicmp(Proposal, AvailableName, MAX_ADAPTER_NAME) == 0)
+                        continue;
+                    Result2 = NciSetConnectionName(&Guid2, Proposal);
+                    if (Result2 == ERROR_DUP_NAME)
+                        continue;
+                    if (Result2 == ERROR_SUCCESS)
+                    {
+                        Result = NciSetConnectionName(&Adapter->CfgInstanceID, AvailableName);
+                        if (Result == ERROR_SUCCESS)
+                            break;
+                    }
+                    break;
+                }
+            }
+        }
+        if (Result == ERROR_SUCCESS)
+            break;
+        if (i > MaxSuffix || Result != ERROR_DUP_NAME)
+            return Result;
+        _snwprintf_s(AvailableName, _countof(AvailableName), _TRUNCATE, L"%.*s %d", MAX_ADAPTER_NAME, Name, i + 1);
+    }
+
+    /* TODO: This should use NetSetup2 so that it doesn't get unset. */
+    HKEY DeviceRegKey;
+    WCHAR DeviceRegPath[MAX_PATH + MAX_INSTANCE_ID];
+    GetDeviceRegPath(Adapter, DeviceRegPath);
+    Result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, DeviceRegPath, 0, KEY_SET_VALUE, &DeviceRegKey);
+    if (Result != ERROR_SUCCESS)
+        return Result;
+    WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
+    GetPoolDeviceTypeName(Adapter->Pool, PoolDeviceTypeName);
+    Result = RegSetKeyValueW(
+        DeviceRegKey,
+        NULL,
+        L"FriendlyName",
+        REG_SZ,
+        PoolDeviceTypeName,
+        (DWORD)((wcslen(PoolDeviceTypeName) + 1) * sizeof(WCHAR)));
+    RegCloseKey(DeviceRegKey);
+    return Result;
+}
+
+/**
+ * Returns the GUID of the interface.
+ *
+ * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+ *
+ * @param Guid          Pointer to GUID to receive adapter ID.
+ */
+void WINAPI
+WintunGetAdapterGUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ GUID *Guid)
+{
+    memcpy_s(Guid, sizeof(*Guid), &Adapter->CfgInstanceID, sizeof(Adapter->CfgInstanceID));
+}
+
+/**
+ * Returns the LUID of the interface.
+ *
+ * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+ *
+ * @param Luid          Pointer to LUID to receive adapter LUID.
+ */
+void WINAPI
+WintunGetAdapterLUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ LUID *Luid)
+{
+    *(LONGLONG *)Luid = (((LONGLONG)Adapter->LuidIndex & ((1 << 24) - 1)) << 24) |
+                        (((LONGLONG)Adapter->IfType & ((1 << 16) - 1)) << 48);
+}
+
+/**
+ * Returns a handle to the adapter device object.
+ */
+WINSTATUS WINAPI
+WintunGetAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *Handle)
+{
+    HANDLE Heap = GetProcessHeap();
+    ULONG InterfacesLen;
+    DWORD Result = CM_Get_Device_Interface_List_SizeW(
+        &InterfacesLen,
+        (GUID *)&ADAPTER_NET_GUID,
+        (DEVINSTID_W)Adapter->DevInstanceID,
+        CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
+    if (Result != CR_SUCCESS)
+        return Result;
+    LPWSTR Interfaces = HeapAlloc(Heap, 0, InterfacesLen * sizeof(WCHAR));
+    if (!Interfaces)
+        return ERROR_OUTOFMEMORY;
+    Result = CM_Get_Device_Interface_ListW(
+        (GUID *)&ADAPTER_NET_GUID,
+        (DEVINSTID_W)Adapter->DevInstanceID,
+        Interfaces,
+        InterfacesLen,
+        CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
+    if (Result != CR_SUCCESS)
+        goto cleanupBuf;
+    *Handle = CreateFileW(
+        Interfaces,
+        GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        NULL,
+        OPEN_EXISTING,
+        0,
+        NULL);
+    if (*Handle == INVALID_HANDLE_VALUE)
+        Result = GetLastError();
+cleanupBuf:
+    HeapFree(Heap, 0, Interfaces);
+    return Result;
+}
+
+/**
+ * Sets device install parameters for a quiet installation.
+ */
+static WINSTATUS
+SetQuietInstall(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
+{
+    SP_DEVINSTALL_PARAMS_W DevInstallParams = { .cbSize = sizeof(SP_DEVINSTALL_PARAMS_W) };
+    if (!SetupDiGetDeviceInstallParamsW(DevInfo, DevInfoData, &DevInstallParams))
+        return GetLastError();
+    DevInstallParams.Flags |= DI_QUIETINSTALL;
+    if (!SetupDiSetDeviceInstallParams(DevInfo, DevInfoData, &DevInstallParams))
+        return GetLastError();
+    return ERROR_SUCCESS;
+}
+
+/**
+ * @return TRUE if DriverData date and version is newer than supplied parameters.
+ */
+static BOOL
+IsNewer(_In_ const SP_DRVINFO_DATA_W *DriverData, _In_ const FILETIME *DriverDate, _In_ DWORDLONG DriverVersion)
+{
+    if (DriverData->DriverDate.dwHighDateTime > DriverDate->dwHighDateTime)
+        return TRUE;
+    if (DriverData->DriverDate.dwHighDateTime < DriverDate->dwHighDateTime)
+        return FALSE;
+
+    if (DriverData->DriverDate.dwLowDateTime > DriverDate->dwLowDateTime)
+        return TRUE;
+    if (DriverData->DriverDate.dwLowDateTime < DriverDate->dwLowDateTime)
+        return FALSE;
+
+    if (DriverData->DriverVersion > DriverVersion)
+        return TRUE;
+    if (DriverData->DriverVersion < DriverVersion)
+        return FALSE;
+
+    return FALSE;
+}
+
+/**
+ * Checks device install parameters if a system reboot is required.
+ */
+static BOOL
+CheckReboot(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
+{
+    SP_DEVINSTALL_PARAMS_W DevInstallParams = { .cbSize = sizeof(SP_DEVINSTALL_PARAMS_W) };
+    if (!SetupDiGetDeviceInstallParamsW(DevInfo, DevInfoData, &DevInstallParams))
+        return FALSE;
+
+    return (DevInstallParams.Flags & (DI_NEEDREBOOT | DI_NEEDRESTART)) != 0;
+}
+
+/**
+ * Creates a Wintun interface.
+ *
+ * @param Pool          Name of the adapter pool
+ *
+ * @param Name          The requested name of the interface
+ *
+ * @param RequestedGUID  The GUID of the created network interface, which then influences NLA generation
+ *                      deterministically. If it is set to NULL, the GUID is chosen by the system at random, and hence
+ *                      a new NLA entry is created for each new interface. It is called "requested" GUID because the API
+ *                      it uses is completely undocumented, and so there could be minor interesting complications with
+ *                      its usage.
+ *
+ * @param Adapter       Pointer to a handle to receive the adapter handle. Must be released with
+ *                      WintunFreeAdapter.
+ *
+ * @param RebootRequired  Pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot. Must be
+ *                      initialised to FALSE manually before this function is called.
+ *
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise
+ */
+WINSTATUS WINAPI
+WintunCreateAdapter(
+    _In_z_count_c_(MAX_POOL) LPCWSTR Pool,
+    _In_z_ LPCWSTR Name,
+    _In_opt_ const GUID *RequestedGUID,
+    _Out_ WINTUN_ADAPTER **Adapter,
+    _Inout_ BOOL *RebootRequired)
+{
+    DWORD Result;
+    HANDLE Mutex = TakeNameMutex(Pool);
+    if (!Mutex)
+        return ERROR_GEN_FAILURE;
+
+    HDEVINFO DevInfo = SetupDiCreateDeviceInfoListExW(&CLASS_NET_GUID, NULL, NULL, NULL);
+    if (DevInfo == INVALID_HANDLE_VALUE)
+    {
+        Result = GetLastError();
+        goto cleanupMutex;
+    }
+
+    WCHAR ClassName[MAX_CLASS_NAME_LEN];
+    if (!SetupDiClassNameFromGuidExW(&CLASS_NET_GUID, ClassName, _countof(ClassName), NULL, NULL, NULL))
+    {
+        Result = GetLastError();
+        goto cleanupDevInfo;
+    }
+
+    HANDLE Heap = GetProcessHeap();
+    WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
+    GetPoolDeviceTypeName(Pool, PoolDeviceTypeName);
+    SP_DEVINFO_DATA DevInfoData = { .cbSize = sizeof(SP_DEVINFO_DATA) };
+    if (!SetupDiCreateDeviceInfoW(
+            DevInfo, ClassName, &CLASS_NET_GUID, PoolDeviceTypeName, NULL, DICD_GENERATE_ID, &DevInfoData))
+    {
+        Result = GetLastError();
+        goto cleanupDevInfo;
+    }
+    Result = SetQuietInstall(DevInfo, &DevInfoData);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupDevInfo;
+
+    if (!SetupDiSetSelectedDevice(DevInfo, &DevInfoData))
+    {
+        Result = GetLastError();
+        goto cleanupDevInfo;
+    }
+
+    static const WCHAR Hwids[_countof(WINTUN_HWID) + 1 /*Multi-string terminator*/] = WINTUN_HWID;
+    if (!SetupDiSetDeviceRegistryPropertyW(DevInfo, &DevInfoData, SPDRP_HARDWAREID, (const BYTE *)Hwids, sizeof(Hwids)))
+    {
+        Result = GetLastError();
+        goto cleanupDevInfo;
+    }
+    if (!SetupDiBuildDriverInfoList(DevInfo, &DevInfoData, SPDIT_COMPATDRIVER)) /* TODO: This takes ~510ms */
+    {
+        Result = GetLastError();
+        goto cleanupDevInfo;
+    }
+
+    FILETIME DriverDate = { 0, 0 };
+    DWORDLONG DriverVersion = 0;
+    for (DWORD DriverIndex = 0;; ++DriverIndex) /* TODO: This loop takes ~600ms */
+    {
+        SP_DRVINFO_DATA_W DriverData = { .cbSize = sizeof(SP_DRVINFO_DATA_W) };
+        if (!SetupDiEnumDriverInfoW(DevInfo, &DevInfoData, SPDIT_COMPATDRIVER, DriverIndex, &DriverData))
+        {
+            if (GetLastError() == ERROR_NO_MORE_ITEMS)
+                break;
+            continue;
+        }
+
+        /* Check the driver version first, since the check is trivial and will save us iterating over hardware IDs for
+         * any driver versioned prior our best match. */
+        if (!IsNewer(&DriverData, &DriverDate, DriverVersion))
+            continue;
+
+        SP_DRVINFO_DETAIL_DATA_W *DriverDetailData;
+        if (GetDriverInfoDetail(DevInfo, &DevInfoData, &DriverData, &DriverDetailData) != ERROR_SUCCESS)
+            continue;
+        if ((DriverDetailData->CompatIDsOffset <= 1 || _wcsicmp(DriverDetailData->HardwareID, WINTUN_HWID)) &&
+            (!DriverDetailData->CompatIDsLength ||
+             !IsOurHardwareID(DriverDetailData->HardwareID + DriverDetailData->CompatIDsOffset)))
+        {
+            HeapFree(Heap, 0, DriverDetailData);
+            continue;
+        }
+        HeapFree(Heap, 0, DriverDetailData);
+
+        if (!SetupDiSetSelectedDriverW(DevInfo, &DevInfoData, &DriverData))
+            continue;
+
+        DriverDate = DriverData.DriverDate;
+        DriverVersion = DriverData.DriverVersion;
+    }
+
+    if (!DriverVersion)
+    {
+        Result = ERROR_FILE_NOT_FOUND;
+        goto cleanupDriverInfoList;
+    }
+
+    if (!SetupDiCallClassInstaller(DIF_REGISTERDEVICE, DevInfo, &DevInfoData))
+    {
+        Result = GetLastError();
+        goto cleanupDevice;
+    }
+    SetupDiCallClassInstaller(DIF_REGISTER_COINSTALLERS, DevInfo, &DevInfoData); /* Ignore errors */
+
+    HKEY NetDevRegKey = INVALID_HANDLE_VALUE;
+    const int PollTimeout = 50 /* ms */;
+    for (int i = 0; NetDevRegKey == INVALID_HANDLE_VALUE && i < WAIT_FOR_REGISTRY_TIMEOUT / PollTimeout; ++i)
+    {
+        if (i)
+            Sleep(PollTimeout);
+        NetDevRegKey = SetupDiOpenDevRegKey(
+            DevInfo, &DevInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_SET_VALUE | KEY_QUERY_VALUE | KEY_NOTIFY);
+    }
+    if (NetDevRegKey == INVALID_HANDLE_VALUE)
+    {
+        Result = GetLastError();
+        goto cleanupDevice;
+    }
+    if (RequestedGUID)
+    {
+        WCHAR RequestedGUIDStr[MAX_GUID_STRING_LEN];
+        Result = RegSetValueExW(
+            NetDevRegKey,
+            L"NetSetupAnticipatedInstanceId",
+            0,
+            REG_SZ,
+            (const BYTE *)RequestedGUIDStr,
+            StringFromGUID2(RequestedGUID, RequestedGUIDStr, _countof(RequestedGUIDStr)) * sizeof(WCHAR));
+        if (Result != ERROR_SUCCESS)
+            goto cleanupNetDevRegKey;
+    }
+
+    SetupDiCallClassInstaller(DIF_INSTALLINTERFACES, DevInfo, &DevInfoData); /* Ignore errors */
+
+    if (!SetupDiCallClassInstaller(DIF_INSTALLDEVICE, DevInfo, &DevInfoData))
+    {
+        Result = GetLastError();
+        goto cleanupNetDevRegKey;
+    }
+    *RebootRequired = *RebootRequired || CheckReboot(DevInfo, &DevInfoData);
+
+    if (!SetupDiSetDeviceRegistryPropertyW(
+            DevInfo,
+            &DevInfoData,
+            SPDRP_DEVICEDESC,
+            (const BYTE *)PoolDeviceTypeName,
+            (DWORD)(wcslen(PoolDeviceTypeName) * sizeof(WCHAR))))
+    {
+        Result = GetLastError();
+        goto cleanupNetDevRegKey;
+    }
+
+    /* DIF_INSTALLDEVICE returns almost immediately, while the device installation continues in the background. It might
+     * take a while, before all registry keys and values are populated. */
+    LPWSTR DummyStr;
+    Result = RegistryQueryStringWait(NetDevRegKey, L"NetCfgInstanceId", WAIT_FOR_REGISTRY_TIMEOUT, &DummyStr);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupNetDevRegKey;
+    HeapFree(Heap, 0, DummyStr);
+    DWORD DummyDWORD;
+    Result = RegistryQueryDWORDWait(NetDevRegKey, L"NetLuidIndex", WAIT_FOR_REGISTRY_TIMEOUT, &DummyDWORD);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupNetDevRegKey;
+    Result = RegistryQueryDWORDWait(NetDevRegKey, L"*IfType", WAIT_FOR_REGISTRY_TIMEOUT, &DummyDWORD);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupNetDevRegKey;
+
+    Result = CreateAdapterData(DevInfo, &DevInfoData, Pool, Adapter);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupNetDevRegKey;
+
+    HKEY TcpipAdapterRegKey;
+    WCHAR TcpipAdapterRegPath[MAX_PATH];
+    GetTcpipAdapterRegPath(*Adapter, TcpipAdapterRegPath);
+    Result = RegistryOpenKeyWait(
+        HKEY_LOCAL_MACHINE,
+        TcpipAdapterRegPath,
+        KEY_QUERY_VALUE | KEY_NOTIFY,
+        WAIT_FOR_REGISTRY_TIMEOUT,
+        &TcpipAdapterRegKey);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupAdapter;
+    Result = RegistryQueryStringWait(TcpipAdapterRegKey, L"IpConfig", WAIT_FOR_REGISTRY_TIMEOUT, &DummyStr);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupTcpipAdapterRegKey;
+    HeapFree(Heap, 0, DummyStr);
+
+    HKEY TcpipInterfaceRegKey;
+    WCHAR TcpipInterfaceRegPath[MAX_PATH];
+    Result = GetTcpipInterfaceRegPath(*Adapter, TcpipInterfaceRegPath);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupTcpipAdapterRegKey;
+    Result = RegistryOpenKeyWait(
+        HKEY_LOCAL_MACHINE,
+        TcpipInterfaceRegPath,
+        KEY_QUERY_VALUE | KEY_SET_VALUE,
+        WAIT_FOR_REGISTRY_TIMEOUT,
+        &TcpipInterfaceRegKey);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupTcpipAdapterRegKey;
+
+    const static DWORD EnableDeadGWDetect = 0;
+    RegSetKeyValueW(
+        TcpipInterfaceRegKey,
+        NULL,
+        L"EnableDeadGWDetect",
+        REG_DWORD,
+        &EnableDeadGWDetect,
+        sizeof(EnableDeadGWDetect)); /* Ignore errors */
+
+    Result = WintunSetAdapterName(*Adapter, Name);
+    RegCloseKey(TcpipInterfaceRegKey);
+cleanupTcpipAdapterRegKey:
+    RegCloseKey(TcpipAdapterRegKey);
+cleanupAdapter:
+    if (Result != ERROR_SUCCESS)
+        HeapFree(Heap, 0, *Adapter);
+cleanupNetDevRegKey:
+    RegCloseKey(NetDevRegKey);
+cleanupDevice:
+    if (Result != ERROR_SUCCESS)
+    {
+        /* The interface failed to install, or the interface ID was unobtainable. Clean-up. */
+        SP_REMOVEDEVICE_PARAMS RemoveDeviceParams = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
+                                                                              .InstallFunction = DIF_REMOVE },
+                                                      .Scope = DI_REMOVEDEVICE_GLOBAL };
+        if (SetupDiSetClassInstallParamsW(
+                DevInfo, &DevInfoData, &RemoveDeviceParams.ClassInstallHeader, sizeof(RemoveDeviceParams)) &&
+            SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
+            *RebootRequired = *RebootRequired || CheckReboot(DevInfo, &DevInfoData);
+    }
+cleanupDriverInfoList:
+    SetupDiDestroyDriverInfoList(DevInfo, &DevInfoData, SPDIT_COMPATDRIVER);
+cleanupDevInfo:
+    SetupDiDestroyDeviceInfoList(DevInfo);
+cleanupMutex:
+    ReleaseNameMutex(Mutex);
+    return Result;
+}
+
+/**
+ * Returns TUN device info list handle and interface device info data. The device info list handle must be closed after
+ * use. In case the device is not found, ERROR_OBJECT_NOT_FOUND is returned.
+ */
+static WINSTATUS
+GetDevInfoData(_In_ const GUID *CfgInstanceID, _Out_ HDEVINFO *DevInfo, _Out_ SP_DEVINFO_DATA *DevInfoData)
+{
+    DWORD Result;
+    *DevInfo = SetupDiGetClassDevsExW(&CLASS_NET_GUID, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
+    if (!*DevInfo)
+        return GetLastError();
+    for (DWORD MemberIndex = 0;; ++MemberIndex)
+    {
+        DevInfoData->cbSize = sizeof(SP_DEVINFO_DATA);
+        if (!SetupDiEnumDeviceInfo(*DevInfo, MemberIndex, DevInfoData))
+        {
+            Result = GetLastError();
+            if (Result == ERROR_NO_MORE_ITEMS)
+                break;
+            continue;
+        }
+
+        GUID CfgInstanceID2;
+        Result = GetNetCfgInstanceId(*DevInfo, DevInfoData, &CfgInstanceID2);
+        if (Result != ERROR_SUCCESS || memcmp(CfgInstanceID, &CfgInstanceID2, sizeof(GUID)) != 0)
+            continue;
+
+        Result = SetQuietInstall(*DevInfo, DevInfoData);
+        if (Result != ERROR_SUCCESS)
+        {
+            SetupDiDestroyDeviceInfoList(*DevInfo);
+            return Result;
+        }
+        return ERROR_SUCCESS;
+    }
+    SetupDiDestroyDeviceInfoList(*DevInfo);
+    return ERROR_OBJECT_NOT_FOUND;
+}
+
+/**
+ * Deletes a Wintun interface.
+ *
+ * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+ *
+ * @param RebootRequired  Pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot. Must be
+ *                      initialised to FALSE manually before this function is called.
+ *
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise. This function succeeds if the interface was not found.
+ */
+WINSTATUS WINAPI
+WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired)
+{
+    HDEVINFO DevInfo;
+    SP_DEVINFO_DATA DevInfoData;
+    DWORD Result = GetDevInfoData(&Adapter->CfgInstanceID, &DevInfo, &DevInfoData);
+    if (Result == ERROR_OBJECT_NOT_FOUND)
+        return ERROR_SUCCESS;
+    if (Result != ERROR_SUCCESS)
+        return Result;
+    SP_REMOVEDEVICE_PARAMS RemoveDeviceParams = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
+                                                                          .InstallFunction = DIF_REMOVE },
+                                                  .Scope = DI_REMOVEDEVICE_GLOBAL };
+    if (SetupDiSetClassInstallParamsW(
+            DevInfo, &DevInfoData, &RemoveDeviceParams.ClassInstallHeader, sizeof(RemoveDeviceParams)) &&
+        SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
+        *RebootRequired = *RebootRequired || CheckReboot(DevInfo, &DevInfoData);
+    else
+        Result = GetLastError();
+    SetupDiDestroyDeviceInfoList(DevInfo);
+    return Result;
+}
+
+/**
+ * Enumerates all Wintun adapters.
+ *
+ * @param Pool          Name of the adapter pool
+ *
+ * @param Func          Callback function. To continue enumeration, the callback function must return TRUE; to stop
+ *                      enumeration, it must return FALSE.
+ *
+ * @param Param         An application-defined value to be passed to the callback function
+ *
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise
+ */
+WINSTATUS WINAPI
+WintunEnumAdapters(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _In_ WINTUN_ENUMPROC Func, _In_ LPARAM Param)
+{
+    DWORD Result;
+    HANDLE Mutex = TakeNameMutex(Pool);
+    if (!Mutex)
+        return ERROR_GEN_FAILURE;
+    HDEVINFO DevInfo = SetupDiGetClassDevsExW(&CLASS_NET_GUID, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
+    if (DevInfo == INVALID_HANDLE_VALUE)
+    {
+        Result = GetLastError();
+        goto cleanupMutex;
+    }
+    HANDLE Heap = GetProcessHeap();
+    for (DWORD MemberIndex = 0;; ++MemberIndex)
+    {
+        SP_DEVINFO_DATA DevInfoData = { .cbSize = sizeof(SP_DEVINFO_DATA) };
+        if (!SetupDiEnumDeviceInfo(DevInfo, MemberIndex, &DevInfoData))
+        {
+            if (GetLastError() == ERROR_NO_MORE_ITEMS)
+            {
+                Result = ERROR_SUCCESS;
+                break;
+            }
+            continue;
+        }
+
+        /* Check the Hardware ID to make sure it's a real Wintun device. This avoids doing slow operations on non-Wintun
+         * devices. */
+        LPWSTR Hwids;
+        Result = GetDeviceRegistryMultiString(DevInfo, &DevInfoData, SPDRP_HARDWAREID, &Hwids);
+        if (Result != ERROR_SUCCESS)
+            break;
+        if (!IsOurHardwareID(Hwids))
+        {
+            HeapFree(Heap, 0, Hwids);
+            continue;
+        }
+        HeapFree(Heap, 0, Hwids);
+
+        BOOL IsOurDriver;
+        Result = IsUsingOurDriver(DevInfo, &DevInfoData, &IsOurDriver);
+        if (Result != ERROR_SUCCESS)
+            break;
+        if (!IsOurDriver)
+            continue;
+
+        BOOL IsMember;
+        Result = IsPoolMember(Pool, DevInfo, &DevInfoData, &IsMember);
+        if (Result != ERROR_SUCCESS)
+            break;
+        if (!IsMember)
+            continue;
+
+        SetQuietInstall(DevInfo, &DevInfoData); /* Ignore errors */
+
+        WINTUN_ADAPTER *Adapter;
+        Result = CreateAdapterData(DevInfo, &DevInfoData, Pool, &Adapter);
+        if (Result != ERROR_SUCCESS)
+            break;
+        if (Func(Adapter, Param))
+            HeapFree(Heap, 0, Adapter);
+        else
+        {
+            HeapFree(Heap, 0, Adapter);
+            break;
+        }
+    }
     SetupDiDestroyDeviceInfoList(DevInfo);
 cleanupMutex:
     ReleaseNameMutex(Mutex);
