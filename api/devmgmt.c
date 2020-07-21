@@ -31,7 +31,8 @@ const static GUID ADAPTER_NET_GUID = { 0xcac88484L,
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static _Return_type_success_(return == 0) DWORD GetRegString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType)
+static WINSTATUS
+GetRegString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType)
 {
     HANDLE Heap = GetProcessHeap();
 
@@ -94,8 +95,8 @@ static _Return_type_success_(return == 0) DWORD GetRegString(_Inout_ LPWSTR *Buf
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static _Return_type_success_(return == 0) DWORD
-    GetRegMultiString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType)
+static WINSTATUS
+GetRegMultiString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType)
 {
     HANDLE Heap = GetProcessHeap();
 
@@ -163,8 +164,8 @@ static _Return_type_success_(return == 0) DWORD
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static _Return_type_success_(return == 0) DWORD
-    RegQueryString(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ LPWSTR *Value)
+static WINSTATUS
+RegQueryString(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ LPWSTR *Value)
 {
     HANDLE Heap = GetProcessHeap();
     DWORD Size = 256;
@@ -213,8 +214,8 @@ static _Return_type_success_(return == 0) DWORD
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static _Return_type_success_(return == 0) DWORD
-    RegQueryDWORD(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ DWORD *Value)
+static WINSTATUS
+RegQueryDWORD(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ DWORD *Value)
 {
     DWORD ValueType, Size = sizeof(DWORD);
     DWORD Result = RegQueryValueExW(Key, Name, NULL, &ValueType, (BYTE *)Value, &Size);
@@ -249,7 +250,8 @@ static _Return_type_success_(return == 0) DWORD
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static _Return_type_success_(return == 0) DWORD GetDeviceRegistryProperty(
+static WINSTATUS
+GetDeviceRegistryProperty(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
     _In_ DWORD Property,
@@ -298,7 +300,8 @@ static _Return_type_success_(return == 0) DWORD GetDeviceRegistryProperty(
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static _Return_type_success_(return == 0) DWORD GetDeviceRegistryString(
+static WINSTATUS
+GetDeviceRegistryString(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
     _In_ DWORD Property,
@@ -338,7 +341,8 @@ static _Return_type_success_(return == 0) DWORD GetDeviceRegistryString(
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static _Return_type_success_(return == 0) DWORD GetDeviceRegistryMultiString(
+static WINSTATUS
+GetDeviceRegistryMultiString(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
     _In_ DWORD Property,
@@ -410,8 +414,8 @@ IsOurHardwareID(_In_z_ LPWSTR Hwids)
 /**
  * Returns pool-specific device type name.
  */
-static _Return_type_success_(return == 0) DWORD
-    GetPoolDeviceTypeName(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _Out_ LPWSTR *Name)
+static WINSTATUS
+GetPoolDeviceTypeName(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _Out_ LPWSTR *Name)
 {
     HANDLE Heap = GetProcessHeap();
     int Len = 256;
@@ -433,7 +437,8 @@ static _Return_type_success_(return == 0) DWORD
 /**
  * Checks if SPDRP_DEVICEDESC or SPDRP_FRIENDLYNAME match device type name.
  */
-static _Return_type_success_(return == 0) DWORD IsPoolMember(
+static WINSTATUS
+IsPoolMember(
     _In_z_count_c_(MAX_POOL) LPCWSTR Pool,
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
@@ -489,7 +494,8 @@ cleanupDeviceDesc:
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static _Return_type_success_(return == 0) DWORD GetDriverInfoDetail(
+static WINSTATUS
+GetDriverInfoDetail(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
     _In_ SP_DRVINFO_DATA_W *DriverData,
@@ -518,8 +524,8 @@ static _Return_type_success_(return == 0) DWORD GetDriverInfoDetail(
 /**
  * Check if the device is using Wintun driver.
  */
-static _Return_type_success_(return == 0) DWORD
-    IsUsingOurDriver(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ BOOL *IsOurDriver)
+static WINSTATUS
+IsUsingOurDriver(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ BOOL *IsOurDriver)
 {
     if (!SetupDiBuildDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER))
         return GetLastError();
@@ -565,7 +571,8 @@ static _Return_type_success_(return == 0) DWORD
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise
  */
-static _Return_type_success_(return == 0) DWORD InitAdapterData(
+static WINSTATUS
+InitAdapterData(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
     _In_z_count_c_(MAX_POOL) LPCWSTR Pool,
@@ -642,8 +649,8 @@ WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
  * ERROR_FILE_NOT_FOUND if adapter with given name is not found;
  * ERROR_ALREADY_EXISTS if adapter is found but not a Wintun-class or not a member of the pool
  */
-_Return_type_success_(return == 0) DWORD WINAPI
-    WintunGetAdapter(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _In_z_ LPCWSTR IfName, _Out_ WINTUN_ADAPTER **Adapter)
+WINSTATUS WINAPI
+WintunGetAdapter(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _In_z_ LPCWSTR IfName, _Out_ WINTUN_ADAPTER **Adapter)
 {
     DWORD Result;
     HANDLE Mutex = TakeNameMutex(Pool);

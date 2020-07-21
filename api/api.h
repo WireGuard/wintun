@@ -7,6 +7,7 @@
 
 #include <Windows.h>
 
+typedef _Return_type_success_(return == ERROR_SUCCESS) DWORD WINSTATUS;
 extern HINSTANCE ResourceModule;
 
 _Check_return_
@@ -22,10 +23,9 @@ NamespaceInit();
 void
 NamespaceCleanup();
 
-_Return_type_success_(return ==
-                             0) extern DWORD(WINAPI *NciSetConnectionName)(_In_ LPCGUID Guid, _In_z_ LPCWSTR NewName);
+extern WINSTATUS(WINAPI *NciSetConnectionName)(_In_ LPCGUID Guid, _In_z_ LPCWSTR NewName);
 
-_Return_type_success_(return == 0) extern DWORD(WINAPI *NciGetConnectionName)(
+extern WINSTATUS(WINAPI *NciGetConnectionName)(
     _In_ LPCGUID Guid,
     _Out_z_bytecap_(InDestNameBytes) LPWSTR Name,
     _In_ DWORD InDestNameBytes,
@@ -52,5 +52,5 @@ typedef struct _WINTUN_ADAPTER
 VOID WINAPI
 WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter);
 
-_Return_type_success_(return == 0) DWORD WINAPI
-    WintunGetAdapter(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _In_z_ LPCWSTR IfName, _Out_ WINTUN_ADAPTER **Adapter);
+WINSTATUS WINAPI
+WintunGetAdapter(_In_z_count_c_(MAX_POOL) LPCWSTR Pool, _In_z_ LPCWSTR IfName, _Out_ WINTUN_ADAPTER **Adapter);
