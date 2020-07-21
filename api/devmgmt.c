@@ -3,12 +3,7 @@
  * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
  */
 
-#include "api.h"
-#include <cfgmgr32.h>
-#include <iphlpapi.h>
-#include <objbase.h>
-#include <SetupAPI.h>
-#include <wchar.h>
+#include "pch.h"
 
 #define WINTUN_HWID L"Wintun"
 #define WAIT_FOR_REGISTRY_TIMEOUT 10000 /* ms */

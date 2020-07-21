@@ -3,9 +3,7 @@
  * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
  */
 
-#include "api.h"
-#include <bcrypt.h>
-#include <sddl.h>
+#include "pch.h"
 
 static SECURITY_ATTRIBUTES SecurityAttributes = { .nLength = sizeof(SECURITY_ATTRIBUTES) };
 static BOOL HasInitialized = FALSE;

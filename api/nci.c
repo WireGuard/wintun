@@ -3,7 +3,7 @@
  * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
  */
 
-#include "api.h"
+#include "pch.h"
 
 static HMODULE NciModule;
 
