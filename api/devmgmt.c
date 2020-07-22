@@ -1030,7 +1030,7 @@ WintunCreateAdapter(
             &DevInfoData,
             SPDRP_DEVICEDESC,
             (const BYTE *)PoolDeviceTypeName,
-            (DWORD)(wcslen(PoolDeviceTypeName) * sizeof(WCHAR))))
+            (DWORD)((wcslen(PoolDeviceTypeName) + 1) * sizeof(WCHAR))))
     {
         Result = GetLastError();
         goto cleanupNetDevRegKey;
