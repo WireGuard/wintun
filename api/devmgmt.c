@@ -345,12 +345,6 @@ GetDevInfoData(_In_ const GUID *CfgInstanceID, _Out_ HDEVINFO *DevInfo, _Out_ SP
         if (Result != ERROR_SUCCESS || memcmp(CfgInstanceID, &CfgInstanceID2, sizeof(GUID)) != 0)
             continue;
 
-        Result = SetQuietInstall(*DevInfo, DevInfoData);
-        if (Result != ERROR_SUCCESS)
-        {
-            SetupDiDestroyDeviceInfoList(*DevInfo);
-            return Result;
-        }
         return ERROR_SUCCESS;
     }
     SetupDiDestroyDeviceInfoList(*DevInfo);
@@ -1150,6 +1144,9 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequ
         return ERROR_SUCCESS;
     if (Result != ERROR_SUCCESS)
         return Result;
+    Result = SetQuietInstall(DevInfo, &DevInfoData);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupDevInfo;
     SP_REMOVEDEVICE_PARAMS RemoveDeviceParams = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
                                                                           .InstallFunction = DIF_REMOVE },
                                                   .Scope = DI_REMOVEDEVICE_GLOBAL };
@@ -1159,6 +1156,7 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequ
         *RebootRequired = *RebootRequired || CheckReboot(DevInfo, &DevInfoData);
     else
         Result = GetLastError();
+cleanupDevInfo:
     SetupDiDestroyDeviceInfoList(DevInfo);
     return Result;
 }
@@ -1228,8 +1226,6 @@ WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUMP
             break;
         if (!IsMember)
             continue;
-
-        SetQuietInstall(DevInfo, &DevInfoData); /* Ignore errors */
 
         WINTUN_ADAPTER *Adapter;
         Result = CreateAdapterData(Pool, DevInfo, &DevInfoData, &Adapter);
