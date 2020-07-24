@@ -21,21 +21,20 @@ const static GUID ADAPTER_NET_GUID = { 0xcac88484L,
  * @param DevInfo       A handle to the device information set that contains a device information element that
  *                      represents the device for which to open a registry key.
  *
- * @param DevInfoData   A pointer to a structure that specifies the device information element in DeviceInfoSet.
+ * @param DevInfoData   A pointer to a structure that specifies the device information element in DevInfo.
  *
  * @param Property      The property to be retrieved. One of the SPDRP_* constants.
  *
- * @param PropertyRegDataType  A pointer to a variable that receives the data type of the property that is being
- *                      retrieved. This is one of the standard registry data types. This parameter is optional
- *                      and can be NULL.
+ * @param ValueType     A pointer to a variable that receives the data type of the property that is being retrieved.
+ *                      This is one of the standard registry data types.
  *
- * @param PropertyBuffer  A pointer to a buffer that receives the property that is being retrieved. Must be
- *                      released with HeapFree(GetProcessHeap(), 0, Value) after use.
+ * @param Buf           A pointer to a buffer that receives the property that is being retrieved. Must be released with
+ *                      HeapFree(GetProcessHeap(), 0, *Buf) after use.
  *
- * @param PropertySize  A pointer to a variable of type DWORD that receives the property size, in bytes, of the
- *                      PropertyBuffer buffer. This parameter is optional and can be NULL.
+ * @param BufLen        On input, a hint of expected registry value size in bytes; on output, actual registry value size
+ *                      in bytes.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 static WINTUN_STATUS
 GetDeviceRegistryProperty(
@@ -67,14 +66,14 @@ GetDeviceRegistryProperty(
  * @param DevInfo       A handle to the device information set that contains a device information element that
  *                      represents the device for which to open a registry key.
  *
- * @param DevInfoData   A pointer to a structure that specifies the device information element in DeviceInfoSet.
+ * @param DevInfoData   A pointer to a structure that specifies the device information element in DevInfo.
  *
  * @param Property      The property to be retrieved. One of the SPDRP_* constants.
  *
- * @param PropertyBuffer  A pointer to a string that receives the string that is being retrieved. Must be
- *                      released with HeapFree(GetProcessHeap(), 0, Value) after use.
+ * @param Buf           A pointer to a string that receives the string that is being retrieved. Must be released with
+ *                      HeapFree(GetProcessHeap(), 0, *Buf) after use.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 static WINTUN_STATUS
 GetDeviceRegistryString(
@@ -108,14 +107,14 @@ GetDeviceRegistryString(
  * @param DevInfo       A handle to the device information set that contains a device information element that
  *                      represents the device for which to open a registry key.
  *
- * @param DevInfoData   A pointer to a structure that specifies the device information element in DeviceInfoSet.
+ * @param DevInfoData   A pointer to a structure that specifies the device information element in DevInfo.
  *
  * @param Property      The property to be retrieved. One of the SPDRP_* constants.
  *
- * @param PropertyBuffer  A pointer to a multi-string that receives the string that is being retrieved. Must be
- *                      released with HeapFree(GetProcessHeap(), 0, Value) after use.
+ * @param Buf           A pointer to a multi-string that receives the string that is being retrieved. Must be released
+ *                      with HeapFree(GetProcessHeap(), 0, *Buf) after use.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 static WINTUN_STATUS
 GetDeviceRegistryMultiString(
@@ -150,15 +149,15 @@ GetDeviceRegistryMultiString(
  * @param DevInfo       A handle to the device information set that contains a device information element that
  *                      represents the device for which to open a registry key.
  *
- * @param DevInfoData   A pointer to a structure that specifies the device information element in DeviceInfoSet.
+ * @param DevInfoData   A pointer to a structure that specifies the device information element in DevInfo.
  *
  * @param DriverData    A pointer to a structure that specifies the driver information element that represents the
  *                      driver for which to retrieve details.
  *
  * @param DriverDetailData  A pointer to a structure that receives detailed information about the specified driver.
- *                      Must be released with HeapFree(GetProcessHeap(), 0, Value) after use.
+ *                      Must be released with HeapFree(GetProcessHeap(), 0, *DriverDetailData) after use.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 static WINTUN_STATUS
 GetDriverInfoDetail(
@@ -187,7 +186,7 @@ GetDriverInfoDetail(
 /**
  * Tests if any of the hardware IDs match ours.
  *
- * @param Hwids         Multi-string containing a list of hardware IDs
+ * @param Hwids         Multi-string containing a list of hardware IDs.
  *
  * @return TRUE on match; FALSE otherwise.
  */
@@ -201,7 +200,7 @@ IsOurHardwareID(_In_z_ WCHAR *Hwids)
 }
 
 /**
- * Check if the device is using Wintun driver.
+ * Checks if the device is using Wintun driver.
  */
 static WINTUN_STATUS
 IsUsingOurDriver(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ BOOL *IsOurDriver)
@@ -269,11 +268,11 @@ SetQuietInstall(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
  * @param DevInfo       A handle to the device information set that contains a device information element that
  *                      represents the device for which to open a registry key.
  *
- * @param DevInfoData   A pointer to a structure that specifies the device information element in DeviceInfoSet.
+ * @param DevInfoData   A pointer to a structure that specifies the device information element in DevInfo.
  *
  * @param CfgInstanceID  Pointer to a GUID to receive the adapter GUID.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 static WINTUN_STATUS
 GetNetCfgInstanceId(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ GUID *CfgInstanceID)
@@ -295,16 +294,16 @@ cleanupKey:
 /**
  * Returns device info list handle and adapter device info data.
  *
- * @param CfgInstanceID  The adapter GUID
+ * @param CfgInstanceID  The adapter GUID.
  *
  * @param DevInfo       A pointer to receive the handle of the device information set that contains a device information
  *                      element that represents the device. Must be released with SetupDiDestroyDeviceInfoList(*DevInfo)
  *                      after use.
  *
  * @param DevInfoData   A pointer to a structure that receives specification of the device information element in
- *                      DeviceInfoSet.
+ *                      DevInfo.
  *
- * @return ERROR_SUCCESS on success; ERROR_FILE_NOT_FOUND if the device is not found; Win32 error code otherwise
+ * @return ERROR_SUCCESS on success; ERROR_FILE_NOT_FOUND if the device is not found; Win32 error code otherwise.
  */
 static WINTUN_STATUS
 GetDevInfoData(_In_ const GUID *CfgInstanceID, _Out_ HDEVINFO *DevInfo, _Out_ SP_DEVINFO_DATA *DevInfoData)
@@ -412,14 +411,15 @@ cleanupDeviceDesc:
  * @param DevInfo       A handle to the device information set that contains a device information element that
  *                      represents the device for which to open a registry key.
  *
- * @param DevInfoData   A pointer to a structure that specifies the device information element in DeviceInfoSet.
+ * @param DevInfoData   A pointer to a structure that specifies the device information element in DevInfo.
  *
- * @param Pool          Name of the adapter pool
+ * @param Pool          Name of the adapter pool.
  *
  * @param Adapter       Pointer to a handle to receive the adapter descriptor. Must be released with
  *                      HeapFree(GetProcessHeap(), 0, *Adapter).
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise
+ * @return ERROR_SUCCESS on success; ERROR_INVALID_DATATYPE or ERROR_INVALID_DATA on any invalid registry values; Win32
+ * error code otherwise.
  */
 static WINTUN_STATUS
 CreateAdapterData(
@@ -549,7 +549,7 @@ cleanupTcpipAdapterRegKey:
 /**
  * Releases Wintun adapter resources.
  *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+ * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
  */
 void WINAPI
 WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
@@ -560,16 +560,14 @@ WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
 /**
  * Finds a Wintun adapter by its name.
  *
- * @param Pool          Name of the adapter pool
+ * @param Pool          Name of the adapter pool.
  *
- * @param Name          Adapter name
+ * @param Name          Adapter name.
  *
- * @param Adapter       Pointer to a handle to receive the adapter handle. Must be released with
- *                      WintunFreeAdapter.
+ * @param Adapter       Pointer to a handle to receive the adapter handle. Must be released with WintunFreeAdapter.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise;
- * ERROR_FILE_NOT_FOUND if adapter with given name is not found;
- * ERROR_ALREADY_EXISTS if adapter is found but not a Wintun-class or not a member of the pool
+ * @return ERROR_SUCCESS on success; ERROR_FILE_NOT_FOUND if adapter with given name is not found; ERROR_ALREADY_EXISTS
+ * if adapter is found but not a Wintun-class or not a member of the pool; Win32 error code otherwise
  */
 WINTUN_STATUS WINAPI
 WintunGetAdapter(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_z_ const WCHAR *Name, _Out_ WINTUN_ADAPTER **Adapter)
@@ -769,11 +767,11 @@ WintunGetAdapterLUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ LUID *Luid)
 /**
  * Returns a handle to the adapter device object.
  *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+ * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
  *
  * @param Handle        Pointer to receive the adapter device object handle. Must be released with CloseHandle.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 WINTUN_STATUS WINAPI
 WintunGetAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *Handle)
@@ -840,9 +838,9 @@ IsNewer(_In_ const SP_DRVINFO_DATA_W *DriverData, _In_ const FILETIME *DriverDat
 /**
  * Creates a Wintun adapter.
  *
- * @param Pool          Name of the adapter pool
+ * @param Pool          Name of the adapter pool.
  *
- * @param Name          The requested name of the adapter
+ * @param Name          The requested name of the adapter.
  *
  * @param RequestedGUID  The GUID of the created network adapter, which then influences NLA generation
  *                      deterministically. If it is set to NULL, the GUID is chosen by the system at random, and hence
@@ -856,7 +854,7 @@ IsNewer(_In_ const SP_DRVINFO_DATA_W *DriverData, _In_ const FILETIME *DriverDat
  * @param RebootRequired  Pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot. Must be
  *                      initialised to FALSE manually before this function is called.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 WINTUN_STATUS WINAPI
 WintunCreateAdapter(
@@ -1105,12 +1103,12 @@ cleanupMutex:
 /**
  * Deletes a Wintun adapter.
  *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+ * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
  *
  * @param RebootRequired  Pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot. Must be
  *                      initialised to FALSE manually before this function is called.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise. This function succeeds if the adapter was not found.
+ * @return ERROR_SUCCESS on success or the adapter was not found; Win32 error code otherwise.
  */
 WINTUN_STATUS WINAPI
 WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired)
@@ -1142,14 +1140,14 @@ cleanupDevInfo:
 /**
  * Enumerates all Wintun adapters.
  *
- * @param Pool          Name of the adapter pool
+ * @param Pool          Name of the adapter pool.
  *
  * @param Func          Callback function. To continue enumeration, the callback function must return TRUE; to stop
  *                      enumeration, it must return FALSE.
  *
- * @param Param         An application-defined value to be passed to the callback function
+ * @param Param         An application-defined value to be passed to the callback function.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 WINTUN_STATUS WINAPI
 WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUMPROC Func, _In_ LPARAM Param)
