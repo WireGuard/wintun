@@ -15,9 +15,10 @@
   <Target Name="Build" DependsOnTargets="Driver-x86;Driver-amd64;Driver-arm64" />
   <Target Name="MSM" DependsOnTargets="MSM-x86;MSM-amd64;MSM-arm64" />
   <Target Name="Clean">
-    <RemoveDir Directories="x86\Release\" />
     <RemoveDir Directories="amd64\Release\" />
+    <RemoveDir Directories="arm\Release\" />
     <RemoveDir Directories="arm64\Release\" />
+    <RemoveDir Directories="x86\Release\" />
     <RemoveDir Directories="$(SDVDir)" />
     <RemoveDir Directories="$(DistributionDir)" />
     <Delete Files="smvbuild.log;smvstats.txt;wintun.DVL.XML" />

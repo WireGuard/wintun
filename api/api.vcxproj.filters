@@ -45,6 +45,9 @@
     <ClCompile Include="nci.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="rundll32.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="registry.c">
       <Filter>Source Files</Filter>
     </ClCompile>

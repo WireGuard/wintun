@@ -122,6 +122,8 @@
     <WixArch Condition="'$(Platform)'=='ARM64'">arm64</WixArch>
     <WixCandleFlags>$(WixCandleFlags) -nologo -arch $(WixArch) -dWINTUN_PLATFORM=$(WintunPlatform) -dWINTUN_VERSION=$(WintunVersion) -dINSTALLER_VERSION_MIN=$(InstallerVersionMin) -sw1086</WixCandleFlags>
     <WixLightFlags>$(WixLightFlags) -nologo -b output_dir="$(OutDir.TrimEnd('\'))" -spdb -sw1076 -sw1079</WixLightFlags>
+    <WixLightFlags Condition="'$(Platform)'=='x64'">$(WixLightFlags) -b output_dir_wow64="..\x86\$(Configuration)"</WixLightFlags>
+    <WixLightFlags Condition="'$(Platform)'=='ARM64'">$(WixLightFlags) -b output_dir_wow64="..\arm\$(Configuration)"</WixLightFlags>
     <WixOutputPath>$(OutDir)</WixOutputPath>
     <WixOutputName>wintun</WixOutputName>
     <WixOutputExt>.msm</WixOutputExt>

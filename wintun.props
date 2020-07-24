@@ -12,9 +12,10 @@
     <WintunVersion>$(WintunVersionMaj).$(WintunVersionMin)</WintunVersion><!-- Used for versioning, must be n.n[.n[.n]]. -->
 
     <!-- .vcxproj are using different platform names. -->
+    <WintunPlatform Condition="'$(Platform)'=='ARM'">arm</WintunPlatform>
+    <WintunPlatform Condition="'$(Platform)'=='ARM64'">arm64</WintunPlatform>
     <WintunPlatform Condition="'$(Platform)'=='Win32'">x86</WintunPlatform>
     <WintunPlatform Condition="'$(Platform)'=='x64'">amd64</WintunPlatform>
-    <WintunPlatform Condition="'$(Platform)'=='ARM64'">arm64</WintunPlatform>
 
     <DistributionDir>dist\</DistributionDir>
     <SDVDir>sdv\</SDVDir>
