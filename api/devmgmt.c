@@ -42,33 +42,22 @@ GetDeviceRegistryProperty(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
     _In_ DWORD Property,
-    _Out_opt_ DWORD *PropertyRegDataType,
-    _Out_ void **PropertyBuffer,
-    _Out_opt_ DWORD *PropertySize)
+    _Out_opt_ DWORD *ValueType,
+    _Out_ void **Buf,
+    _Inout_ DWORD *BufLen)
 {
     HANDLE Heap = GetProcessHeap();
-    DWORD Result, Size = 256;
     for (;;)
     {
-        void *Buf = HeapAlloc(Heap, 0, Size);
-        if (!Buf)
+        *Buf = HeapAlloc(Heap, 0, *BufLen);
+        if (!*Buf)
             return ERROR_OUTOFMEMORY;
-        DWORD ValueType;
-        if (!SetupDiGetDeviceRegistryPropertyW(DevInfo, DevInfoData, Property, &ValueType, Buf, Size, &Size))
-        {
-            Result = GetLastError();
-            HeapFree(Heap, 0, Buf);
-            if (Result == ERROR_INSUFFICIENT_BUFFER)
-                continue;
+        if (SetupDiGetDeviceRegistryPropertyW(DevInfo, DevInfoData, Property, ValueType, *Buf, *BufLen, BufLen))
+            return ERROR_SUCCESS;
+        DWORD Result = GetLastError();
+        HeapFree(Heap, 0, *Buf);
+        if (Result != ERROR_INSUFFICIENT_BUFFER)
             return Result;
-        }
-
-        if (PropertyRegDataType)
-            *PropertyRegDataType = ValueType;
-        *PropertyBuffer = Buf;
-        if (PropertySize)
-            *PropertySize = Size;
-        return ERROR_SUCCESS;
     }
 }
 
@@ -92,24 +81,23 @@ GetDeviceRegistryString(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
     _In_ DWORD Property,
-    _Out_ WCHAR **PropertyBuffer)
+    _Out_ WCHAR **Buf)
 {
-    DWORD Result, ValueType, Size;
-    Result = GetDeviceRegistryProperty(DevInfo, DevInfoData, Property, &ValueType, PropertyBuffer, &Size);
+    DWORD Result, ValueType, Size = 256 * sizeof(WCHAR);
+    Result = GetDeviceRegistryProperty(DevInfo, DevInfoData, Property, &ValueType, Buf, &Size);
     if (Result != ERROR_SUCCESS)
         return Result;
-
     switch (ValueType)
     {
     case REG_SZ:
     case REG_EXPAND_SZ:
     case REG_MULTI_SZ:
-        Result = RegistryGetString(PropertyBuffer, Size / sizeof(WCHAR), ValueType);
+        Result = RegistryGetString(Buf, Size / sizeof(WCHAR), ValueType);
         if (Result != ERROR_SUCCESS)
-            HeapFree(GetProcessHeap(), 0, *PropertyBuffer);
+            HeapFree(GetProcessHeap(), 0, *Buf);
         return Result;
     default:
-        HeapFree(GetProcessHeap(), 0, *PropertyBuffer);
+        HeapFree(GetProcessHeap(), 0, *Buf);
         return ERROR_INVALID_DATATYPE;
     }
 }
@@ -134,24 +122,23 @@ GetDeviceRegistryMultiString(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
     _In_ DWORD Property,
-    _Out_ WCHAR **PropertyBuffer)
+    _Out_ WCHAR **Buf)
 {
-    DWORD Result, ValueType, Size;
-    Result = GetDeviceRegistryProperty(DevInfo, DevInfoData, Property, &ValueType, PropertyBuffer, &Size);
+    DWORD Result, ValueType, Size = 256 * sizeof(WCHAR);
+    Result = GetDeviceRegistryProperty(DevInfo, DevInfoData, Property, &ValueType, Buf, &Size);
     if (Result != ERROR_SUCCESS)
         return Result;
-
     switch (ValueType)
     {
     case REG_SZ:
     case REG_EXPAND_SZ:
     case REG_MULTI_SZ:
-        Result = RegistryGetMultiString(PropertyBuffer, Size / sizeof(WCHAR), ValueType);
+        Result = RegistryGetMultiString(Buf, Size / sizeof(WCHAR), ValueType);
         if (Result != ERROR_SUCCESS)
-            HeapFree(GetProcessHeap(), 0, *PropertyBuffer);
+            HeapFree(GetProcessHeap(), 0, *Buf);
         return Result;
     default:
-        HeapFree(GetProcessHeap(), 0, *PropertyBuffer);
+        HeapFree(GetProcessHeap(), 0, *Buf);
         return ERROR_INVALID_DATATYPE;
     }
 }
@@ -188,15 +175,12 @@ GetDriverInfoDetail(
         if (!*DriverDetailData)
             return ERROR_OUTOFMEMORY;
         (*DriverDetailData)->cbSize = sizeof(SP_DRVINFO_DETAIL_DATA_W);
-        if (!SetupDiGetDriverInfoDetailW(DevInfo, DevInfoData, DriverData, *DriverDetailData, Size, &Size))
-        {
-            DWORD Result = GetLastError();
-            HeapFree(Heap, 0, *DriverDetailData);
-            if (Result == ERROR_INSUFFICIENT_BUFFER)
-                continue;
+        if (SetupDiGetDriverInfoDetailW(DevInfo, DevInfoData, DriverData, *DriverDetailData, Size, &Size))
+            return ERROR_SUCCESS;
+        DWORD Result = GetLastError();
+        HeapFree(Heap, 0, *DriverDetailData);
+        if (Result != ERROR_INSUFFICIENT_BUFFER)
             return Result;
-        }
-        return ERROR_SUCCESS;
     }
 }
 
@@ -325,7 +309,6 @@ cleanupKey:
 static WINTUN_STATUS
 GetDevInfoData(_In_ const GUID *CfgInstanceID, _Out_ HDEVINFO *DevInfo, _Out_ SP_DEVINFO_DATA *DevInfoData)
 {
-    DWORD Result;
     *DevInfo = SetupDiGetClassDevsExW(&CLASS_NET_GUID, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (!*DevInfo)
         return GetLastError();
@@ -334,18 +317,14 @@ GetDevInfoData(_In_ const GUID *CfgInstanceID, _Out_ HDEVINFO *DevInfo, _Out_ SP
         DevInfoData->cbSize = sizeof(SP_DEVINFO_DATA);
         if (!SetupDiEnumDeviceInfo(*DevInfo, MemberIndex, DevInfoData))
         {
-            Result = GetLastError();
-            if (Result == ERROR_NO_MORE_ITEMS)
+            if (GetLastError() == ERROR_NO_MORE_ITEMS)
                 break;
             continue;
         }
-
         GUID CfgInstanceID2;
-        Result = GetNetCfgInstanceId(*DevInfo, DevInfoData, &CfgInstanceID2);
-        if (Result != ERROR_SUCCESS || memcmp(CfgInstanceID, &CfgInstanceID2, sizeof(GUID)) != 0)
-            continue;
-
-        return ERROR_SUCCESS;
+        if (GetNetCfgInstanceId(*DevInfo, DevInfoData, &CfgInstanceID2) == ERROR_SUCCESS &&
+            !memcmp(CfgInstanceID, &CfgInstanceID2, sizeof(GUID)))
+            return ERROR_SUCCESS;
     }
     SetupDiDestroyDeviceInfoList(*DevInfo);
     return ERROR_FILE_NOT_FOUND;
@@ -619,8 +598,7 @@ WintunGetAdapter(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_z_ const WCHAR 
         }
 
         GUID CfgInstanceID;
-        Result = GetNetCfgInstanceId(DevInfo, &DevInfoData, &CfgInstanceID);
-        if (Result != ERROR_SUCCESS)
+        if (GetNetCfgInstanceId(DevInfo, &DevInfoData, &CfgInstanceID) != ERROR_SUCCESS)
             continue;
 
         /* TODO: is there a better way than comparing ifnames? */
