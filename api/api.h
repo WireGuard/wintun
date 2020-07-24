@@ -94,7 +94,7 @@ void WINAPI
 WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter);
 
 WINTUN_STATUS WINAPI
-WintunGetAdapter(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_z_ const WCHAR *Name, _Out_ WINTUN_ADAPTER **Adapter);
+WintunGetAdapter(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name, _Out_ WINTUN_ADAPTER **Adapter);
 
 WINTUN_STATUS WINAPI
 WintunGetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_ADAPTER_NAME) WCHAR *Name);
@@ -114,7 +114,7 @@ WintunGetAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *H
 WINTUN_STATUS WINAPI
 WintunCreateAdapter(
     _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
-    _In_z_ const WCHAR *Name,
+    _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER **Adapter,
     _Inout_ BOOL *RebootRequired);

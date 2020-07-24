@@ -570,7 +570,10 @@ WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
  * if adapter is found but not a Wintun-class or not a member of the pool; Win32 error code otherwise
  */
 WINTUN_STATUS WINAPI
-WintunGetAdapter(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_z_ const WCHAR *Name, _Out_ WINTUN_ADAPTER **Adapter)
+WintunGetAdapter(
+    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
+    _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
+    _Out_ WINTUN_ADAPTER **Adapter)
 {
     DWORD Result;
     HANDLE Mutex = TakeNameMutex(Pool);
@@ -859,7 +862,7 @@ IsNewer(_In_ const SP_DRVINFO_DATA_W *DriverData, _In_ const FILETIME *DriverDat
 WINTUN_STATUS WINAPI
 WintunCreateAdapter(
     _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
-    _In_z_ const WCHAR *Name,
+    _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER **Adapter,
     _Inout_ BOOL *RebootRequired)
