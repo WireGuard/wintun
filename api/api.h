@@ -38,16 +38,20 @@ NciInit();
 void
 NciCleanup();
 
+#define MAX_REG_PATH \
+    256 /* Maximum registry path length \
+           https://support.microsoft.com/en-us/help/256986/windows-registry-information-for-advanced-users */
+
 WINTUN_STATUS
 RegistryOpenKeyWait(
     _In_ HKEY Key,
-    _In_z_count_c_(MAX_PATH) const WCHAR *Path,
+    _In_z_count_c_(MAX_REG_PATH) const WCHAR *Path,
     _In_ DWORD Access,
     _In_ DWORD Timeout,
     _Out_ HKEY *KeyOut);
 
 WINTUN_STATUS
-RegistryWaitForKey(_In_ HKEY Key, _In_z_count_c_(MAX_PATH) const WCHAR *Path, _In_ DWORD Timeout);
+RegistryWaitForKey(_In_ HKEY Key, _In_z_count_c_(MAX_REG_PATH) const WCHAR *Path, _In_ DWORD Timeout);
 
 WINTUN_STATUS
 RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType);

@@ -510,11 +510,11 @@ cleanupKey:
  * Returns the device-level registry key path.
  */
 static void
-GetDeviceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_PATH + MAX_INSTANCE_ID) WCHAR *Path)
+GetDeviceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
 {
     _snwprintf_s(
         Path,
-        MAX_PATH + MAX_INSTANCE_ID,
+        MAX_REG_PATH,
         _TRUNCATE,
         L"SYSTEM\\CurrentControlSet\\Enum\\%.*s",
         MAX_INSTANCE_ID,
@@ -525,12 +525,12 @@ GetDeviceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_PATH + MAX_
  * Returns the adapter-specific TCP/IP network registry key path.
  */
 static void
-GetTcpipAdapterRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_PATH) WCHAR *Path)
+GetTcpipAdapterRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
 {
     WCHAR Guid[MAX_GUID_STRING_LEN];
     _snwprintf_s(
         Path,
-        MAX_PATH,
+        MAX_REG_PATH,
         _TRUNCATE,
         L"SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Adapters\\%.*s",
         StringFromGUID2(&Adapter->CfgInstanceID, Guid, _countof(Guid)),
@@ -541,11 +541,11 @@ GetTcpipAdapterRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_PATH)
  * Returns the interface-specific TCP/IP network registry key path.
  */
 static WINTUN_STATUS
-GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_PATH) WCHAR *Path)
+GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
 {
     DWORD Result;
     HKEY TcpipAdapterRegKey;
-    WCHAR TcpipAdapterRegPath[MAX_PATH];
+    WCHAR TcpipAdapterRegPath[MAX_REG_PATH];
     GetTcpipAdapterRegPath(Adapter, TcpipAdapterRegPath);
     Result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, TcpipAdapterRegPath, 0, KEY_QUERY_VALUE, &TcpipAdapterRegKey);
     if (Result != ERROR_SUCCESS)
@@ -559,7 +559,7 @@ GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_PAT
         Result = ERROR_NETWORK_NOT_AVAILABLE;
         goto cleanupPaths;
     }
-    _snwprintf_s(Path, MAX_PATH, _TRUNCATE, L"SYSTEM\\CurrentControlSet\\Services\\%s", Paths);
+    _snwprintf_s(Path, MAX_REG_PATH, _TRUNCATE, L"SYSTEM\\CurrentControlSet\\Services\\%s", Paths);
 cleanupPaths:
     HeapFree(GetProcessHeap(), 0, Paths);
 cleanupTcpipAdapterRegKey:
@@ -743,7 +743,7 @@ WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAP
 
     /* TODO: This should use NetSetup2 so that it doesn't get unset. */
     HKEY DeviceRegKey;
-    WCHAR DeviceRegPath[MAX_PATH + MAX_INSTANCE_ID];
+    WCHAR DeviceRegPath[MAX_REG_PATH];
     GetDeviceRegPath(Adapter, DeviceRegPath);
     Result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, DeviceRegPath, 0, KEY_SET_VALUE, &DeviceRegKey);
     if (Result != ERROR_SUCCESS)
@@ -1056,7 +1056,7 @@ WintunCreateAdapter(
         goto cleanupNetDevRegKey;
 
     HKEY TcpipAdapterRegKey;
-    WCHAR TcpipAdapterRegPath[MAX_PATH];
+    WCHAR TcpipAdapterRegPath[MAX_REG_PATH];
     GetTcpipAdapterRegPath(*Adapter, TcpipAdapterRegPath);
     Result = RegistryOpenKeyWait(
         HKEY_LOCAL_MACHINE,
@@ -1072,7 +1072,7 @@ WintunCreateAdapter(
     HeapFree(Heap, 0, DummyStr);
 
     HKEY TcpipInterfaceRegKey;
-    WCHAR TcpipInterfaceRegPath[MAX_PATH];
+    WCHAR TcpipInterfaceRegPath[MAX_REG_PATH];
     Result = GetTcpipInterfaceRegPath(*Adapter, TcpipInterfaceRegPath);
     if (Result != ERROR_SUCCESS)
         goto cleanupTcpipAdapterRegKey;
