@@ -320,7 +320,7 @@ cleanupKey:
  * @param DevInfoData   A pointer to a structure that receives specification of the device information element in
  *                      DeviceInfoSet.
  *
- * @return ERROR_SUCCESS on success; ERROR_OBJECT_NOT_FOUND if the device is not found; Win32 error code otherwise
+ * @return ERROR_SUCCESS on success; ERROR_FILE_NOT_FOUND if the device is not found; Win32 error code otherwise
  */
 static WINTUN_STATUS
 GetDevInfoData(_In_ const GUID *CfgInstanceID, _Out_ HDEVINFO *DevInfo, _Out_ SP_DEVINFO_DATA *DevInfoData)
@@ -348,7 +348,7 @@ GetDevInfoData(_In_ const GUID *CfgInstanceID, _Out_ HDEVINFO *DevInfo, _Out_ SP
         return ERROR_SUCCESS;
     }
     SetupDiDestroyDeviceInfoList(*DevInfo);
-    return ERROR_OBJECT_NOT_FOUND;
+    return ERROR_FILE_NOT_FOUND;
 }
 
 /**
@@ -556,7 +556,7 @@ GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG
         goto cleanupTcpipAdapterRegKey;
     if (!Paths[0])
     {
-        Result = ERROR_NETWORK_NOT_AVAILABLE;
+        Result = ERROR_INVALID_DATA;
         goto cleanupPaths;
     }
     _snwprintf_s(Path, MAX_REG_PATH, _TRUNCATE, L"SYSTEM\\CurrentControlSet\\Services\\%s", Paths);
@@ -598,7 +598,7 @@ WintunGetAdapter(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_z_ const WCHAR 
     DWORD Result;
     HANDLE Mutex = TakeNameMutex(Pool);
     if (!Mutex)
-        return ERROR_GEN_FAILURE;
+        return ERROR_INVALID_HANDLE;
 
     HDEVINFO DevInfo = SetupDiGetClassDevsExW(&CLASS_NET_GUID, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
@@ -891,7 +891,7 @@ WintunCreateAdapter(
     DWORD Result;
     HANDLE Mutex = TakeNameMutex(Pool);
     if (!Mutex)
-        return ERROR_GEN_FAILURE;
+        return ERROR_INVALID_HANDLE;
 
     HDEVINFO DevInfo = SetupDiCreateDeviceInfoListExW(&CLASS_NET_GUID, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
@@ -1140,7 +1140,7 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequ
     HDEVINFO DevInfo;
     SP_DEVINFO_DATA DevInfoData;
     DWORD Result = GetDevInfoData(&Adapter->CfgInstanceID, &DevInfo, &DevInfoData);
-    if (Result == ERROR_OBJECT_NOT_FOUND)
+    if (Result == ERROR_FILE_NOT_FOUND)
         return ERROR_SUCCESS;
     if (Result != ERROR_SUCCESS)
         return Result;
@@ -1179,7 +1179,7 @@ WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUMP
     DWORD Result;
     HANDLE Mutex = TakeNameMutex(Pool);
     if (!Mutex)
-        return ERROR_GEN_FAILURE;
+        return ERROR_INVALID_HANDLE;
     HDEVINFO DevInfo = SetupDiGetClassDevsExW(&CLASS_NET_GUID, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
     {
