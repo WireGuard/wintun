@@ -336,7 +336,7 @@ static void
 RemoveNumberedSuffix(_In_z_ const WCHAR *Name, _Out_ WCHAR *Removed)
 {
     size_t Len = wcslen(Name);
-    if (Len && Name[Len - 1] < L'0' || Name[Len - 1] > L'9')
+    if (Len && (Name[Len - 1] < L'0' || Name[Len - 1] > L'9'))
     {
         wmemcpy(Removed, Name, Len + 1);
         return;
