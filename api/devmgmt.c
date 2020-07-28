@@ -476,7 +476,7 @@ CreateAdapterData(
         goto cleanupAdapter;
     }
 
-    wcscpy_s((*Adapter)->Pool, _countof((*Adapter)->Pool), Pool);
+    wcsncpy_s((*Adapter)->Pool, _countof((*Adapter)->Pool), Pool, _TRUNCATE);
     Result = ERROR_SUCCESS;
 
 cleanupAdapter:
@@ -689,7 +689,7 @@ WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAP
     DWORD Result;
     const int MaxSuffix = 1000;
     WCHAR AvailableName[MAX_ADAPTER_NAME];
-    wcscpy_s(AvailableName, _countof(AvailableName), Name);
+    wcsncpy_s(AvailableName, _countof(AvailableName), Name, _TRUNCATE);
     for (int i = 0;; ++i)
     {
         Result = NciSetConnectionName(&Adapter->CfgInstanceID, AvailableName);
@@ -755,7 +755,7 @@ WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAP
 void WINAPI
 WintunGetAdapterGUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ GUID *Guid)
 {
-    memcpy_s(Guid, sizeof(*Guid), &Adapter->CfgInstanceID, sizeof(Adapter->CfgInstanceID));
+    memcpy(Guid, &Adapter->CfgInstanceID, sizeof(GUID));
 }
 
 /**
