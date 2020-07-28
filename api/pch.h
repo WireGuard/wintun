@@ -10,6 +10,7 @@
 #include <bcrypt.h>
 #include <cfgmgr32.h>
 #include <iphlpapi.h>
+#include <locale.h>
 #include <objbase.h>
 #include <sddl.h>
 #include <SetupAPI.h>

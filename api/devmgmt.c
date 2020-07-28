@@ -15,6 +15,8 @@ const static GUID ADAPTER_NET_GUID = { 0xcac88484L,
                                        0x4c03,
                                        { 0x82, 0xe6, 0x71, 0xa8, 0x7a, 0xba, 0xc3, 0x61 } };
 
+static _locale_t Locale;
+
 /**
  * Retrieves a specified Plug and Play device property.
  *
@@ -385,14 +387,14 @@ IsPoolMember(
         goto cleanupDeviceDesc;
     WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
     GetPoolDeviceTypeName(Pool, PoolDeviceTypeName);
-    if (!_wcsicmp(FriendlyName, PoolDeviceTypeName) || !_wcsicmp(DeviceDesc, PoolDeviceTypeName))
+    if (!_wcsicmp_l(FriendlyName, PoolDeviceTypeName, Locale) || !_wcsicmp_l(DeviceDesc, PoolDeviceTypeName, Locale))
     {
         *IsMember = TRUE;
         goto cleanupFriendlyName;
     }
     RemoveNumberedSuffix(FriendlyName, FriendlyName);
     RemoveNumberedSuffix(DeviceDesc, DeviceDesc);
-    if (!_wcsicmp(FriendlyName, PoolDeviceTypeName) || !_wcsicmp(DeviceDesc, PoolDeviceTypeName))
+    if (!_wcsicmp_l(FriendlyName, PoolDeviceTypeName, Locale) || !_wcsicmp_l(DeviceDesc, PoolDeviceTypeName, Locale))
     {
         *IsMember = TRUE;
         goto cleanupFriendlyName;
@@ -608,7 +610,7 @@ WintunGetAdapter(
             continue;
         Name2[_countof(Name2) - 1] = 0;
         RemoveNumberedSuffix(Name2, Name3);
-        if (_wcsicmp(Name, Name2) && _wcsicmp(Name, Name3))
+        if (_wcsicmp_l(Name, Name2, Locale) && _wcsicmp_l(Name, Name3, Locale))
             continue;
 
         /* Check the Hardware ID to make sure it's a real Wintun device. This avoids doing slow operations on non-Wintun
@@ -1222,4 +1224,16 @@ WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUMP
 cleanupMutex:
     ReleaseNameMutex(Mutex);
     return Result;
+}
+
+void
+DevmgmtInit()
+{
+    Locale = _wcreate_locale(LC_ALL, L"");
+}
+
+void
+DevmgmtCleanup()
+{
+    _free_locale(Locale);
 }

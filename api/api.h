@@ -126,3 +126,9 @@ typedef BOOL(CALLBACK *WINTUN_ENUMPROC)(_In_ const WINTUN_ADAPTER *Adapter, _In_
 
 WINTUN_STATUS WINAPI
 WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUMPROC Func, _In_ LPARAM Param);
+
+void
+DevmgmtInit();
+
+void
+DevmgmtCleanup();
