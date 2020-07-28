@@ -605,13 +605,16 @@ WintunGetAdapter(
             continue;
 
         /* TODO: is there a better way than comparing ifnames? */
-        WCHAR Name2[MAX_ADAPTER_NAME], Name3[MAX_ADAPTER_NAME];
+        WCHAR Name2[MAX_ADAPTER_NAME];
         if (NciGetConnectionName(&CfgInstanceID, Name2, sizeof(Name2), NULL) != ERROR_SUCCESS)
             continue;
         Name2[_countof(Name2) - 1] = 0;
-        RemoveNumberedSuffix(Name2, Name3);
-        if (_wcsicmp_l(Name, Name2, Locale) && _wcsicmp_l(Name, Name3, Locale))
-            continue;
+        if (_wcsicmp_l(Name, Name2, Locale))
+        {
+            RemoveNumberedSuffix(Name2, Name2);
+            if (_wcsicmp_l(Name, Name2, Locale))
+                continue;
+        }
 
         /* Check the Hardware ID to make sure it's a real Wintun device. This avoids doing slow operations on non-Wintun
          * devices. */
