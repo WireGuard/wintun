@@ -186,7 +186,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="api.h" />
+    <ClInclude Include="devmgmt.h" />
+    <ClInclude Include="namespace.h" />
+    <ClInclude Include="nci.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="registry.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="api.c" />

@@ -6,6 +6,10 @@
 #pragma once
 
 #include "api.h"
+#include "devmgmt.h"
+#include "namespace.h"
+#include "nci.h"
+#include "registry.h"
 
 #include <bcrypt.h>
 #include <cfgmgr32.h>
