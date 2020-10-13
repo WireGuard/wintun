@@ -6,6 +6,18 @@
 #include <windows.h>
 #include <ntverp.h>
 
+#ifdef HAVE_EV
+wintun.cat RCDATA "wintun\\wintun.cat"
+wintun.inf RCDATA "wintun\\wintun.inf"
+wintun.sys RCDATA "wintun\\wintun.sys"
+#endif
+
+#ifdef HAVE_WHQL
+wintun-whql.cat RCDATA "whql\\wintun.cat"
+wintun-whql.inf RCDATA "whql\\wintun.inf"
+wintun-whql.sys RCDATA "whql\\wintun.sys"
+#endif
+
 #define STRINGIZE(x) #x
 #define EXPAND(x) STRINGIZE(x)
 

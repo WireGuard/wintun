@@ -143,14 +143,18 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32' Or '$(Platform)'=='x64' Or '$(Configuration)|$(Platform)'=='Debug|ARM64'">HAVE_EV;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="Exists('..\$(WintunPlatform)\$(Configuration)\whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
     </ClCompile>
     <ResourceCompile>
       <AdditionalIncludeDirectories>..\$(WintunPlatform)\$(Configuration);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32' Or '$(Platform)'=='x64' Or '$(Configuration)|$(Platform)'=='Debug|ARM64'">HAVE_EV;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="Exists('..\$(WintunPlatform)\$(Configuration)\whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>Bcrypt.lib;Cfgmgr32.lib;Iphlpapi.lib;Setupapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Bcrypt.lib;Cfgmgr32.lib;Crypt32.lib;Iphlpapi.lib;newdev.lib;ntdll.lib;Setupapi.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>exports.def</ModuleDefinitionFile>
       <SubSystem>Windows</SubSystem>
     </Link>
@@ -193,6 +197,7 @@
     <ClInclude Include="nci.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="registry.h" />
+    <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="api.c" />
@@ -205,6 +210,7 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="registry.c" />
+    <ClCompile Include="resource.c" />
     <ClCompile Include="rundll32.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
