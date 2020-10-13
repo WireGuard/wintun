@@ -15,12 +15,15 @@ OpenKeyWait(_In_ HKEY Key, _Inout_z_ WCHAR *Path, _In_ DWORD Access, _In_ ULONGL
 
     HANDLE Event = CreateEventW(NULL, FALSE, FALSE, NULL);
     if (!Event)
-        return GetLastError();
+        return WINTUN_LOGGER_LAST_ERROR(L"Failed to create event");
     for (;;)
     {
         Result = RegNotifyChangeKeyValue(Key, FALSE, REG_NOTIFY_CHANGE_NAME, Event, TRUE);
         if (Result != ERROR_SUCCESS)
+        {
+            WINTUN_LOGGER_ERROR(L"Failed to setup notification", Result);
             break;
+        }
 
         HKEY Subkey;
         Result = RegOpenKeyExW(Key, Path, 0, PathNext ? KEY_NOTIFY : Access, &Subkey);
@@ -36,13 +39,19 @@ OpenKeyWait(_In_ HKEY Key, _Inout_z_ WCHAR *Path, _In_ DWORD Access, _In_ ULONGL
             break;
         }
         if (Result != ERROR_FILE_NOT_FOUND && Result != ERROR_PATH_NOT_FOUND)
+        {
+            WINTUN_LOGGER_ERROR(L"Failed to open", Result);
             break;
+        }
 
         LONGLONG TimeLeft = Deadline - GetTickCount64();
         if (TimeLeft < 0)
             TimeLeft = 0;
         if (WaitForSingleObject(Event, (DWORD)TimeLeft) != WAIT_OBJECT_0)
+        {
+            WINTUN_LOGGER(WINTUN_LOG_ERR, "Timeout waiting");
             break;
+        }
     }
     CloseHandle(Event);
     return Result;
@@ -136,7 +145,7 @@ RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
         DWORD Result = ExpandEnvironmentStringsW(*Buf, Expanded, Len);
         if (!Result)
         {
-            Result = GetLastError();
+            Result = WINTUN_LOGGER_LAST_ERROR(L"Failed to expand environment variables");
             HeapFree(Heap, 0, Expanded);
             return Result;
         }
@@ -257,7 +266,7 @@ RegistryQuery(
             return ERROR_SUCCESS;
         HeapFree(Heap, 0, *Buf);
         if (Result != ERROR_MORE_DATA)
-            return Result;
+            return WINTUN_LOGGER_ERROR(L"Querying value failed", Result);
     }
 }
 
@@ -293,6 +302,7 @@ RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ WCHAR **V
             HeapFree(GetProcessHeap(), 0, *Value);
         return Result;
     default:
+        WINTUN_LOGGER(WINTUN_LOG_ERR, L"Value is not a string");
         HeapFree(GetProcessHeap(), 0, *Value);
         return ERROR_INVALID_DATATYPE;
     }
@@ -312,7 +322,7 @@ RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ WCHAR **V
  *                      string from the multi-string is returned. The string must be released with
  *                      HeapFree(GetProcessHeap(), 0, Value) after use.
  *
- * @return ERROR_SUCCESS on success; WAIT_TIMEOUT on timeout; ERROR_INVALID_DATATYPE when the registry value is a
+ * @return ERROR_SUCCESS on success; WAIT_TIMEOUT on timeout; ERROR_INVALID_DATATYPE when the registry value is not a
  * string; Win32 error code otherwise.
  */
 WINTUN_STATUS
@@ -322,12 +332,15 @@ RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD 
     ULONGLONG Deadline = GetTickCount64() + Timeout;
     HANDLE Event = CreateEventW(NULL, FALSE, FALSE, NULL);
     if (!Event)
-        return GetLastError();
+        return WINTUN_LOGGER_LAST_ERROR(L"Failed to create event");
     for (;;)
     {
         Result = RegNotifyChangeKeyValue(Key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, Event, TRUE);
         if (Result != ERROR_SUCCESS)
+        {
+            WINTUN_LOGGER_ERROR(L"Failed to setup notification", Result);
             break;
+        }
         Result = RegistryQueryString(Key, Name, Value);
         if (Result != ERROR_FILE_NOT_FOUND && Result != ERROR_PATH_NOT_FOUND)
             break;
@@ -335,7 +348,10 @@ RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD 
         if (TimeLeft < 0)
             TimeLeft = 0;
         if (WaitForSingleObject(Event, (DWORD)TimeLeft) != WAIT_OBJECT_0)
+        {
+            WINTUN_LOGGER(WINTUN_LOG_ERR, "Timeout waiting");
             break;
+        }
     }
     CloseHandle(Event);
     return Result;
@@ -359,11 +375,17 @@ RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ DWORD *Val
     DWORD ValueType, Size = sizeof(DWORD);
     DWORD Result = RegQueryValueExW(Key, Name, NULL, &ValueType, (BYTE *)Value, &Size);
     if (Result != ERROR_SUCCESS)
-        return Result;
+        return WINTUN_LOGGER_ERROR(L"Querying failed", Result);
     if (ValueType != REG_DWORD)
+    {
+        WINTUN_LOGGER(WINTUN_LOG_ERR, L"Value is not a DWORD");
         return ERROR_INVALID_DATATYPE;
+    }
     if (Size != sizeof(DWORD))
+    {
+        WINTUN_LOGGER(WINTUN_LOG_ERR, L"Value size is not 4 bytes");
         return ERROR_INVALID_DATA;
+    }
     return ERROR_SUCCESS;
 }
 
@@ -388,12 +410,15 @@ RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD T
     ULONGLONG Deadline = GetTickCount64() + Timeout;
     HANDLE Event = CreateEventW(NULL, FALSE, FALSE, NULL);
     if (!Event)
-        return GetLastError();
+        return WINTUN_LOGGER_LAST_ERROR(L"Failed to create event");
     for (;;)
     {
         Result = RegNotifyChangeKeyValue(Key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, Event, TRUE);
         if (Result != ERROR_SUCCESS)
+        {
+            WINTUN_LOGGER_ERROR(L"Failed to setup notification", Result);
             break;
+        }
         Result = RegistryQueryDWORD(Key, Name, Value);
         if (Result != ERROR_FILE_NOT_FOUND && Result != ERROR_PATH_NOT_FOUND)
             break;
@@ -401,7 +426,10 @@ RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD T
         if (TimeLeft < 0)
             TimeLeft = 0;
         if (WaitForSingleObject(Event, (DWORD)TimeLeft) != WAIT_OBJECT_0)
+        {
+            WINTUN_LOGGER(WINTUN_LOG_ERR, "Timeout waiting");
             break;
+        }
     }
     CloseHandle(Event);
     return Result;

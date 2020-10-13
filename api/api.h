@@ -7,6 +7,13 @@
 
 #include <Windows.h>
 
+#ifndef __L
+#    define __L(x) L##x
+#endif
+#ifndef _L
+#    define _L(x) __L(x)
+#endif
+
 typedef _Return_type_success_(return == ERROR_SUCCESS) DWORD WINTUN_STATUS;
 
 extern HINSTANCE ResourceModule;

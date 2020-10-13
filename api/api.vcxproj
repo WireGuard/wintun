@@ -187,6 +187,8 @@
   <ItemGroup>
     <ClInclude Include="api.h" />
     <ClInclude Include="devmgmt.h" />
+    <ClInclude Include="driver.h" />
+    <ClInclude Include="logger.h" />
     <ClInclude Include="namespace.h" />
     <ClInclude Include="nci.h" />
     <ClInclude Include="pch.h" />
@@ -195,6 +197,8 @@
   <ItemGroup>
     <ClCompile Include="api.c" />
     <ClCompile Include="devmgmt.c" />
+    <ClCompile Include="driver.c" />
+    <ClCompile Include="logger.c" />
     <ClCompile Include="namespace.c" />
     <ClCompile Include="nci.c" />
     <ClCompile Include="pch.c">

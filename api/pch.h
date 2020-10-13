@@ -7,6 +7,8 @@
 
 #include "api.h"
 #include "devmgmt.h"
+#include "driver.h"
+#include "logger.h"
 #include "namespace.h"
 #include "nci.h"
 #include "registry.h"
@@ -15,6 +17,7 @@
 #include <cfgmgr32.h>
 #include <iphlpapi.h>
 #include <locale.h>
+#include <ndisguid.h>
 #include <objbase.h>
 #include <sddl.h>
 #include <SetupAPI.h>

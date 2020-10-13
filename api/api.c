@@ -31,17 +31,28 @@ WintunGetVersion(
     DWORD Result =
         RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Services\\Wintun", 0, KEY_QUERY_VALUE, &Key);
     if (Result != ERROR_SUCCESS)
-        return Result;
+        return WINTUN_LOGGER_ERROR(L"Failed to open registry key", Result);
     Result = RegistryQueryDWORD(Key, L"DriverMajorVersion", DriverVersionMaj);
     if (Result != ERROR_SUCCESS)
+    {
+        WINTUN_LOGGER_ERROR(L"Failed to query DriverMajorVersion value", Result);
         goto cleanupKey;
+    }
     Result = RegistryQueryDWORD(Key, L"DriverMinorVersion", DriverVersionMin);
     if (Result != ERROR_SUCCESS)
+    {
+        WINTUN_LOGGER_ERROR(L"Failed to query DriverMinorVersion value", Result);
         goto cleanupKey;
+    }
     Result = RegistryQueryDWORD(Key, L"NdisMajorVersion", NdisVersionMaj);
     if (Result != ERROR_SUCCESS)
+    {
+        WINTUN_LOGGER_ERROR(L"Failed to query NdisMajorVersion value", Result);
         goto cleanupKey;
+    }
     Result = RegistryQueryDWORD(Key, L"NdisMinorVersion", NdisVersionMin);
+    if (Result != ERROR_SUCCESS)
+        WINTUN_LOGGER_ERROR(L"Failed to query NdisMinorVersion value", Result);
 cleanupKey:
     RegCloseKey(Key);
     return Result;

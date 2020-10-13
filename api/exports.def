@@ -1,12 +1,13 @@
 EXPORTS
-	WintunFreeAdapter
-	WintunGetAdapter
-	WintunGetAdapterName
-	WintunSetAdapterName
-	WintunGetAdapterGUID
-	WintunGetAdapterLUID
-	WintunGetAdapterDeviceObject
-	WintunGetVersion
 	WintunCreateAdapter
 	WintunDeleteAdapter
 	WintunEnumAdapters
+	WintunFreeAdapter
+	WintunGetAdapter
+	WintunGetAdapterDeviceObject
+	WintunGetAdapterGUID
+	WintunGetAdapterLUID
+	WintunGetAdapterName
+	WintunGetVersion
+	WintunSetAdapterName
+	WintunSetLogger
