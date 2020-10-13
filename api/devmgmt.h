@@ -55,10 +55,10 @@ WintunCreateAdapter(
 WINTUN_STATUS WINAPI
 WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired);
 
-typedef BOOL(CALLBACK *WINTUN_ENUMPROC)(_In_ const WINTUN_ADAPTER *Adapter, _In_ LPARAM Param);
+typedef BOOL(CALLBACK *WINTUN_ENUM_FUNC)(_In_ const WINTUN_ADAPTER *Adapter, _In_ LPARAM Param);
 
 WINTUN_STATUS WINAPI
-WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUMPROC Func, _In_ LPARAM Param);
+WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUM_FUNC Func, _In_ LPARAM Param);
 
 void
 DevmgmtInit();
