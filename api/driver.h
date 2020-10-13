@@ -9,6 +9,8 @@
 #include <Windows.h>
 #include <SetupAPI.h>
 
+#define WINTUN_HWID L"Wintun"
+
 _Return_type_success_(return != NULL) SP_DRVINFO_DETAIL_DATA_W *DriverGetDrvInfoDetail(
     _In_ HDEVINFO DevInfo,
     _In_opt_ SP_DEVINFO_DATA *DevInfoData,

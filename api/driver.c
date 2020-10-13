@@ -302,7 +302,7 @@ InstallDriver(_In_ BOOL UpdateExisting)
     BOOL RebootRequired = FALSE;
     if (UpdateExisting &&
         !UpdateDriverForPlugAndPlayDevicesW(
-            NULL, L"Wintun", InfPath, INSTALLFLAG_FORCE | INSTALLFLAG_NONINTERACTIVE, &RebootRequired))
+            NULL, WINTUN_HWID, InfPath, INSTALLFLAG_FORCE | INSTALLFLAG_NONINTERACTIVE, &RebootRequired))
         WINTUN_LOGGER_LAST_ERROR(L"Could not update existing adapters");
     if (RebootRequired)
         WINTUN_LOGGER(WINTUN_LOG_WARN, L"A reboot might be required, which really should not be the case");
@@ -346,7 +346,7 @@ static WINTUN_STATUS RemoveDriver(VOID)
         SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData = DriverGetDrvInfoDetail(DevInfo, NULL, &DrvInfoData);
         if (!DrvInfoDetailData)
             continue;
-        if (!_wcsicmp(DrvInfoDetailData->HardwareID, L"wintun"))
+        if (!_wcsicmp(DrvInfoDetailData->HardwareID, WINTUN_HWID))
         {
             PathStripPathW(DrvInfoDetailData->InfFileName);
             WINTUN_LOGGER(WINTUN_LOG_INFO, L"Removing existing driver");
@@ -396,7 +396,7 @@ DriverIsWintunAdapter(_In_ HDEVINFO DevInfo, _In_opt_ SP_DEVINFO_DATA *DevInfoDa
         SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData = DriverGetDrvInfoDetail(DevInfo, DevInfoData, &DrvInfoData);
         if (!DrvInfoDetailData)
             continue;
-        Found = !_wcsicmp(DrvInfoDetailData->HardwareID, L"wintun");
+        Found = !_wcsicmp(DrvInfoDetailData->HardwareID, WINTUN_HWID);
         HeapFree(Heap, 0, DrvInfoDetailData);
     }
     SetupDiDestroyDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER);

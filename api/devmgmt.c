@@ -5,7 +5,6 @@
 
 #include "pch.h"
 
-#define WINTUN_HWID L"Wintun"
 #define WAIT_FOR_REGISTRY_TIMEOUT 10000     /* ms */
 #define MAX_POOL_DEVICE_TYPE (MAX_POOL + 8) /* Should accommodate a pool name with " Tunnel" appended */
 
@@ -1024,12 +1023,7 @@ WintunCreateAdapter(
 
     const static DWORD EnableDeadGWDetect = 0;
     Result = RegSetKeyValueW(
-            TcpipInterfaceRegKey,
-            NULL,
-            L"EnableDeadGWDetect",
-            REG_DWORD,
-            &EnableDeadGWDetect,
-            sizeof(EnableDeadGWDetect));
+        TcpipInterfaceRegKey, NULL, L"EnableDeadGWDetect", REG_DWORD, &EnableDeadGWDetect, sizeof(EnableDeadGWDetect));
     if (Result != ERROR_SUCCESS)
         WINTUN_LOGGER_ERROR(L"Failed to set EnableDeadGWDetect", Result);
 
