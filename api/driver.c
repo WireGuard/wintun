@@ -135,22 +135,12 @@ static WINTUN_STATUS
 InstallCertificate(_In_z_ const WCHAR *SignedResource)
 {
     WINTUN_LOGGER(WINTUN_LOG_INFO, L"Trusting code signing certificate");
-    HRSRC FoundResource = FindResourceW(ResourceModule, SignedResource, RT_RCDATA);
-    if (!FoundResource)
-        return WINTUN_LOGGER_LAST_ERROR(L"Failed to find resource");
-    DWORD SizeResource = SizeofResource(ResourceModule, FoundResource);
-    if (!SizeResource)
-        return WINTUN_LOGGER_LAST_ERROR(L"Failed to size resource");
-    HGLOBAL LoadedResource = LoadResource(ResourceModule, FoundResource);
-    if (!LoadedResource)
-        return WINTUN_LOGGER_LAST_ERROR(L"Failed to load resource");
-    LPVOID LockedResource = LockResource(LoadedResource);
-    if (!LockedResource)
-    {
-        WINTUN_LOGGER(WINTUN_LOG_ERR, L"Failed to lock resource");
-        return ERROR_LOCK_FAILED;
-    }
-    const CERT_BLOB CertBlob = { .cbData = SizeResource, .pbData = LockedResource };
+    const VOID *LockedResource;
+    DWORD SizeResource;
+    DWORD Result = ResourceGetAddress(SignedResource, &LockedResource, &SizeResource);
+    if (Result != ERROR_SUCCESS)
+        return WINTUN_LOGGER_ERROR("Failed to locate resource", Result);
+    const CERT_BLOB CertBlob = { .cbData = SizeResource, .pbData = (BYTE *)LockedResource };
     HCERTSTORE QueriedStore;
     if (!CryptQueryObject(
             CERT_QUERY_OBJECT_BLOB,
@@ -165,7 +155,6 @@ InstallCertificate(_In_z_ const WCHAR *SignedResource)
             0,
             NULL))
         return WINTUN_LOGGER_LAST_ERROR("Failed to find certificate");
-    DWORD Result = ERROR_SUCCESS;
     HCERTSTORE TrustedStore =
         CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, 0, CERT_SYSTEM_STORE_LOCAL_MACHINE, L"TrustedPublisher");
     if (!TrustedStore)
@@ -285,11 +274,11 @@ InstallDriver(_In_ BOOL UpdateExisting)
         WINTUN_LOGGER_ERROR(L"Unable to install code signing certificate", Result);
 
     WINTUN_LOGGER(WINTUN_LOG_INFO, L"Copying resources to temporary path");
-    if ((Result = CopyResource(CatPath, &SecurityAttributes, UseWHQL ? L"wintun-whql.cat" : L"wintun.cat")) !=
+    if ((Result = ResourceCopyToFile(CatPath, &SecurityAttributes, UseWHQL ? L"wintun-whql.cat" : L"wintun.cat")) !=
             ERROR_SUCCESS ||
-        (Result = CopyResource(SysPath, &SecurityAttributes, UseWHQL ? L"wintun-whql.sys" : L"wintun.sys")) !=
+        (Result = ResourceCopyToFile(SysPath, &SecurityAttributes, UseWHQL ? L"wintun-whql.sys" : L"wintun.sys")) !=
             ERROR_SUCCESS ||
-        (Result = CopyResource(InfPath, &SecurityAttributes, UseWHQL ? L"wintun-whql.inf" : L"wintun.inf")) !=
+        (Result = ResourceCopyToFile(InfPath, &SecurityAttributes, UseWHQL ? L"wintun-whql.inf" : L"wintun.inf")) !=
             ERROR_SUCCESS)
     {
         Result = WINTUN_LOGGER_LAST_ERROR(L"Failed to copy resources");
