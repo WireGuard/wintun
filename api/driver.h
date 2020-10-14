@@ -22,6 +22,10 @@ DriverIsWintunAdapter(_In_ HDEVINFO DevInfo, _In_opt_ SP_DEVINFO_DATA *DevInfoDa
 _Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE
     DriverGetAdapterDeviceObject(_In_opt_z_ const WCHAR *InstanceId);
 
+#if defined(HAVE_EV) || defined(HAVE_WHQL)
+
 WINTUN_STATUS DriverInstallOrUpdate(VOID);
 
 WINTUN_STATUS DriverUninstall(VOID);
+
+#endif
