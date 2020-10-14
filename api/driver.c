@@ -158,6 +158,176 @@ cleanupBuf:
 
 #if defined(HAVE_EV) || defined(HAVE_WHQL)
 
+/* We can't use RtlGetVersion, because appcompat's aclayers.dll shims it to report Vista
+ * when run from legacy contexts. So, we instead use the undocumented RtlGetNtVersionNumbers.
+ *
+ * Another way would be reading from the PEB directly:
+ *   ((DWORD *)NtCurrentTeb()->ProcessEnvironmentBlock)[sizeof(void *) == 8 ? 70 : 41]
+ * Or just read from KUSER_SHARED_DATA the same way on 32-bit and 64-bit:
+ *    *(DWORD *)0x7FFE026C
+ */
+extern VOID NTAPI
+RtlGetNtVersionNumbers(_Out_opt_ DWORD *MajorVersion, _Out_opt_ DWORD *MinorVersion, _Out_opt_ DWORD *BuildNumber);
+
+/**
+ * Queries driver availability and Windows requirement about driver signing model.
+ *
+ * @return non-zero when WHQL/Attestation-signed drivers are available and required; zero otherwise.
+ */
+static BOOL
+HaveWHQL()
+{
+#    if defined(HAVE_EV) && defined(HAVE_WHQL)
+    DWORD MajorVersion;
+    RtlGetNtVersionNumbers(&MajorVersion, NULL, NULL);
+    return MajorVersion >= 10;
+#    elif defined(HAVE_EV)
+    return FALSE;
+#    elif defined(HAVE_WHQL)
+    return TRUE;
+#    endif
+}
+
+/**
+ * Locates the white-space string span.
+ *
+ * \param Beg           String start
+ *
+ * \param End           String end (non-inclusive)
+ *
+ * \return First non-white-space character or string end.
+ */
+static const CHAR *
+SkipWSpace(_In_ const CHAR *Beg, _In_ const CHAR *End)
+{
+    for (; Beg < End && iswspace(*Beg); ++Beg)
+        ;
+    return Beg;
+}
+
+/**
+ * Locates the non-LF string span.
+ *
+ * \param Beg           String start
+ *
+ * \param End           String end (non-inclusive)
+ *
+ * \return First LF character or string end.
+ */
+static const CHAR *
+SkipNonLF(_In_ const CHAR *Beg, _In_ const CHAR *End)
+{
+    for (; Beg < End && *Beg != '\n'; ++Beg)
+        ;
+    return Beg;
+}
+
+/**
+ * Queries the version of the driver this wintun.dll is packing.
+ *
+ * DriverDate           Pointer to a variable to receive the driver date.
+ *
+ * DriverVersion        Pointer to a variable to receive the driver version.
+ *
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ */
+WINTUN_STATUS
+DriverGetVersion(_Out_ FILETIME *DriverDate, _Out_ DWORDLONG *DriverVersion)
+{
+    const VOID *LockedResource;
+    DWORD SizeResource;
+    DWORD Result = ResourceGetAddress(HaveWHQL() ? L"wintun-whql.inf" : L"wintun.inf", &LockedResource, &SizeResource);
+    if (Result != ERROR_SUCCESS)
+        return WINTUN_LOGGER_ERROR(L"Failed to locate resource", Result);
+    enum
+    {
+        SectNone,
+        SectUnknown,
+        SectVersion
+    } Section = SectNone;
+    for (const CHAR *Inf = (const CHAR *)LockedResource, *InfEnd = Inf + SizeResource; Inf < InfEnd; ++Inf)
+    {
+        if (*Inf == ';')
+        {
+            Inf = SkipNonLF(Inf + 1, InfEnd);
+            continue;
+        }
+        Inf = SkipWSpace(Inf, InfEnd);
+        if (*Inf == '[')
+        {
+            Section = Inf + 9 <= InfEnd && !_strnicmp(Inf, "[Version]", 9) ? SectVersion : SectUnknown;
+        }
+        else if (Section == SectVersion)
+        {
+            if (Inf + 9 <= InfEnd && !_strnicmp(Inf, "DriverVer", 9))
+            {
+                Inf = SkipWSpace(Inf + 9, InfEnd);
+                if (Inf < InfEnd && *Inf == '=')
+                {
+                    Inf = SkipWSpace(Inf + 1, InfEnd);
+                    /* Duplicate buffer, as RT_RCDATA resource is not guaranteed to be zero-terminated. */
+                    CHAR buf[0x100];
+                    size_t n = InfEnd - Inf;
+                    if (n >= _countof(buf))
+                        n = _countof(buf) - 1;
+                    strncpy_s(buf, _countof(buf), Inf, n);
+                    buf[n] = 0;
+                    const CHAR *p = buf;
+                    CHAR *p_next;
+                    unsigned long date[3] = { 0, 0, 0 };
+                    for (size_t i = 0;; ++i, ++p)
+                    {
+                        date[i] = strtoul(p, &p_next, 10);
+                        p = p_next;
+                        if (i >= _countof(date) - 1)
+                            break;
+                        if (*p != '/' && *p != '-')
+                        {
+                            WINTUN_LOGGER(WINTUN_LOG_ERR, L"Unexpected date delimiter");
+                            return ERROR_INVALID_DATA;
+                        }
+                    }
+                    if (date[0] < 1 || date[0] > 12 || date[1] < 1 || date[1] > 31 || date[2] < 1601 || date[2] > 30827)
+                    {
+                        WINTUN_LOGGER(WINTUN_LOG_ERR, L"Invalid date");
+                        return ERROR_INVALID_DATA;
+                    }
+                    const SYSTEMTIME st = { .wYear = (WORD)date[2], .wMonth = (WORD)date[0], .wDay = (WORD)date[1] };
+                    SystemTimeToFileTime(&st, DriverDate);
+                    p = SkipWSpace(p, buf + n);
+                    ULONGLONG version[4] = { 0, 0, 0, 0 };
+                    if (*p == ',')
+                    {
+                        p = SkipWSpace(p + 1, buf + n);
+                        for (size_t i = 0;; ++i, ++p)
+                        {
+                            version[i] = strtoul(p, &p_next, 10);
+                            if (version[i] > 0xffff)
+                            {
+                                WINTUN_LOGGER(WINTUN_LOG_ERR, L"Version field may not exceed 65535");
+                                return ERROR_INVALID_DATA;
+                            }
+                            p = p_next;
+                            if (i >= _countof(version) - 1 || !*p || *p == ';' || iswspace(*p))
+                                break;
+                            if (*p != '.')
+                            {
+                                WINTUN_LOGGER(WINTUN_LOG_ERR, L"Unexpected version delimiter");
+                                return ERROR_INVALID_DATA;
+                            }
+                        }
+                    }
+                    *DriverVersion = (version[0] << 48) | (version[1] << 32) | (version[2] << 16) | version[3];
+                    return ERROR_SUCCESS;
+                }
+            }
+        }
+        Inf = SkipNonLF(Inf, InfEnd);
+    }
+    WINTUN_LOGGER(WINTUN_LOG_ERR, L"DriverVer not found in INF resource");
+    return ERROR_FILE_NOT_FOUND;
+}
+
 /**
  * Checks if the Wintun driver is loaded.
  *
@@ -295,17 +465,6 @@ cleanupQueriedStore:
     return Result;
 }
 
-/* We can't use RtlGetVersion, because appcompat's aclayers.dll shims it to report Vista
- * when run from legacy contexts. So, we instead use the undocumented RtlGetNtVersionNumbers.
- *
- * Another way would be reading from the PEB directly:
- *   ((DWORD *)NtCurrentTeb()->ProcessEnvironmentBlock)[sizeof(void *) == 8 ? 70 : 41]
- * Or just read from KUSER_SHARED_DATA the same way on 32-bit and 64-bit:
- *    *(DWORD *)0x7FFE026C
- */
-extern VOID NTAPI
-RtlGetNtVersionNumbers(_Out_opt_ DWORD *MajorVersion, _Out_opt_ DWORD *MinorVersion, _Out_opt_ DWORD *BuildNumber);
-
 /**
  * Installs Wintun driver to the Windows driver store and updates existing adapters to use it.
  *
@@ -323,7 +482,7 @@ InstallDriver(_In_ BOOL UpdateExisting)
     if (!PathCombineW(WindowsTempDirectory, WindowsDirectory, L"Temp"))
         return ERROR_BUFFER_OVERFLOW;
     UCHAR RandomBytes[32] = { 0 };
-#pragma warning(suppress : 6387)
+#    pragma warning(suppress : 6387)
     if (!RtlGenRandom(RandomBytes, sizeof(RandomBytes)))
         return WINTUN_LOGGER_LAST_ERROR(L"Failed to generate random");
     WCHAR RandomSubDirectory[sizeof(RandomBytes) * 2 + 1];
@@ -354,16 +513,7 @@ InstallDriver(_In_ BOOL UpdateExisting)
         goto cleanupFree;
     }
 
-    BOOL UseWHQL = FALSE;
-#if defined(HAVE_EV) && defined(HAVE_WHQL)
-    DWORD MajorVersion;
-    RtlGetNtVersionNumbers(&MajorVersion, NULL, NULL);
-    UseWHQL = MajorVersion >= 10;
-#elif defined(HAVE_EV)
-    UseWHQL = FALSE;
-#elif defined(HAVE_WHQL)
-    UseWHQL = TRUE;
-#endif
+    BOOL UseWHQL = HaveWHQL();
     if (!UseWHQL && (Result = InstallCertificate(L"wintun.sys")) != ERROR_SUCCESS)
         WINTUN_LOGGER_ERROR(L"Unable to install code signing certificate", Result);
 
@@ -447,7 +597,7 @@ cleanupDeviceInfoSet:
     return Result;
 }
 
-#define TUN_IOCTL_FORCE_CLOSE_HANDLES CTL_CODE(51820U, 0x971U, METHOD_NEITHER, FILE_READ_DATA | FILE_WRITE_DATA)
+#    define TUN_IOCTL_FORCE_CLOSE_HANDLES CTL_CODE(51820U, 0x971U, METHOD_NEITHER, FILE_READ_DATA | FILE_WRITE_DATA)
 
 /**
  * Closes all client handles to the Wintun adapter.

@@ -24,6 +24,8 @@ _Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE
 
 #if defined(HAVE_EV) || defined(HAVE_WHQL)
 
+WINTUN_STATUS DriverGetVersion(_Out_ FILETIME *DriverDate, _Out_ DWORDLONG *DriverVersion);
+
 WINTUN_STATUS DriverInstallOrUpdate(VOID);
 
 WINTUN_STATUS DriverUninstall(VOID);
