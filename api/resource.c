@@ -21,17 +21,17 @@ ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const VOID **Address,
 {
     HRSRC FoundResource = FindResourceW(ResourceModule, ResourceName, RT_RCDATA);
     if (!FoundResource)
-        return WINTUN_LOGGER_LAST_ERROR(L"Failed to find resource");
+        return LOG_LAST_ERROR(L"Failed to find resource");
     *Size = SizeofResource(ResourceModule, FoundResource);
     if (!*Size)
-        return WINTUN_LOGGER_LAST_ERROR(L"Failed to size resource");
+        return LOG_LAST_ERROR(L"Failed to size resource");
     HGLOBAL LoadedResource = LoadResource(ResourceModule, FoundResource);
     if (!LoadedResource)
-        return WINTUN_LOGGER_LAST_ERROR(L"Failed to load resource");
+        return LOG_LAST_ERROR(L"Failed to load resource");
     *Address = LockResource(LoadedResource);
     if (!*Address)
     {
-        WINTUN_LOGGER(WINTUN_LOG_ERR, L"Failed to lock resource");
+        LOG(WINTUN_LOG_ERR, L"Failed to lock resource");
         return ERROR_LOCK_FAILED;
     }
     return ERROR_SUCCESS;
@@ -58,7 +58,7 @@ ResourceCopyToFile(
     DWORD SizeResource;
     DWORD Result = ResourceGetAddress(ResourceName, &LockedResource, &SizeResource);
     if (Result != ERROR_SUCCESS)
-        return WINTUN_LOGGER_ERROR("Failed to locate resource", Result);
+        return LOG_ERROR("Failed to locate resource", Result);
     HANDLE DestinationHandle = CreateFileW(
         DestinationPath,
         GENERIC_WRITE,
@@ -68,13 +68,13 @@ ResourceCopyToFile(
         FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_TEMPORARY,
         NULL);
     if (DestinationHandle == INVALID_HANDLE_VALUE)
-        return WINTUN_LOGGER_LAST_ERROR(L"Failed to create file");
+        return LOG_LAST_ERROR(L"Failed to create file");
     DWORD BytesWritten;
     if (!WriteFile(DestinationHandle, LockedResource, SizeResource, &BytesWritten, NULL))
-        Result = WINTUN_LOGGER_LAST_ERROR(L"Failed to write file");
+        Result = LOG_LAST_ERROR(L"Failed to write file");
     if (BytesWritten != SizeResource)
     {
-        WINTUN_LOGGER(WINTUN_LOG_ERR, L"Incomplete write");
+        LOG(WINTUN_LOG_ERR, L"Incomplete write");
         Result = Result != ERROR_SUCCESS ? Result : ERROR_WRITE_FAULT;
     }
     CloseHandle(DestinationHandle);

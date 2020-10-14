@@ -33,6 +33,6 @@ LoggerLastError(_In_z_ const WCHAR *Prefix)
     return Error;
 }
 
-#define WINTUN_LOGGER(lvl, msg) Logger((lvl), _L(__FUNCTION__) L": " msg)
-#define WINTUN_LOGGER_ERROR(msg, err) LoggerError(_L(__FUNCTION__) L": " msg, (err))
-#define WINTUN_LOGGER_LAST_ERROR(msg) LoggerLastError(_L(__FUNCTION__) L": " msg)
+#define LOG(lvl, msg) Logger((lvl), _L(__FUNCTION__) L": " msg)
+#define LOG_ERROR(msg, err) LoggerError(_L(__FUNCTION__) L": " msg, (err))
+#define LOG_LAST_ERROR(msg) LoggerLastError(_L(__FUNCTION__) L": " msg)
