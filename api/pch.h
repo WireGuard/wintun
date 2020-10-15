@@ -28,4 +28,5 @@
 #include <SetupAPI.h>
 #include <Shlwapi.h>
 #include <string.h>
+#include <TlHelp32.h>
 #include <wchar.h>
