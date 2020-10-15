@@ -85,17 +85,6 @@ RegistryOpenKeyWait(
     return OpenKeyWait(Key, Buf, Access, GetTickCount64() + Timeout, KeyOut);
 }
 
-WINTUN_STATUS
-RegistryWaitForKey(_In_ HKEY Key, _In_z_count_c_(MAX_REG_PATH) const WCHAR *Path, _In_ DWORD Timeout)
-{
-    HKEY k;
-    DWORD Result = RegistryOpenKeyWait(Key, Path, KEY_NOTIFY, Timeout, &k);
-    if (Result != ERROR_SUCCESS)
-        return Result;
-    RegCloseKey(k);
-    return ERROR_SUCCESS;
-}
-
 /**
  * Validates and/or sanitizes string value read from registry.
  *
