@@ -27,10 +27,7 @@ ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const VOID **Address,
 }
 
 WINTUN_STATUS
-ResourceCopyToFile(
-    _In_z_ const WCHAR *DestinationPath,
-    _In_opt_ SECURITY_ATTRIBUTES *SecurityAttributes,
-    _In_z_ const WCHAR *ResourceName)
+ResourceCopyToFile(_In_z_ const WCHAR *DestinationPath, _In_z_ const WCHAR *ResourceName)
 {
     const VOID *LockedResource;
     DWORD SizeResource;

@@ -17,6 +17,7 @@
 typedef _Return_type_success_(return == ERROR_SUCCESS) DWORD WINTUN_STATUS;
 
 extern HINSTANCE ResourceModule;
+extern SECURITY_ATTRIBUTES *SecurityAttributes;
 
 /**
  * Returns the version of the Wintun driver and NDIS system currently loaded.

@@ -5,7 +5,6 @@
 
 #include "pch.h"
 
-static SECURITY_ATTRIBUTES SecurityAttributes = { .nLength = sizeof(SECURITY_ATTRIBUTES) };
 static BOOL HasInitialized = FALSE;
 static CRITICAL_SECTION Initializing;
 static BCRYPT_ALG_HANDLE AlgProvider;
@@ -62,36 +61,29 @@ NamespaceRuntimeInit()
         goto cleanupLeaveCriticalSection;
     }
 
-    ULONG SecDescrSize;
-    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"O:SYD:P(A;;GA;;;SY)", 1, &SecurityAttributes.lpSecurityDescriptor, &SecDescrSize))
-    {
-        Result = GetLastError();
-        goto cleanupBCryptCloseAlgorithmProvider;
-    }
     BYTE Sid[MAX_SID_SIZE];
     DWORD SidSize = MAX_SID_SIZE;
     if (!CreateWellKnownSid(WinLocalSystemSid, NULL, Sid, &SidSize))
     {
         Result = GetLastError();
-        goto cleanupSecurityDescriptor;
+        goto cleanupBCryptCloseAlgorithmProvider;
     }
 
     HANDLE Boundary = CreateBoundaryDescriptorW(L"Wintun", 0);
     if (!Boundary)
     {
         Result = GetLastError();
-        goto cleanupSecurityDescriptor;
+        goto cleanupBCryptCloseAlgorithmProvider;
     }
     if (!AddSIDToBoundaryDescriptor(&Boundary, Sid))
     {
         Result = GetLastError();
-        goto cleanupSecurityDescriptor;
+        goto cleanupBCryptCloseAlgorithmProvider;
     }
 
     for (;;)
     {
-        if (CreatePrivateNamespaceW(&SecurityAttributes, Boundary, L"Wintun"))
+        if (CreatePrivateNamespaceW(SecurityAttributes, Boundary, L"Wintun"))
             break;
         Result = GetLastError();
         if (Result == ERROR_ALREADY_EXISTS)
@@ -102,15 +94,13 @@ NamespaceRuntimeInit()
             if (Result == ERROR_PATH_NOT_FOUND)
                 continue;
         }
-        goto cleanupSecurityDescriptor;
+        goto cleanupBCryptCloseAlgorithmProvider;
     }
 
     HasInitialized = TRUE;
     Result = ERROR_SUCCESS;
     goto cleanupLeaveCriticalSection;
 
-cleanupSecurityDescriptor:
-    LocalFree(SecurityAttributes.lpSecurityDescriptor);
 cleanupBCryptCloseAlgorithmProvider:
     BCryptCloseAlgorithmProvider(AlgProvider, 0);
 cleanupLeaveCriticalSection:
@@ -149,7 +139,7 @@ NamespaceTakeMutex(_In_z_ const WCHAR *Pool)
     memcpy(MutexName, MutexNamePrefix, sizeof(MutexNamePrefix) - sizeof(WCHAR));
     Bin2Hex(Hash, sizeof(Hash), MutexName + _countof(MutexNamePrefix) - 1);
     MutexName[_countof(MutexName) - 1] = 0;
-    Mutex = CreateMutexW(&SecurityAttributes, FALSE, MutexName);
+    Mutex = CreateMutexW(SecurityAttributes, FALSE, MutexName);
     if (!Mutex)
         goto cleanupPoolNorm;
     switch (WaitForSingleObject(Mutex, INFINITE))
@@ -187,7 +177,6 @@ NamespaceCleanup()
     EnterCriticalSection(&Initializing);
     if (HasInitialized)
     {
-        LocalFree(SecurityAttributes.lpSecurityDescriptor);
         BCryptCloseAlgorithmProvider(AlgProvider, 0);
         HasInitialized = FALSE;
     }

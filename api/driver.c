@@ -301,17 +301,10 @@ InstallDriver(_In_ BOOL UpdateExisting)
     WCHAR RandomTempSubDirectory[MAX_PATH];
     if (!PathCombineW(RandomTempSubDirectory, WindowsTempDirectory, RandomSubDirectory))
         return ERROR_BUFFER_OVERFLOW;
-    SECURITY_ATTRIBUTES SecurityAttributes = { .nLength = sizeof(SecurityAttributes) };
-    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"O:SYD:P(A;;GA;;;SY)", SDDL_REVISION_1, &SecurityAttributes.lpSecurityDescriptor, NULL))
-        return LOG_LAST_ERROR(L"Failed to convert security descriptor");
-    DWORD Result = ERROR_SUCCESS;
-    if (!CreateDirectoryW(RandomTempSubDirectory, &SecurityAttributes))
-    {
-        Result = LOG_LAST_ERROR(L"Failed to create temporary folder");
-        goto cleanupFree;
-    }
+    if (!CreateDirectoryW(RandomTempSubDirectory, SecurityAttributes))
+        return LOG_LAST_ERROR(L"Failed to create temporary folder");
 
+    DWORD Result = ERROR_SUCCESS;
     WCHAR CatPath[MAX_PATH] = { 0 };
     WCHAR SysPath[MAX_PATH] = { 0 };
     WCHAR InfPath[MAX_PATH] = { 0 };
@@ -328,12 +321,9 @@ InstallDriver(_In_ BOOL UpdateExisting)
         LOG(WINTUN_LOG_WARN, L"Unable to install code signing certificate");
 
     LOG(WINTUN_LOG_INFO, L"Copying resources to temporary path");
-    if ((Result = ResourceCopyToFile(CatPath, &SecurityAttributes, UseWHQL ? L"wintun-whql.cat" : L"wintun.cat")) !=
-            ERROR_SUCCESS ||
-        (Result = ResourceCopyToFile(SysPath, &SecurityAttributes, UseWHQL ? L"wintun-whql.sys" : L"wintun.sys")) !=
-            ERROR_SUCCESS ||
-        (Result = ResourceCopyToFile(InfPath, &SecurityAttributes, UseWHQL ? L"wintun-whql.inf" : L"wintun.inf")) !=
-            ERROR_SUCCESS)
+    if ((Result = ResourceCopyToFile(CatPath, UseWHQL ? L"wintun-whql.cat" : L"wintun.cat")) != ERROR_SUCCESS ||
+        (Result = ResourceCopyToFile(SysPath, UseWHQL ? L"wintun-whql.sys" : L"wintun.sys")) != ERROR_SUCCESS ||
+        (Result = ResourceCopyToFile(InfPath, UseWHQL ? L"wintun-whql.inf" : L"wintun.inf")) != ERROR_SUCCESS)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to copy resources");
         goto cleanupDelete;
@@ -356,8 +346,6 @@ cleanupDelete:
     DeleteFileW(InfPath);
 cleanupDirectory:
     RemoveDirectoryW(RandomTempSubDirectory);
-cleanupFree:
-    LocalFree(SecurityAttributes.lpSecurityDescriptor);
     return Result;
 }
 

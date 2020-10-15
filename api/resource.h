@@ -27,14 +27,9 @@ ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const VOID **Address,
  *
  * DestinationPath      File path
  *
- * SecurityAttributes   File security attributes. May be NULL for detault.
- *
  * ResourceName         Name of the RT_RCDATA resource. Use MAKEINTRESOURCEW to locate resource by ID.
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 WINTUN_STATUS
-ResourceCopyToFile(
-    _In_z_ const WCHAR *DestinationPath,
-    _In_opt_ SECURITY_ATTRIBUTES *SecurityAttributes,
-    _In_z_ const WCHAR *ResourceName);
+ResourceCopyToFile(_In_z_ const WCHAR *DestinationPath, _In_z_ const WCHAR *ResourceName);
