@@ -30,32 +30,9 @@ DriverIsOurHardwareID(_In_z_ const WCHAR *Hwids);
 BOOL
 DriverIsOurDrvInfoDetail(_In_ const SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData);
 
-#if defined(HAVE_EV) || defined(HAVE_WHQL)
-
 /**
- * Queries the version of the driver this wintun.dll is packing.
+ * Removes all Wintun drivers from the driver store.
  *
- * DriverDate           Pointer to a variable to receive the driver date.
- *
- * DriverVersion        Pointer to a variable to receive the driver version.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ * @return ERROR_SUCCESS on success or the adapter was not found; Win32 error code otherwise.
  */
-WINTUN_STATUS
-DriverGetVersion(_Out_ FILETIME *DriverDate, _Out_ DWORDLONG *DriverVersion);
-
-/**
- * Installs or updates Wintun driver.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
-WINTUN_STATUS DriverInstallOrUpdate(VOID);
-
-/**
- * Uninstalls Wintun driver.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
-WINTUN_STATUS DriverUninstall(VOID);
-
-#endif
+WINTUN_STATUS DriverRemoveAllOurs(VOID);

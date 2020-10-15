@@ -5,6 +5,8 @@
 
 #include "pch.h"
 
+#pragma warning(disable : 4221) /* nonstandard: address of automatic in initializer */
+
 #define WAIT_FOR_REGISTRY_TIMEOUT 10000     /* ms */
 #define MAX_POOL_DEVICE_TYPE (MAX_POOL + 8) /* Should accommodate a pool name with " Tunnel" appended */
 
@@ -819,8 +821,106 @@ IsNewer(_In_ const SP_DRVINFO_DATA_W *DrvInfoData, _In_ const FILETIME *DriverDa
     return FALSE;
 }
 
-WINTUN_STATUS WINAPI
-WintunCreateAdapter(
+#if defined(HAVE_EV) || defined(HAVE_WHQL)
+
+/* We can't use RtlGetVersion, because appcompat's aclayers.dll shims it to report Vista
+ * when run from legacy contexts. So, we instead use the undocumented RtlGetNtVersionNumbers.
+ *
+ * Another way would be reading from the PEB directly:
+ *   ((DWORD *)NtCurrentTeb()->ProcessEnvironmentBlock)[sizeof(void *) == 8 ? 70 : 41]
+ * Or just read from KUSER_SHARED_DATA the same way on 32-bit and 64-bit:
+ *    *(DWORD *)0x7FFE026C
+ */
+extern VOID NTAPI
+RtlGetNtVersionNumbers(_Out_opt_ DWORD *MajorVersion, _Out_opt_ DWORD *MinorVersion, _Out_opt_ DWORD *BuildNumber);
+
+static BOOL
+HaveWHQL()
+{
+#    if defined(HAVE_EV) && defined(HAVE_WHQL)
+    DWORD MajorVersion;
+    RtlGetNtVersionNumbers(&MajorVersion, NULL, NULL);
+    return MajorVersion >= 10;
+#    elif defined(HAVE_EV)
+    return FALSE;
+#    elif defined(HAVE_WHQL)
+    return TRUE;
+#    endif
+}
+
+static WINTUN_STATUS
+InstallCertificate(_In_z_ const WCHAR *SignedResource)
+{
+    LOG(WINTUN_LOG_INFO, L"Trusting code signing certificate");
+    const VOID *LockedResource;
+    DWORD SizeResource;
+    DWORD Result = ResourceGetAddress(SignedResource, &LockedResource, &SizeResource);
+    if (Result != ERROR_SUCCESS)
+        return LOG(WINTUN_LOG_ERR, L"Failed to locate resource"), Result;
+    const CERT_BLOB CertBlob = { .cbData = SizeResource, .pbData = (BYTE *)LockedResource };
+    HCERTSTORE QueriedStore;
+    if (!CryptQueryObject(
+            CERT_QUERY_OBJECT_BLOB,
+            &CertBlob,
+            CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED,
+            CERT_QUERY_FORMAT_FLAG_ALL,
+            0,
+            0,
+            0,
+            0,
+            &QueriedStore,
+            0,
+            NULL))
+        return LOG_LAST_ERROR(L"Failed to find certificate");
+    HCERTSTORE TrustedStore =
+        CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, 0, CERT_SYSTEM_STORE_LOCAL_MACHINE, L"TrustedPublisher");
+    if (!TrustedStore)
+    {
+        Result = LOG_LAST_ERROR(L"Failed to open store");
+        goto cleanupQueriedStore;
+    }
+    LPSTR CodeSigningOid[] = { szOID_PKIX_KP_CODE_SIGNING };
+    CERT_ENHKEY_USAGE EnhancedUsage = { .cUsageIdentifier = 1, .rgpszUsageIdentifier = CodeSigningOid };
+    for (const CERT_CONTEXT *CertContext = NULL; (CertContext = CertFindCertificateInStore(
+                                                      QueriedStore,
+                                                      X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
+                                                      CERT_FIND_EXT_ONLY_ENHKEY_USAGE_FLAG,
+                                                      CERT_FIND_ENHKEY_USAGE,
+                                                      &EnhancedUsage,
+                                                      CertContext)) != NULL;)
+    {
+        CERT_EXTENSION *Ext = CertFindExtension(
+            szOID_BASIC_CONSTRAINTS2, CertContext->pCertInfo->cExtension, CertContext->pCertInfo->rgExtension);
+        CERT_BASIC_CONSTRAINTS2_INFO Constraints;
+        DWORD Size = sizeof(Constraints);
+        if (Ext &&
+            CryptDecodeObjectEx(
+                X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
+                szOID_BASIC_CONSTRAINTS2,
+                Ext->Value.pbData,
+                Ext->Value.cbData,
+                0,
+                NULL,
+                &Constraints,
+                &Size) &&
+            !Constraints.fCA)
+            if (!CertAddCertificateContextToStore(TrustedStore, CertContext, CERT_STORE_ADD_REPLACE_EXISTING, NULL))
+            {
+                LOG_LAST_ERROR(L"Failed to add certificate to store");
+                Result = Result != ERROR_SUCCESS ? Result : GetLastError();
+            }
+    }
+    CertCloseStore(TrustedStore, 0);
+cleanupQueriedStore:
+    CertCloseStore(QueriedStore, 0);
+    return Result;
+}
+
+#endif
+
+static WINTUN_STATUS
+CreateAdapter(
+    _In_z_count_c_(MAX_PATH) const WCHAR *InfPath,
     _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
     _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
@@ -856,7 +956,19 @@ WintunCreateAdapter(
         Result = LOG_LAST_ERROR(L"Creating new device information element failed");
         goto cleanupDevInfo;
     }
-    SetQuietInstall(DevInfo, &DevInfoData);
+    SP_DEVINSTALL_PARAMS_W DevInstallParams = { .cbSize = sizeof(SP_DEVINSTALL_PARAMS_W) };
+    if (!SetupDiGetDeviceInstallParamsW(DevInfo, &DevInfoData, &DevInstallParams))
+    {
+        Result = LOG_LAST_ERROR(L"Retrieving device installation parameters failed");
+        goto cleanupDevInfo;
+    }
+    DevInstallParams.Flags |= DI_QUIETINSTALL | DI_ENUMSINGLEINF;
+    wcscpy_s(DevInstallParams.DriverPath, _countof(DevInstallParams.DriverPath), InfPath);
+    if (!SetupDiSetDeviceInstallParamsW(DevInfo, &DevInfoData, &DevInstallParams))
+    {
+        Result = LOG_LAST_ERROR(L"Setting device installation parameters failed");
+        goto cleanupDevInfo;
+    }
 
     if (!SetupDiSetSelectedDevice(DevInfo, &DevInfoData))
     {
@@ -1089,6 +1201,78 @@ cleanupDevInfo:
 cleanupMutex:
     NamespaceReleaseMutex(Mutex);
     return Result;
+}
+
+WINTUN_STATUS WINAPI
+WintunCreateAdapter(
+    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
+    _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
+    _In_opt_ const GUID *RequestedGUID,
+    _Out_ WINTUN_ADAPTER **Adapter,
+    _Inout_ BOOL *RebootRequired)
+{
+#if defined(HAVE_EV) || defined(HAVE_WHQL)
+    WCHAR WindowsDirectory[MAX_PATH];
+    if (!GetWindowsDirectoryW(WindowsDirectory, _countof(WindowsDirectory)))
+        return LOG_LAST_ERROR(L"Failed to get Windows folder");
+    WCHAR WindowsTempDirectory[MAX_PATH];
+    if (!PathCombineW(WindowsTempDirectory, WindowsDirectory, L"Temp"))
+        return ERROR_BUFFER_OVERFLOW;
+    UCHAR RandomBytes[32] = { 0 };
+#    pragma warning(suppress : 6387)
+    if (!RtlGenRandom(RandomBytes, sizeof(RandomBytes)))
+        return LOG_LAST_ERROR(L"Failed to generate random");
+    WCHAR RandomSubDirectory[sizeof(RandomBytes) * 2 + 1];
+    for (int i = 0; i < sizeof(RandomBytes); ++i)
+        swprintf_s(&RandomSubDirectory[i * 2], 3, L"%02x", RandomBytes[i]);
+    WCHAR RandomTempSubDirectory[MAX_PATH];
+    if (!PathCombineW(RandomTempSubDirectory, WindowsTempDirectory, RandomSubDirectory))
+        return ERROR_BUFFER_OVERFLOW;
+    if (!CreateDirectoryW(RandomTempSubDirectory, SecurityAttributes))
+        return LOG_LAST_ERROR(L"Failed to create temporary folder");
+
+    DWORD Result = ERROR_SUCCESS;
+    WCHAR CatPath[MAX_PATH] = { 0 };
+    WCHAR SysPath[MAX_PATH] = { 0 };
+    WCHAR InfPath[MAX_PATH] = { 0 };
+    if (!PathCombineW(CatPath, RandomTempSubDirectory, L"wintun.cat") ||
+        !PathCombineW(SysPath, RandomTempSubDirectory, L"wintun.sys") ||
+        !PathCombineW(InfPath, RandomTempSubDirectory, L"wintun.inf"))
+    {
+        Result = ERROR_BUFFER_OVERFLOW;
+        goto cleanupDirectory;
+    }
+
+    BOOL UseWHQL = HaveWHQL();
+    if (!UseWHQL && (Result = InstallCertificate(L"wintun.sys")) != ERROR_SUCCESS)
+        LOG(WINTUN_LOG_WARN, L"Unable to install code signing certificate");
+
+    LOG(WINTUN_LOG_INFO, L"Copying resources to temporary path");
+    if ((Result = ResourceCopyToFile(CatPath, UseWHQL ? L"wintun-whql.cat" : L"wintun.cat")) != ERROR_SUCCESS ||
+        (Result = ResourceCopyToFile(SysPath, UseWHQL ? L"wintun-whql.sys" : L"wintun.sys")) != ERROR_SUCCESS ||
+        (Result = ResourceCopyToFile(InfPath, UseWHQL ? L"wintun-whql.inf" : L"wintun.inf")) != ERROR_SUCCESS)
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to copy resources");
+        goto cleanupDelete;
+    }
+
+    LOG(WINTUN_LOG_INFO, L"Installing driver");
+    if (!SetupCopyOEMInfW(InfPath, NULL, SPOST_PATH, 0, NULL, 0, NULL, NULL))
+    {
+        Result = LOG_LAST_ERROR(L"Could not install driver to store");
+        goto cleanupDelete;
+    }
+
+    Result = CreateAdapter(InfPath, Pool, Name, RequestedGUID, Adapter, RebootRequired);
+    DriverRemoveAllOurs();
+cleanupDelete:
+    DeleteFileW(CatPath);
+    DeleteFileW(SysPath);
+    DeleteFileW(InfPath);
+cleanupDirectory:
+    RemoveDirectoryW(RandomTempSubDirectory);
+    return Result;
+#endif
 }
 
 WINTUN_STATUS WINAPI
