@@ -320,7 +320,7 @@ InstallDriver(_In_ BOOL UpdateExisting)
         !PathCombineW(InfPath, RandomTempSubDirectory, L"wintun.inf"))
     {
         Result = ERROR_BUFFER_OVERFLOW;
-        goto cleanupFree;
+        goto cleanupDirectory;
     }
 
     BOOL UseWHQL = HaveWHQL();
@@ -354,6 +354,7 @@ cleanupDelete:
     DeleteFileW(CatPath);
     DeleteFileW(SysPath);
     DeleteFileW(InfPath);
+cleanupDirectory:
     RemoveDirectoryW(RandomTempSubDirectory);
 cleanupFree:
     LocalFree(SecurityAttributes.lpSecurityDescriptor);
