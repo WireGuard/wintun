@@ -110,7 +110,7 @@ RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
         /* String is missing zero-terminator. */
         WCHAR *BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
         if (!BufZ)
-            return ERROR_OUTOFMEMORY;
+            return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
         wmemcpy(BufZ, *Buf, Len);
         BufZ[Len] = 0;
         HeapFree(Heap, 0, *Buf);
@@ -130,7 +130,7 @@ RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
     {
         WCHAR *Expanded = HeapAlloc(Heap, 0, Len * sizeof(WCHAR));
         if (!Expanded)
-            return ERROR_OUTOFMEMORY;
+            return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
         DWORD Result = ExpandEnvironmentStringsW(*Buf, Expanded, Len);
         if (!Result)
         {
@@ -178,7 +178,7 @@ RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType
                 /* Missing string and list terminators. */
                 WCHAR *BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 2) * sizeof(WCHAR));
                 if (!BufZ)
-                    return ERROR_OUTOFMEMORY;
+                    return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
                 wmemcpy(BufZ, *Buf, Len);
                 BufZ[Len] = 0;
                 BufZ[Len + 1] = 0;
@@ -191,7 +191,7 @@ RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType
                 /* Missing list terminator. */
                 WCHAR *BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
                 if (!BufZ)
-                    return ERROR_OUTOFMEMORY;
+                    return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
                 wmemcpy(BufZ, *Buf, Len);
                 BufZ[Len] = 0;
                 HeapFree(Heap, 0, *Buf);
@@ -210,7 +210,7 @@ RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType
     Len = (DWORD)wcslen(*Buf) + 1;
     WCHAR *BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
     if (!BufZ)
-        return ERROR_OUTOFMEMORY;
+        return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
     wmemcpy(BufZ, *Buf, Len);
     BufZ[Len] = 0;
     HeapFree(Heap, 0, *Buf);
@@ -249,7 +249,7 @@ RegistryQuery(
     {
         *Buf = HeapAlloc(Heap, 0, *BufLen);
         if (!*Buf)
-            return ERROR_OUTOFMEMORY;
+            return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
         LSTATUS Result = RegQueryValueExW(Key, Name, NULL, ValueType, (BYTE *)*Buf, BufLen);
         if (Result == ERROR_SUCCESS)
             return ERROR_SUCCESS;

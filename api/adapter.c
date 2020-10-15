@@ -36,28 +36,19 @@ AdapterGetDrvInfoDetail(
 {
     HANDLE Heap = GetProcessHeap();
     DWORD Size = sizeof(SP_DRVINFO_DETAIL_DATA_W) + 0x100;
-    DWORD Result;
     for (;;)
     {
         *DrvInfoDetailData = HeapAlloc(Heap, 0, Size);
         if (!*DrvInfoDetailData)
-        {
-            Result = ERROR_OUTOFMEMORY;
-            goto out;
-        }
+            return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
         (*DrvInfoDetailData)->cbSize = sizeof(SP_DRVINFO_DETAIL_DATA_W);
         if (SetupDiGetDriverInfoDetailW(DevInfo, DevInfoData, DrvInfoData, *DrvInfoDetailData, Size, &Size))
             return ERROR_SUCCESS;
-        Result = GetLastError();
+        DWORD Result = GetLastError();
         HeapFree(Heap, 0, *DrvInfoDetailData);
         if (Result != ERROR_INSUFFICIENT_BUFFER)
-        {
-            LOG_ERROR(L"Failed", Result);
-            goto out;
-        }
+            return LOG_ERROR(L"Failed", Result);
     }
-out:
-    return Result;
 }
 
 /**
@@ -95,7 +86,7 @@ GetDeviceRegistryProperty(
     {
         *Buf = HeapAlloc(Heap, 0, *BufLen);
         if (!*Buf)
-            return ERROR_OUTOFMEMORY;
+            return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
         if (SetupDiGetDeviceRegistryPropertyW(DevInfo, DevInfoData, Property, ValueType, *Buf, *BufLen, BufLen))
             return ERROR_SUCCESS;
         DWORD Result = GetLastError();
@@ -233,7 +224,7 @@ GetDeviceObject(_In_opt_z_ const WCHAR *InstanceId, _Out_ HANDLE *Handle)
     }
     WCHAR *Interfaces = HeapAlloc(Heap, 0, InterfacesLen * sizeof(WCHAR));
     if (!Interfaces)
-        return ERROR_OUTOFMEMORY;
+        return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
     Result = CM_Get_Device_Interface_ListW(
         (GUID *)&GUID_DEVINTERFACE_NET,
         (DEVINSTID_W)InstanceId,
@@ -283,7 +274,7 @@ ForceCloseWintunAdapterHandle(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevIn
     HANDLE Heap = GetProcessHeap();
     WCHAR *InstanceId = HeapAlloc(Heap, HEAP_ZERO_MEMORY, sizeof(*InstanceId) * RequiredBytes);
     if (!InstanceId)
-        return ERROR_OUTOFMEMORY;
+        return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
     if (!SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, InstanceId, RequiredBytes, &RequiredBytes))
     {
         Result = LOG_LAST_ERROR(L"Failed to get device instance ID");
@@ -327,7 +318,7 @@ AdapterDisableAllOurs(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
     {
         SP_DEVINFO_DATA_LIST *DeviceNode = HeapAlloc(Heap, 0, sizeof(SP_DEVINFO_DATA_LIST));
         if (!DeviceNode)
-            return ERROR_OUTOFMEMORY;
+            return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
         DeviceNode->Data.cbSize = sizeof(SP_DEVINFO_DATA);
         if (!SetupDiEnumDeviceInfo(DevInfo, EnumIndex, &DeviceNode->Data))
         {
@@ -681,6 +672,7 @@ CreateAdapterData(
     *Adapter = HeapAlloc(Heap, 0, sizeof(WINTUN_ADAPTER));
     if (!*Adapter)
     {
+        LOG(WINTUN_LOG_ERR, L"Out of memory");
         Result = ERROR_OUTOFMEMORY;
         goto cleanupKey;
     }

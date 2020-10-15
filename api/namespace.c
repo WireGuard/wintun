@@ -13,26 +13,22 @@ static BCRYPT_ALG_HANDLE AlgProvider;
 static WCHAR *
 NormalizeStringAlloc(_In_ NORM_FORM NormForm, _In_z_ const WCHAR *Source)
 {
-    WCHAR *Result = NULL;
     HANDLE Heap = GetProcessHeap();
     int Len = NormalizeString(NormForm, Source, -1, NULL, 0);
-    for (int i = 0; i < 10; ++i)
+    for (;;)
     {
-        if (Result)
-            HeapFree(Heap, 0, Result);
-        Result = HeapAlloc(Heap, 0, sizeof(WCHAR) * Len);
-        if (!Result)
-            return NULL;
-        Len = NormalizeString(NormForm, Source, -1, Result, Len);
+        WCHAR *Str = HeapAlloc(Heap, 0, sizeof(WCHAR) * Len);
+        if (!Str)
+            return LOG(WINTUN_LOG_ERR, L"Out of memory"), NULL;
+        Len = NormalizeString(NormForm, Source, -1, Str, Len);
         if (Len > 0)
-            return Result;
-        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-            break;
+            return Str;
+        DWORD Result = GetLastError();
+        HeapFree(Heap, 0, Str);
+        if (Result != ERROR_INSUFFICIENT_BUFFER)
+            return LOG_ERROR(L"Failed", Result), NULL;
         Len = -Len;
     }
-    if (Result)
-        HeapFree(Heap, 0, Result);
-    return NULL;
 }
 
 static void
