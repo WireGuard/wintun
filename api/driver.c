@@ -120,7 +120,7 @@ DriverGetVersion(_Out_ FILETIME *DriverDate, _Out_ DWORDLONG *DriverVersion)
     DWORD SizeResource;
     DWORD Result = ResourceGetAddress(HaveWHQL() ? L"wintun-whql.inf" : L"wintun.inf", &LockedResource, &SizeResource);
     if (Result != ERROR_SUCCESS)
-        return LOG_ERROR(L"Failed to locate resource", Result);
+        return LOG(WINTUN_LOG_ERR, L"Failed to locate resource"), Result;
     enum
     {
         SectNone,
@@ -287,7 +287,7 @@ InstallCertificate(_In_z_ const WCHAR *SignedResource)
     DWORD SizeResource;
     DWORD Result = ResourceGetAddress(SignedResource, &LockedResource, &SizeResource);
     if (Result != ERROR_SUCCESS)
-        return LOG_ERROR(L"Failed to locate resource", Result);
+        return LOG(WINTUN_LOG_ERR, L"Failed to locate resource"), Result;
     const CERT_BLOB CertBlob = { .cbData = SizeResource, .pbData = (BYTE *)LockedResource };
     HCERTSTORE QueriedStore;
     if (!CryptQueryObject(
@@ -397,7 +397,7 @@ InstallDriver(_In_ BOOL UpdateExisting)
 
     BOOL UseWHQL = HaveWHQL();
     if (!UseWHQL && (Result = InstallCertificate(L"wintun.sys")) != ERROR_SUCCESS)
-        LOG_ERROR(L"Unable to install code signing certificate", Result);
+        LOG(WINTUN_LOG_WARN, L"Unable to install code signing certificate");
 
     LOG(WINTUN_LOG_INFO, L"Copying resources to temporary path");
     if ((Result = ResourceCopyToFile(CatPath, &SecurityAttributes, UseWHQL ? L"wintun-whql.cat" : L"wintun.cat")) !=
@@ -407,7 +407,7 @@ InstallDriver(_In_ BOOL UpdateExisting)
         (Result = ResourceCopyToFile(InfPath, &SecurityAttributes, UseWHQL ? L"wintun-whql.inf" : L"wintun.inf")) !=
             ERROR_SUCCESS)
     {
-        Result = LOG_LAST_ERROR(L"Failed to copy resources");
+        LOG(WINTUN_LOG_ERR, L"Failed to copy resources");
         goto cleanupDelete;
     }
 
@@ -460,7 +460,10 @@ static WINTUN_STATUS RemoveDriver(VOID)
         }
         SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData;
         if (AdapterGetDrvInfoDetail(DevInfo, NULL, &DrvInfoData, &DrvInfoDetailData) != ERROR_SUCCESS)
+        {
+            LOG(WINTUN_LOG_WARN, L"Failed getting driver info detail");
             continue;
+        }
         if (!DriverIsOurDrvInfoDetail(DrvInfoDetailData))
         {
             HeapFree(Heap, 0, DrvInfoDetailData);
@@ -503,12 +506,12 @@ WINTUN_STATUS DriverInstallOrUpdate(VOID)
     DWORD Result = ERROR_SUCCESS;
     if ((Result = RemoveDriver()) != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to uninstall old drivers", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to uninstall old drivers");
         goto cleanupAdapters;
     }
     if ((Result = InstallDriver(!!ExistingAdapters)) != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to install driver", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to install driver");
         goto cleanupAdapters;
     }
     LOG(WINTUN_LOG_INFO, L"Installation successful");
@@ -537,10 +540,10 @@ WINTUN_STATUS DriverUninstall(VOID)
 {
     AdapterDeleteAllOurs();
     DWORD Result = RemoveDriver();
-    if (Result != ERROR_SUCCESS)
-        LOG_ERROR(L"Failed to uninstall driver", Result);
-    else
+    if (Result == ERROR_SUCCESS)
         LOG(WINTUN_LOG_INFO, L"Uninstallation successful");
+    else
+        LOG(WINTUN_LOG_ERR, L"Failed to uninstall driver");
     return Result;
 }
 

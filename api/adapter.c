@@ -205,7 +205,7 @@ IsOurAdapter(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ BOO
     WCHAR *Hwids;
     DWORD Result = GetDeviceRegistryMultiString(DevInfo, DevInfoData, SPDRP_HARDWAREID, &Hwids);
     if (Result != ERROR_SUCCESS)
-        return LOG_ERROR(L"Failed to query hardware ID", Result);
+        return LOG(WINTUN_LOG_ERR, L"Failed to query hardware ID"), Result;
     *IsOur = DriverIsOurHardwareID(Hwids);
     return ERROR_SUCCESS;
 }
@@ -293,7 +293,7 @@ ForceCloseWintunAdapterHandle(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevIn
     Result = GetDeviceObject(InstanceId, &NdisHandle);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to get adapter device object", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to get adapter device object");
         goto out;
     }
     Result = DeviceIoControl(NdisHandle, TUN_IOCTL_FORCE_CLOSE_HANDLES, NULL, 0, NULL, 0, &RequiredBytes, NULL)
@@ -616,13 +616,13 @@ IsPoolMember(
     DWORD Result = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_DEVICEDESC, &DeviceDesc);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to query device description property", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to query device description property");
         return Result;
     }
     Result = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_FRIENDLYNAME, &FriendlyName);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to query friendly name property", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to query friendly name property");
         goto cleanupDeviceDesc;
     }
     WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
@@ -706,7 +706,7 @@ CreateAdapterData(
     Result = RegistryQueryDWORD(Key, L"NetLuidIndex", &(*Adapter)->LuidIndex);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to query NetLuidIndex value", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to query NetLuidIndex value");
         goto cleanupAdapter;
     }
 
@@ -714,7 +714,7 @@ CreateAdapterData(
     Result = RegistryQueryDWORD(Key, L"*IfType", &(*Adapter)->IfType);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to query *IfType value", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to query *IfType value");
         goto cleanupAdapter;
     }
 
@@ -874,12 +874,12 @@ WintunGetAdapter(
         Result = IsOurAdapter(DevInfo, &DevInfoData, &IsOur);
         if (Result != ERROR_SUCCESS)
         {
-            LOG_ERROR(L"Failed to determine hardware ID", Result);
+            LOG(WINTUN_LOG_ERR, L"Failed to determine hardware ID");
             goto cleanupDevInfo;
         }
         if (!IsOur)
         {
-            LOG_ERROR(L"Foreign adapter with the same name exists", Result);
+            LOG(WINTUN_LOG_ERR, L"Foreign adapter with the same name exists");
             Result = ERROR_ALREADY_EXISTS;
             goto cleanupDevInfo;
         }
@@ -888,19 +888,19 @@ WintunGetAdapter(
         Result = IsPoolMember(Pool, DevInfo, &DevInfoData, &IsMember);
         if (Result != ERROR_SUCCESS)
         {
-            LOG_ERROR(L"Failed to determine pool membership", Result);
+            LOG(WINTUN_LOG_ERR, L"Failed to determine pool membership");
             goto cleanupDevInfo;
         }
         if (!IsMember)
         {
-            LOG_ERROR(L"Wintun adapter with the same name exists in another pool", Result);
+            LOG(WINTUN_LOG_ERR, L"Wintun adapter with the same name exists in another pool");
             Result = ERROR_ALREADY_EXISTS;
             goto cleanupDevInfo;
         }
 
         Result = CreateAdapterData(Pool, DevInfo, &DevInfoData, Adapter);
         if (Result != ERROR_SUCCESS)
-            LOG_ERROR(L"Failed to create adapter data", Result);
+            LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
 
         goto cleanupDevInfo;
     }
@@ -1159,7 +1159,10 @@ WintunCreateAdapter(
 
         SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData;
         if (AdapterGetDrvInfoDetail(DevInfo, &DevInfoData, &DrvInfoData, &DrvInfoDetailData) != ERROR_SUCCESS)
+        {
+            LOG(WINTUN_LOG_WARN, L"Failed getting driver info detail");
             continue;
+        }
         if (!DriverIsOurDrvInfoDetail(DrvInfoDetailData))
         {
             HeapFree(Heap, 0, DrvInfoDetailData);
@@ -1247,7 +1250,7 @@ WintunCreateAdapter(
     Result = RegistryQueryStringWait(NetDevRegKey, L"NetCfgInstanceId", WAIT_FOR_REGISTRY_TIMEOUT, &DummyStr);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to query NetCfgInstanceId value", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to query NetCfgInstanceId value");
         goto cleanupNetDevRegKey;
     }
     HeapFree(Heap, 0, DummyStr);
@@ -1255,20 +1258,20 @@ WintunCreateAdapter(
     Result = RegistryQueryDWORDWait(NetDevRegKey, L"NetLuidIndex", WAIT_FOR_REGISTRY_TIMEOUT, &DummyDWORD);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to query NetLuidIndex value", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to query NetLuidIndex value");
         goto cleanupNetDevRegKey;
     }
     Result = RegistryQueryDWORDWait(NetDevRegKey, L"*IfType", WAIT_FOR_REGISTRY_TIMEOUT, &DummyDWORD);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to query *IfType value", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to query *IfType value");
         goto cleanupNetDevRegKey;
     }
 
     Result = CreateAdapterData(Pool, DevInfo, &DevInfoData, Adapter);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to create adapter data", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
         goto cleanupNetDevRegKey;
     }
 
@@ -1283,13 +1286,13 @@ WintunCreateAdapter(
         &TcpipAdapterRegKey);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to open adapter-specific TCP/IP adapter registry key", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to open adapter-specific TCP/IP adapter registry key");
         goto cleanupAdapter;
     }
     Result = RegistryQueryStringWait(TcpipAdapterRegKey, L"IpConfig", WAIT_FOR_REGISTRY_TIMEOUT, &DummyStr);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to query IpConfig value", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to query IpConfig value");
         goto cleanupTcpipAdapterRegKey;
     }
     HeapFree(Heap, 0, DummyStr);
@@ -1299,7 +1302,7 @@ WintunCreateAdapter(
     Result = GetTcpipInterfaceRegPath(*Adapter, TcpipInterfaceRegPath);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to determine interface-specific TCP/IP network registry key path", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to determine interface-specific TCP/IP network registry key path");
         goto cleanupTcpipAdapterRegKey;
     }
     Result = RegistryOpenKeyWait(
@@ -1310,7 +1313,7 @@ WintunCreateAdapter(
         &TcpipInterfaceRegKey);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to open interface-specific TCP/IP network registry key", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to open interface-specific TCP/IP network registry key");
         goto cleanupTcpipAdapterRegKey;
     }
 
@@ -1372,7 +1375,7 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequ
         return ERROR_SUCCESS;
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to get device info data", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to get device info data");
         return Result;
     }
     SetQuietInstall(DevInfo, &DevInfoData);
@@ -1427,20 +1430,14 @@ WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUM_
         }
 
         BOOL IsOur;
-        Result = IsOurAdapter(DevInfo, &DevInfoData, &IsOur);
-        if (Result != ERROR_SUCCESS)
-        {
-            LOG_ERROR(L"Failed to determine hardware ID", Result);
-            break;
-        }
-        if (!IsOur)
+        if (IsOurAdapter(DevInfo, &DevInfoData, &IsOur) != ERROR_SUCCESS || !IsOur)
             continue;
 
         BOOL IsMember;
         Result = IsPoolMember(Pool, DevInfo, &DevInfoData, &IsMember);
         if (Result != ERROR_SUCCESS)
         {
-            LOG_ERROR(L"Failed to determine pool membership", Result);
+            LOG(WINTUN_LOG_ERR, L"Failed to determine pool membership");
             break;
         }
         if (!IsMember)
@@ -1450,7 +1447,7 @@ WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUM_
         Result = CreateAdapterData(Pool, DevInfo, &DevInfoData, &Adapter);
         if (Result != ERROR_SUCCESS)
         {
-            LOG_ERROR(L"Failed to create adapter data", Result);
+            LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
             break;
         }
         Continue = Func(Adapter, Param);
