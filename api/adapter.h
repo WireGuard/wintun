@@ -6,10 +6,39 @@
 #pragma once
 
 #include "api.h"
+#include <SetupAPI.h>
 #include <IPExport.h>
 
 #define MAX_POOL 256
 #define MAX_INSTANCE_ID MAX_PATH /* TODO: Is MAX_PATH always enough? */
+
+typedef struct _SP_DEVINFO_DATA_LIST
+{
+    SP_DEVINFO_DATA Data;
+    struct _SP_DEVINFO_DATA_LIST *Next;
+} SP_DEVINFO_DATA_LIST;
+
+WINTUN_STATUS
+AdapterGetDrvInfoDetail(
+    _In_ HDEVINFO DevInfo,
+    _In_opt_ SP_DEVINFO_DATA *DevInfoData,
+    _In_ SP_DRVINFO_DATA_W *DrvInfoData,
+    _Out_ SP_DRVINFO_DETAIL_DATA_W **DrvInfoDetailData);
+
+WINTUN_STATUS
+AdapterDisableAllOurs(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **DisabledAdapters);
+
+WINTUN_STATUS
+AdapterEnableAll(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA_LIST *AdaptersToEnable);
+
+WINTUN_STATUS
+AdapterDeleteAllOurs();
+
+void
+AdapterInit();
+
+void
+AdapterCleanup();
 
 typedef struct _WINTUN_ADAPTER
 {
@@ -59,9 +88,3 @@ typedef BOOL(CALLBACK *WINTUN_ENUM_FUNC)(_In_ const WINTUN_ADAPTER *Adapter, _In
 
 WINTUN_STATUS WINAPI
 WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUM_FUNC Func, _In_ LPARAM Param);
-
-void
-DevmgmtInit();
-
-void
-DevmgmtCleanup();

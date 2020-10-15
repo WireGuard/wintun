@@ -58,7 +58,7 @@ ResourceCopyToFile(
     DWORD SizeResource;
     DWORD Result = ResourceGetAddress(ResourceName, &LockedResource, &SizeResource);
     if (Result != ERROR_SUCCESS)
-        return LOG_ERROR("Failed to locate resource", Result);
+        return LOG_ERROR(L"Failed to locate resource", Result);
     HANDLE DestinationHandle = CreateFileW(
         DestinationPath,
         GENERIC_WRITE,

@@ -190,7 +190,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="api.h" />
-    <ClInclude Include="devmgmt.h" />
+    <ClInclude Include="adapter.h" />
     <ClInclude Include="driver.h" />
     <ClInclude Include="logger.h" />
     <ClInclude Include="namespace.h" />
@@ -201,7 +201,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="api.c" />
-    <ClCompile Include="devmgmt.c" />
+    <ClCompile Include="adapter.c" />
     <ClCompile Include="driver.c" />
     <ClCompile Include="logger.c" />
     <ClCompile Include="namespace.c" />

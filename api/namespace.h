@@ -9,10 +9,10 @@
 
 _Check_return_
 HANDLE
-TakeNameMutex(_In_z_ const WCHAR *Pool);
+NamespaceTakeMutex(_In_z_ const WCHAR *Pool);
 
 void
-ReleaseNameMutex(_In_ HANDLE Mutex);
+NamespaceReleaseMutex(_In_ HANDLE Mutex);
 
 void
 NamespaceInit();

@@ -40,9 +40,6 @@
     <ClInclude Include="registry.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="devmgmt.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="logger.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -52,15 +49,15 @@
     <ClInclude Include="driver.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="adapter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="api.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="namespace.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="devmgmt.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nci.c">
@@ -82,6 +79,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="driver.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="adapter.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

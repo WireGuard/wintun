@@ -7,20 +7,14 @@
 
 #include "api.h"
 #include <Windows.h>
-#include <SetupAPI.h>
 
 #define WINTUN_HWID L"Wintun"
 
-_Return_type_success_(return != NULL) SP_DRVINFO_DETAIL_DATA_W *DriverGetDrvInfoDetail(
-    _In_ HDEVINFO DevInfo,
-    _In_opt_ SP_DEVINFO_DATA *DevInfoData,
-    _In_ SP_DRVINFO_DATA_W *DrvInfoData);
+BOOL
+DriverIsOurHardwareID(_In_z_ const WCHAR *Hwids);
 
 BOOL
-DriverIsWintunAdapter(_In_ HDEVINFO DevInfo, _In_opt_ SP_DEVINFO_DATA *DevInfoData);
-
-_Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE
-    DriverGetAdapterDeviceObject(_In_opt_z_ const WCHAR *InstanceId);
+DriverIsOurDrvInfoDetail(_In_ const SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData);
 
 #if defined(HAVE_EV) || defined(HAVE_WHQL)
 

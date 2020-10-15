@@ -5,8 +5,8 @@
 
 #pragma once
 
+#include "adapter.h"
 #include "api.h"
-#include "devmgmt.h"
 #include "driver.h"
 #include "logger.h"
 #include "namespace.h"

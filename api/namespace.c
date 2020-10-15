@@ -122,7 +122,7 @@ cleanupLeaveCriticalSection:
 
 _Check_return_
 HANDLE
-TakeNameMutex(_In_z_ const WCHAR *Pool)
+NamespaceTakeMutex(_In_z_ const WCHAR *Pool)
 {
     HANDLE Mutex = NULL;
 
@@ -171,7 +171,7 @@ cleanupSha256:
 }
 
 void
-ReleaseNameMutex(_In_ HANDLE Mutex)
+NamespaceReleaseMutex(_In_ HANDLE Mutex)
 {
     ReleaseMutex(Mutex);
     CloseHandle(Mutex);

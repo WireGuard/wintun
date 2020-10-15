@@ -7,153 +7,35 @@
 
 #pragma warning(disable : 4221) /* nonstandard: address of automatic in initializer */
 
-typedef struct _SP_DEVINFO_DATA_LIST
-{
-    SP_DEVINFO_DATA Data;
-    struct _SP_DEVINFO_DATA_LIST *Next;
-} SP_DEVINFO_DATA_LIST;
-
 /**
- * Retrieves driver information detail for a device information set or a particular device information element in the
- * device information set.
+ * Tests if any of the hardware IDs match ours.
  *
- * @param DevInfo       A handle to the device information set that contains a device information element that
- *                      represents the device for which to retrieve driver information.
+ * @param Hwids         Multi-string containing a list of hardware IDs.
  *
- * @param DevInfoData   A pointer to a structure that specifies the device information element in DevInfo.
- *
- * @param DrvInfoData   A pointer to a structure that specifies the driver information element that represents the
- *                      driver for which to retrieve details.
- *
- * @param DrvInfoDetailData  A pointer to a structure that receives detailed information about the specified driver.
- *                      Must be released with HeapFree(GetProcessHeap(), 0, *DrvInfoDetailData) after use.
- *
- * @return non-zero on success; zero otherwise - use GetLastError().
- */
-_Return_type_success_(return != NULL) SP_DRVINFO_DETAIL_DATA_W *DriverGetDrvInfoDetail(
-    _In_ HDEVINFO DevInfo,
-    _In_opt_ SP_DEVINFO_DATA *DevInfoData,
-    _In_ SP_DRVINFO_DATA_W *DrvInfoData)
-{
-    HANDLE Heap = GetProcessHeap();
-    DWORD Size = sizeof(SP_DRVINFO_DETAIL_DATA_W) + 0x100;
-    DWORD Result;
-    for (;;)
-    {
-        SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData = HeapAlloc(Heap, 0, Size);
-        if (!DrvInfoDetailData)
-        {
-            Result = ERROR_OUTOFMEMORY;
-            goto out;
-        }
-        DrvInfoDetailData->cbSize = sizeof(SP_DRVINFO_DETAIL_DATA_W);
-        if (SetupDiGetDriverInfoDetailW(DevInfo, DevInfoData, DrvInfoData, DrvInfoDetailData, Size, &Size))
-            return DrvInfoDetailData;
-        Result = GetLastError();
-        HeapFree(Heap, 0, DrvInfoDetailData);
-        if (Result != ERROR_INSUFFICIENT_BUFFER)
-        {
-            LOG_ERROR(L"Failed", Result);
-            goto out;
-        }
-    }
-out:
-    SetLastError(Result);
-    return NULL;
-}
-
-/**
- * Checks if the device (i.e. network adapter) is using Wintun driver.
- *
- * @param DevInfo       A handle to the device information set that contains a device information element that
- *                      represents the device.
- *
- * @param DevInfoData   A pointer to a structure that specifies the device information element in DevInfo.
- *
- * @return non-zero when using Wintun driver; zero when not or error - use GetLastError().
+ * @return TRUE on match; FALSE otherwise.
  */
 BOOL
-DriverIsWintunAdapter(_In_ HDEVINFO DevInfo, _In_opt_ SP_DEVINFO_DATA *DevInfoData)
+DriverIsOurHardwareID(_In_z_ const WCHAR *Hwids)
 {
-    BOOL Found = FALSE;
-    if (!SetupDiBuildDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER))
-    {
-        LOG_LAST_ERROR(L"Failed to build list of drivers");
-        return FALSE;
-    }
-    HANDLE Heap = GetProcessHeap();
-    for (DWORD EnumIndex = 0; !Found; ++EnumIndex)
-    {
-        SP_DRVINFO_DATA_W DrvInfoData = { .cbSize = sizeof(SP_DRVINFO_DATA_W) };
-        if (!SetupDiEnumDriverInfoW(DevInfo, DevInfoData, SPDIT_COMPATDRIVER, EnumIndex, &DrvInfoData))
-        {
-            if (GetLastError() == ERROR_NO_MORE_ITEMS)
-                break;
-            continue;
-        }
-        SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData = DriverGetDrvInfoDetail(DevInfo, DevInfoData, &DrvInfoData);
-        if (!DrvInfoDetailData)
-            continue;
-        Found = !_wcsicmp(DrvInfoDetailData->HardwareID, WINTUN_HWID);
-        HeapFree(Heap, 0, DrvInfoDetailData);
-    }
-    SetupDiDestroyDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER);
-    SetLastError(ERROR_SUCCESS);
-    return Found;
+    for (; Hwids[0]; Hwids += wcslen(Hwids) + 1)
+        if (!_wcsicmp(Hwids, WINTUN_HWID))
+            return TRUE;
+    return FALSE;
 }
 
 /**
- * Returns a handle to the adapter device object.
+ * Tests if hardware ID or any of the compatible IDs match ours.
  *
- * @param InstanceId    Adapter device instance ID.
+ * @param DrvInfoDetailData  Detailed information about a particular driver information structure.
  *
- * @return device handle on success; INVALID_HANDLE_VALUE otherwise - use GetLastError().
+ * @return TRUE on match; FALSE otherwise.
  */
-_Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE
-    DriverGetAdapterDeviceObject(_In_opt_z_ const WCHAR *InstanceId)
+BOOL
+DriverIsOurDrvInfoDetail(_In_ const SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData)
 {
-    HANDLE Heap = GetProcessHeap();
-    ULONG InterfacesLen;
-    HANDLE Handle = INVALID_HANDLE_VALUE;
-    DWORD Result = CM_Get_Device_Interface_List_SizeW(
-        &InterfacesLen, (GUID *)&GUID_DEVINTERFACE_NET, (DEVINSTID_W)InstanceId, CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
-    if (Result != CR_SUCCESS)
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to get device associated device instances size");
-        SetLastError(ERROR_GEN_FAILURE);
-        return INVALID_HANDLE_VALUE;
-    }
-    WCHAR *Interfaces = HeapAlloc(Heap, 0, InterfacesLen * sizeof(WCHAR));
-    if (!Interfaces)
-    {
-        SetLastError(ERROR_OUTOFMEMORY);
-        return INVALID_HANDLE_VALUE;
-    }
-    Result = CM_Get_Device_Interface_ListW(
-        (GUID *)&GUID_DEVINTERFACE_NET,
-        (DEVINSTID_W)InstanceId,
-        Interfaces,
-        InterfacesLen,
-        CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
-    if (Result != CR_SUCCESS)
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to get device associated device instances");
-        Result = ERROR_GEN_FAILURE;
-        goto cleanupBuf;
-    }
-    Handle = CreateFileW(
-        Interfaces,
-        GENERIC_READ | GENERIC_WRITE,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        NULL,
-        OPEN_EXISTING,
-        0,
-        NULL);
-    Result = Handle != INVALID_HANDLE_VALUE ? ERROR_SUCCESS : LOG_LAST_ERROR(L"Failed to connect to device");
-cleanupBuf:
-    HeapFree(Heap, 0, Interfaces);
-    SetLastError(Result);
-    return Handle;
+    return DrvInfoDetailData->CompatIDsOffset > 1 && !_wcsicmp(DrvInfoDetailData->HardwareID, WINTUN_HWID) ||
+           DrvInfoDetailData->CompatIDsLength &&
+               DriverIsOurHardwareID(DrvInfoDetailData->HardwareID + DrvInfoDetailData->CompatIDsOffset);
 }
 
 #if defined(HAVE_EV) || defined(HAVE_WHQL)
@@ -405,7 +287,7 @@ InstallCertificate(_In_z_ const WCHAR *SignedResource)
     DWORD SizeResource;
     DWORD Result = ResourceGetAddress(SignedResource, &LockedResource, &SizeResource);
     if (Result != ERROR_SUCCESS)
-        return LOG_ERROR("Failed to locate resource", Result);
+        return LOG_ERROR(L"Failed to locate resource", Result);
     const CERT_BLOB CertBlob = { .cbData = SizeResource, .pbData = (BYTE *)LockedResource };
     HCERTSTORE QueriedStore;
     if (!CryptQueryObject(
@@ -420,7 +302,7 @@ InstallCertificate(_In_z_ const WCHAR *SignedResource)
             &QueriedStore,
             0,
             NULL))
-        return LOG_LAST_ERROR("Failed to find certificate");
+        return LOG_LAST_ERROR(L"Failed to find certificate");
     HCERTSTORE TrustedStore =
         CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, 0, CERT_SYSTEM_STORE_LOCAL_MACHINE, L"TrustedPublisher");
     if (!TrustedStore)
@@ -576,207 +458,26 @@ static WINTUN_STATUS RemoveDriver(VOID)
                 break;
             continue;
         }
-        SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData = DriverGetDrvInfoDetail(DevInfo, NULL, &DrvInfoData);
-        if (!DrvInfoDetailData)
+        SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData;
+        if (AdapterGetDrvInfoDetail(DevInfo, NULL, &DrvInfoData, &DrvInfoDetailData) != ERROR_SUCCESS)
             continue;
-        if (!_wcsicmp(DrvInfoDetailData->HardwareID, WINTUN_HWID))
+        if (!DriverIsOurDrvInfoDetail(DrvInfoDetailData))
         {
-            PathStripPathW(DrvInfoDetailData->InfFileName);
-            LOG(WINTUN_LOG_INFO, L"Removing existing driver");
-            if (!SetupUninstallOEMInfW(DrvInfoDetailData->InfFileName, SUOI_FORCEDELETE, NULL))
-            {
-                LOG_LAST_ERROR(L"Unable to remove existing driver");
-                Result = Result != ERROR_SUCCESS ? Result : GetLastError();
-            }
+            HeapFree(Heap, 0, DrvInfoDetailData);
+            continue;
+        }
+        PathStripPathW(DrvInfoDetailData->InfFileName);
+        LOG(WINTUN_LOG_INFO, L"Removing existing driver");
+        if (!SetupUninstallOEMInfW(DrvInfoDetailData->InfFileName, SUOI_FORCEDELETE, NULL))
+        {
+            LOG_LAST_ERROR(L"Unable to remove existing driver");
+            Result = Result != ERROR_SUCCESS ? Result : GetLastError();
         }
         HeapFree(Heap, 0, DrvInfoDetailData);
     }
     SetupDiDestroyDriverInfoList(DevInfo, NULL, SPDIT_CLASSDRIVER);
 cleanupDeviceInfoSet:
     SetupDiDestroyDeviceInfoList(DevInfo);
-    return Result;
-}
-
-#    define TUN_IOCTL_FORCE_CLOSE_HANDLES CTL_CODE(51820U, 0x971U, METHOD_NEITHER, FILE_READ_DATA | FILE_WRITE_DATA)
-
-/**
- * Closes all client handles to the Wintun adapter.
- *
- * @param DevInfo       A handle to the device information set that contains a device information element that
- *                      represents the device.
- *
- * @param DevInfoData   A pointer to a structure that specifies the device information element in DevInfo.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
-static WINTUN_STATUS
-ForceCloseWintunAdapterHandle(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
-{
-    DWORD Result = ERROR_SUCCESS;
-    DWORD RequiredBytes;
-    if (SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, NULL, 0, &RequiredBytes) ||
-        (Result = GetLastError()) != ERROR_INSUFFICIENT_BUFFER)
-        return LOG_ERROR(L"Failed to query device instance ID size", Result);
-    HANDLE Heap = GetProcessHeap();
-    WCHAR *InstanceId = HeapAlloc(Heap, HEAP_ZERO_MEMORY, sizeof(*InstanceId) * RequiredBytes);
-    if (!InstanceId)
-        return ERROR_OUTOFMEMORY;
-    if (!SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, InstanceId, RequiredBytes, &RequiredBytes))
-    {
-        Result = LOG_LAST_ERROR(L"Failed to get device instance ID");
-        goto out;
-    }
-    HANDLE NdisHandle = DriverGetAdapterDeviceObject(InstanceId);
-    if (NdisHandle == INVALID_HANDLE_VALUE)
-    {
-        Result = GetLastError();
-        goto out;
-    }
-    Result = DeviceIoControl(NdisHandle, TUN_IOCTL_FORCE_CLOSE_HANDLES, NULL, 0, NULL, 0, &RequiredBytes, NULL)
-                 ? ERROR_SUCCESS
-                 : LOG_LAST_ERROR(L"Failed to perform ioctl");
-    CloseHandle(NdisHandle);
-out:
-    HeapFree(Heap, 0, InstanceId);
-    return Result;
-}
-
-/**
- * Disables Wintun adapters.
- *
- * @param DevInfo       A handle to the device information set.
- *
- * @param DisabledAdapters  Output list of disabled adapters. The adapters disabled are inserted in the list head.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
-static WINTUN_STATUS
-DisableWintunAdapters(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **DisabledAdapters)
-{
-    SP_PROPCHANGE_PARAMS Params = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
-                                                            .InstallFunction = DIF_PROPERTYCHANGE },
-                                    .StateChange = DICS_DISABLE,
-                                    .Scope = DICS_FLAG_GLOBAL };
-    DWORD Result = ERROR_SUCCESS;
-    HANDLE Heap = GetProcessHeap();
-    for (DWORD EnumIndex = 0;; ++EnumIndex)
-    {
-        SP_DEVINFO_DATA_LIST *DeviceNode = HeapAlloc(Heap, 0, sizeof(SP_DEVINFO_DATA_LIST));
-        if (!DeviceNode)
-            return ERROR_OUTOFMEMORY;
-        DeviceNode->Data.cbSize = sizeof(SP_DEVINFO_DATA);
-        if (!SetupDiEnumDeviceInfo(DevInfo, EnumIndex, &DeviceNode->Data))
-        {
-            if (GetLastError() == ERROR_NO_MORE_ITEMS)
-            {
-                HeapFree(Heap, 0, DeviceNode);
-                break;
-            }
-            goto cleanupDeviceInfoData;
-        }
-        if (!DriverIsWintunAdapter(DevInfo, &DeviceNode->Data))
-            goto cleanupDeviceInfoData;
-
-        ULONG Status, ProblemCode;
-        if (CM_Get_DevNode_Status(&Status, &ProblemCode, DeviceNode->Data.DevInst, 0) != CR_SUCCESS ||
-            ((Status & DN_HAS_PROBLEM) && ProblemCode == CM_PROB_DISABLED))
-            goto cleanupDeviceInfoData;
-
-        LOG(WINTUN_LOG_INFO, L"Force closing all open handles for existing adapter");
-        if (ForceCloseWintunAdapterHandle(DevInfo, &DeviceNode->Data) != ERROR_SUCCESS)
-            LOG(WINTUN_LOG_WARN, L"Failed to force close adapter handles");
-        Sleep(200);
-
-        LOG(WINTUN_LOG_INFO, L"Disabling existing adapter");
-        if (!SetupDiSetClassInstallParamsW(DevInfo, &DeviceNode->Data, &Params.ClassInstallHeader, sizeof(Params)) ||
-            !SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, DevInfo, &DeviceNode->Data))
-        {
-            LOG_LAST_ERROR(L"Unable to disable existing adapter");
-            Result = Result != ERROR_SUCCESS ? Result : GetLastError();
-            goto cleanupDeviceInfoData;
-        }
-
-        DeviceNode->Next = *DisabledAdapters;
-        *DisabledAdapters = DeviceNode;
-        continue;
-
-    cleanupDeviceInfoData:
-        HeapFree(Heap, 0, &DeviceNode->Data);
-    }
-    return Result;
-}
-
-/**
- * Removes all Wintun adapters.
- *
- * @param DevInfo       A handle to the device information set.
- *
- * @param DisabledAdapters  Output list of disabled adapters.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
-static WINTUN_STATUS
-RemoveWintunAdapters(_In_ HDEVINFO DevInfo)
-{
-    SP_REMOVEDEVICE_PARAMS Params = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
-                                                              .InstallFunction = DIF_REMOVE },
-                                      .Scope = DI_REMOVEDEVICE_GLOBAL };
-    DWORD Result = ERROR_SUCCESS;
-    for (DWORD EnumIndex = 0;; ++EnumIndex)
-    {
-        SP_DEVINFO_DATA DevInfoData = { .cbSize = sizeof(SP_DEVINFO_DATA) };
-        if (!SetupDiEnumDeviceInfo(DevInfo, EnumIndex, &DevInfoData))
-        {
-            if (GetLastError() == ERROR_NO_MORE_ITEMS)
-                break;
-            continue;
-        }
-        if (!DriverIsWintunAdapter(DevInfo, &DevInfoData))
-            continue;
-
-        LOG(WINTUN_LOG_INFO, L"Force closing all open handles for existing adapter");
-        if (ForceCloseWintunAdapterHandle(DevInfo, &DevInfoData) != ERROR_SUCCESS)
-            LOG(WINTUN_LOG_WARN, L"Failed to force close adapter handles");
-        Sleep(200);
-
-        LOG(WINTUN_LOG_INFO, L"Removing existing adapter");
-        if (!SetupDiSetClassInstallParamsW(DevInfo, &DevInfoData, &Params.ClassInstallHeader, sizeof(Params)) ||
-            !SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
-        {
-            LOG_LAST_ERROR(L"Unable to remove existing adapter");
-            Result = Result != ERROR_SUCCESS ? Result : GetLastError();
-        }
-    }
-    return Result;
-}
-
-/**
- * Enables Wintun adapters.
- *
- * @param DevInfo       A handle to the device information set.
- *
- * @param AdaptersToEnable  Input list of adapters to enable.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
-static WINTUN_STATUS
-EnableWintunAdapters(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA_LIST *AdaptersToEnable)
-{
-    SP_PROPCHANGE_PARAMS Params = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
-                                                            .InstallFunction = DIF_PROPERTYCHANGE },
-                                    .StateChange = DICS_ENABLE,
-                                    .Scope = DICS_FLAG_GLOBAL };
-    DWORD Result = ERROR_SUCCESS;
-    for (SP_DEVINFO_DATA_LIST *DeviceNode = AdaptersToEnable; DeviceNode; DeviceNode = DeviceNode->Next)
-    {
-        LOG(WINTUN_LOG_INFO, L"Enabling existing adapter");
-        if (!SetupDiSetClassInstallParamsW(DevInfo, &DeviceNode->Data, &Params.ClassInstallHeader, sizeof(Params)) ||
-            !SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, DevInfo, &DeviceNode->Data))
-        {
-            LOG_LAST_ERROR(L"Unable to enable existing adapter");
-            Result = Result != ERROR_SUCCESS ? Result : GetLastError();
-        }
-    }
     return Result;
 }
 
@@ -794,7 +495,7 @@ WINTUN_STATUS DriverInstallOrUpdate(VOID)
     SP_DEVINFO_DATA_LIST *ExistingAdapters = NULL;
     if (IsDriverLoaded())
     {
-        DisableWintunAdapters(DevInfo, &ExistingAdapters);
+        AdapterDisableAllOurs(DevInfo, &ExistingAdapters);
         LOG(WINTUN_LOG_INFO, L"Waiting for driver to unload from kernel");
         if (!EnsureDriverUnloaded())
             LOG(WINTUN_LOG_WARN, L"Unable to unload driver, which means a reboot will likely be required");
@@ -815,7 +516,7 @@ WINTUN_STATUS DriverInstallOrUpdate(VOID)
 cleanupAdapters:;
     if (ExistingAdapters)
     {
-        EnableWintunAdapters(DevInfo, ExistingAdapters);
+        AdapterEnableAll(DevInfo, ExistingAdapters);
         while (ExistingAdapters)
         {
             SP_DEVINFO_DATA_LIST *Next = ExistingAdapters->Next;
@@ -834,10 +535,7 @@ cleanupAdapters:;
  */
 WINTUN_STATUS DriverUninstall(VOID)
 {
-    HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
-    if (DevInfo == INVALID_HANDLE_VALUE)
-        return LOG_LAST_ERROR(L"Failed to get present class devices");
-    RemoveWintunAdapters(DevInfo);
+    AdapterDeleteAllOurs();
     DWORD Result = RemoveDriver();
     if (Result != ERROR_SUCCESS)
         LOG_ERROR(L"Failed to uninstall driver", Result);

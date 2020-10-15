@@ -49,7 +49,7 @@ OpenKeyWait(_In_ HKEY Key, _Inout_z_ WCHAR *Path, _In_ DWORD Access, _In_ ULONGL
             TimeLeft = 0;
         if (WaitForSingleObject(Event, (DWORD)TimeLeft) != WAIT_OBJECT_0)
         {
-            LOG(WINTUN_LOG_ERR, "Timeout waiting");
+            LOG(WINTUN_LOG_ERR, L"Timeout waiting");
             break;
         }
     }
@@ -349,7 +349,7 @@ RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD 
             TimeLeft = 0;
         if (WaitForSingleObject(Event, (DWORD)TimeLeft) != WAIT_OBJECT_0)
         {
-            LOG(WINTUN_LOG_ERR, "Timeout waiting");
+            LOG(WINTUN_LOG_ERR, L"Timeout waiting");
             break;
         }
     }
@@ -427,7 +427,7 @@ RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD T
             TimeLeft = 0;
         if (WaitForSingleObject(Event, (DWORD)TimeLeft) != WAIT_OBJECT_0)
         {
-            LOG(WINTUN_LOG_ERR, "Timeout waiting");
+            LOG(WINTUN_LOG_ERR, L"Timeout waiting");
             break;
         }
     }
