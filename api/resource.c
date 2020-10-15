@@ -5,17 +5,6 @@
 
 #include "pch.h"
 
-/**
- * Locates RT_RCDATA resource memory address and size.
- *
- * ResourceName         Name of the RT_RCDATA resource. Use MAKEINTRESOURCEW to locate resource by ID.
- *
- * Address              Pointer to a pointer variable to receive resource address.
- *
- * Size                 Pointer to a variable to receive resource size.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
 WINTUN_STATUS
 ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const VOID **Address, _Out_ DWORD *Size)
 {
@@ -37,17 +26,6 @@ ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const VOID **Address,
     return ERROR_SUCCESS;
 }
 
-/**
- * Copies resource to a file.
- *
- * DestinationPath      File path
- *
- * SecurityAttributes   File security attributes. May be NULL for detault.
- *
- * ResourceName         Name of the RT_RCDATA resource. Use MAKEINTRESOURCEW to locate resource by ID.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
 WINTUN_STATUS
 ResourceCopyToFile(
     _In_z_ const WCHAR *DestinationPath,

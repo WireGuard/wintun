@@ -7,13 +7,6 @@
 
 #pragma warning(disable : 4221) /* nonstandard: address of automatic in initializer */
 
-/**
- * Tests if any of the hardware IDs match ours.
- *
- * @param Hwids         Multi-string containing a list of hardware IDs.
- *
- * @return TRUE on match; FALSE otherwise.
- */
 BOOL
 DriverIsOurHardwareID(_In_z_ const WCHAR *Hwids)
 {
@@ -23,13 +16,6 @@ DriverIsOurHardwareID(_In_z_ const WCHAR *Hwids)
     return FALSE;
 }
 
-/**
- * Tests if hardware ID or any of the compatible IDs match ours.
- *
- * @param DrvInfoDetailData  Detailed information about a particular driver information structure.
- *
- * @return TRUE on match; FALSE otherwise.
- */
 BOOL
 DriverIsOurDrvInfoDetail(_In_ const SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData)
 {
@@ -51,11 +37,6 @@ DriverIsOurDrvInfoDetail(_In_ const SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData)
 extern VOID NTAPI
 RtlGetNtVersionNumbers(_Out_opt_ DWORD *MajorVersion, _Out_opt_ DWORD *MinorVersion, _Out_opt_ DWORD *BuildNumber);
 
-/**
- * Queries driver availability and Windows requirement about driver signing model.
- *
- * @return non-zero when WHQL/Attestation-signed drivers are available and required; zero otherwise.
- */
 static BOOL
 HaveWHQL()
 {
@@ -70,15 +51,6 @@ HaveWHQL()
 #    endif
 }
 
-/**
- * Locates the white-space string span.
- *
- * \param Beg           String start
- *
- * \param End           String end (non-inclusive)
- *
- * \return First non-white-space character or string end.
- */
 static const CHAR *
 SkipWSpace(_In_ const CHAR *Beg, _In_ const CHAR *End)
 {
@@ -87,15 +59,6 @@ SkipWSpace(_In_ const CHAR *Beg, _In_ const CHAR *End)
     return Beg;
 }
 
-/**
- * Locates the non-LF string span.
- *
- * \param Beg           String start
- *
- * \param End           String end (non-inclusive)
- *
- * \return First LF character or string end.
- */
 static const CHAR *
 SkipNonLF(_In_ const CHAR *Beg, _In_ const CHAR *End)
 {
@@ -104,15 +67,6 @@ SkipNonLF(_In_ const CHAR *Beg, _In_ const CHAR *End)
     return Beg;
 }
 
-/**
- * Queries the version of the driver this wintun.dll is packing.
- *
- * DriverDate           Pointer to a variable to receive the driver date.
- *
- * DriverVersion        Pointer to a variable to receive the driver version.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
 WINTUN_STATUS
 DriverGetVersion(_Out_ FILETIME *DriverDate, _Out_ DWORDLONG *DriverVersion)
 {
@@ -210,13 +164,7 @@ DriverGetVersion(_Out_ FILETIME *DriverDate, _Out_ DWORDLONG *DriverVersion)
     return ERROR_FILE_NOT_FOUND;
 }
 
-/**
- * Checks if the Wintun driver is loaded.
- *
- * Note: This function does not log any errors, not to flood the log when called from the EnsureDriverUnloaded() loop.
- *
- * @return non-zero when loaded; zero when not loaded or error - use GetLastError().
- */
+/* This function does not log any errors, not to flood the log when called from the EnsureDriverUnloaded() loop. */
 static BOOL IsDriverLoaded(VOID)
 {
     VOID *StackBuffer[0x80];
@@ -258,11 +206,6 @@ static BOOL IsDriverLoaded(VOID)
     return Found;
 }
 
-/**
- * Polls for 15 sec until the Wintun driver is unloaded.
- *
- * @return non-zero if the driver unloaded; zero on error or timeout - use GetLastError().
- */
 static BOOL EnsureDriverUnloaded(VOID)
 {
     BOOL Loaded;
@@ -271,14 +214,6 @@ static BOOL EnsureDriverUnloaded(VOID)
     return !Loaded;
 }
 
-/**
- * Installs code-signing certificate to the computer's Trusted Publishers certificate store.
- *
- * @param SignedResource  ID of the RT_RCDATA resource containing the signed binary to extract the code-signing
- *                      certificate from.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
 static WINTUN_STATUS
 InstallCertificate(_In_z_ const WCHAR *SignedResource)
 {
@@ -347,13 +282,6 @@ cleanupQueriedStore:
     return Result;
 }
 
-/**
- * Installs Wintun driver to the Windows driver store and updates existing adapters to use it.
- *
- * @param UpdateExisting  Set to non-zero when existing adapters should be upgraded to the newest driver.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
 static WINTUN_STATUS
 InstallDriver(_In_ BOOL UpdateExisting)
 {
@@ -432,11 +360,6 @@ cleanupFree:
     return Result;
 }
 
-/**
- * Removes Wintun driver from the Windows driver store.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
 static WINTUN_STATUS RemoveDriver(VOID)
 {
     HDEVINFO DevInfo = SetupDiGetClassDevsW(&GUID_DEVCLASS_NET, NULL, NULL, 0);
@@ -484,11 +407,6 @@ cleanupDeviceInfoSet:
     return Result;
 }
 
-/**
- * Installs or updates Wintun driver.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
 WINTUN_STATUS DriverInstallOrUpdate(VOID)
 {
     HANDLE Heap = GetProcessHeap();
@@ -531,11 +449,6 @@ cleanupAdapters:;
     return Result;
 }
 
-/**
- * Uninstalls Wintun driver.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
 WINTUN_STATUS DriverUninstall(VOID)
 {
     AdapterDeleteAllOurs();
