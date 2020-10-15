@@ -21,6 +21,8 @@ NormalizeStringAlloc(_In_ NORM_FORM NormForm, _In_z_ const WCHAR *Source)
         if (Result)
             HeapFree(Heap, 0, Result);
         Result = HeapAlloc(Heap, 0, sizeof(WCHAR) * Len);
+        if (!Result)
+            return NULL;
         Len = NormalizeString(NormForm, Source, -1, Result, Len);
         if (Len > 0)
             return Result;
