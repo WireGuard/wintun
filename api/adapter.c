@@ -9,8 +9,20 @@
 
 #define WAIT_FOR_REGISTRY_TIMEOUT 10000     /* ms */
 #define MAX_POOL_DEVICE_TYPE (MAX_POOL + 8) /* Should accommodate a pool name with " Tunnel" appended */
+#if defined(_M_IX86)
+#    define IMAGE_FILE_PROCESS IMAGE_FILE_MACHINE_I386
+#elif defined(_M_AMD64)
+#    define IMAGE_FILE_PROCESS IMAGE_FILE_MACHINE_AMD64
+#elif defined(_M_ARM)
+#    define IMAGE_FILE_PROCESS IMAGE_FILE_MACHINE_ARMNT
+#elif defined(_M_ARM64)
+#    define IMAGE_FILE_PROCESS IMAGE_FILE_MACHINE_ARM64
+#else
+#    error Unsupported architecture
+#endif
 
 static _locale_t Locale;
+static USHORT NativeMachine = IMAGE_FILE_PROCESS;
 
 WINTUN_STATUS
 AdapterGetDrvInfoDetail(
@@ -324,6 +336,22 @@ void
 AdapterInit()
 {
     Locale = _wcreate_locale(LC_ALL, L"");
+
+#if defined(_M_IX86) || defined(_M_ARM)
+    typedef BOOL(WINAPI * IsWow64Process2_t)(
+        _In_ HANDLE hProcess, _Out_ USHORT * pProcessMachine, _Out_opt_ USHORT * pNativeMachine);
+    HANDLE Kernel32;
+    IsWow64Process2_t IsWow64Process2;
+    USHORT ProcessMachine;
+    if ((Kernel32 = GetModuleHandleW(L"kernel32.dll")) == NULL ||
+        (IsWow64Process2 = (IsWow64Process2_t)GetProcAddress(Kernel32, "IsWow64Process2")) == NULL ||
+        !IsWow64Process2(GetCurrentProcess(), &ProcessMachine, &NativeMachine))
+    {
+        BOOL IsWoW64;
+        NativeMachine =
+            IsWow64Process(GetCurrentProcess(), &IsWoW64) && IsWoW64 ? IMAGE_FILE_MACHINE_AMD64 : IMAGE_FILE_PROCESS;
+    }
+#endif
 }
 
 void
@@ -1203,6 +1231,90 @@ cleanupMutex:
     return Result;
 }
 
+static WINTUN_STATUS
+CreateTemporaryDirectory(_Out_cap_c_(MAX_PATH) WCHAR *RandomTempSubDirectory)
+{
+    WCHAR WindowsDirectory[MAX_PATH];
+    if (!GetWindowsDirectoryW(WindowsDirectory, _countof(WindowsDirectory)))
+        return LOG_LAST_ERROR(L"Failed to get Windows folder");
+    WCHAR WindowsTempDirectory[MAX_PATH];
+    if (!PathCombineW(WindowsTempDirectory, WindowsDirectory, L"Temp"))
+        return ERROR_BUFFER_OVERFLOW;
+    UCHAR RandomBytes[32] = { 0 };
+#pragma warning(suppress : 6387)
+    if (!RtlGenRandom(RandomBytes, sizeof(RandomBytes)))
+        return LOG_LAST_ERROR(L"Failed to generate random");
+    WCHAR RandomSubDirectory[sizeof(RandomBytes) * 2 + 1];
+    for (int i = 0; i < sizeof(RandomBytes); ++i)
+        swprintf_s(&RandomSubDirectory[i * 2], 3, L"%02x", RandomBytes[i]);
+    if (!PathCombineW(RandomTempSubDirectory, WindowsTempDirectory, RandomSubDirectory))
+        return ERROR_BUFFER_OVERFLOW;
+    if (!CreateDirectoryW(RandomTempSubDirectory, SecurityAttributes))
+        return LOG_LAST_ERROR(L"Failed to create temporary folder");
+    return ERROR_SUCCESS;
+}
+
+#if defined(_M_IX86) || defined(_M_ARM)
+
+static WINTUN_STATUS
+ExecuteRunDll32(_In_z_ const WCHAR *Arguments)
+{
+    WCHAR WindowsDirectory[MAX_PATH];
+    if (!GetWindowsDirectoryW(WindowsDirectory, _countof(WindowsDirectory)))
+        return LOG_LAST_ERROR(L"Failed to get Windows folder");
+    WCHAR RunDll32Path[MAX_PATH];
+    if (!PathCombineW(RunDll32Path, WindowsDirectory, L"Sysnative\\rundll32.exe"))
+        return ERROR_BUFFER_OVERFLOW;
+
+    DWORD Result;
+    WCHAR RandomTempSubDirectory[MAX_PATH];
+    if ((Result = CreateTemporaryDirectory(RandomTempSubDirectory)) != ERROR_SUCCESS)
+        return LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder"), Result;
+    WCHAR DllPath[MAX_PATH] = { 0 };
+    if (!PathCombineW(DllPath, RandomTempSubDirectory, L"wintun.dll"))
+    {
+        Result = ERROR_BUFFER_OVERFLOW;
+        goto cleanupDirectory;
+    }
+    if ((Result = ResourceCopyToFile(
+             DllPath, NativeMachine == IMAGE_FILE_MACHINE_ARM64 ? L"wintun-arm64.dll" : L"wintun-amd64.dll")) !=
+        ERROR_SUCCESS)
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to copy resource");
+        goto cleanupDelete;
+    }
+    HANDLE Heap = GetProcessHeap();
+    size_t CommandLineLen = 10 + MAX_PATH + 2 + wcslen(Arguments) + 1;
+    WCHAR *CommandLine = HeapAlloc(Heap, 0, CommandLineLen * sizeof(WCHAR));
+    if (!CommandLine)
+    {
+        LOG(WINTUN_LOG_ERR, L"Out of memory");
+        Result = ERROR_OUTOFMEMORY;
+        goto cleanupDelete;
+    }
+    _snwprintf_s(CommandLine, CommandLineLen, _TRUNCATE, L"rundll32 \"%.*s\",%s", MAX_PATH, DllPath, Arguments);
+    /* TODO: Create stdio pipes to intercept logged messages. */
+    STARTUPINFOW si = { .cb = sizeof(STARTUPINFO), .dwFlags = STARTF_USESHOWWINDOW, .wShowWindow = SW_HIDE };
+    PROCESS_INFORMATION pi;
+    if (!CreateProcessW(RunDll32Path, CommandLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+    {
+        Result = LOG_LAST_ERROR(L"Creating process failed");
+        goto cleanupCommandLine;
+    }
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+cleanupCommandLine:
+    HeapFree(Heap, 0, CommandLine);
+cleanupDelete:
+    DeleteFileW(DllPath);
+cleanupDirectory:
+    RemoveDirectoryW(RandomTempSubDirectory);
+    return Result;
+}
+
+#endif
+
 WINTUN_STATUS WINAPI
 WintunCreateAdapter(
     _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
@@ -1211,27 +1323,39 @@ WintunCreateAdapter(
     _Out_ WINTUN_ADAPTER **Adapter,
     _Inout_ BOOL *RebootRequired)
 {
-#if defined(HAVE_EV) || defined(HAVE_WHQL)
-    WCHAR WindowsDirectory[MAX_PATH];
-    if (!GetWindowsDirectoryW(WindowsDirectory, _countof(WindowsDirectory)))
-        return LOG_LAST_ERROR(L"Failed to get Windows folder");
-    WCHAR WindowsTempDirectory[MAX_PATH];
-    if (!PathCombineW(WindowsTempDirectory, WindowsDirectory, L"Temp"))
-        return ERROR_BUFFER_OVERFLOW;
-    UCHAR RandomBytes[32] = { 0 };
-#    pragma warning(suppress : 6387)
-    if (!RtlGenRandom(RandomBytes, sizeof(RandomBytes)))
-        return LOG_LAST_ERROR(L"Failed to generate random");
-    WCHAR RandomSubDirectory[sizeof(RandomBytes) * 2 + 1];
-    for (int i = 0; i < sizeof(RandomBytes); ++i)
-        swprintf_s(&RandomSubDirectory[i * 2], 3, L"%02x", RandomBytes[i]);
-    WCHAR RandomTempSubDirectory[MAX_PATH];
-    if (!PathCombineW(RandomTempSubDirectory, WindowsTempDirectory, RandomSubDirectory))
-        return ERROR_BUFFER_OVERFLOW;
-    if (!CreateDirectoryW(RandomTempSubDirectory, SecurityAttributes))
-        return LOG_LAST_ERROR(L"Failed to create temporary folder");
+#if defined(_M_IX86) || defined(_M_ARM)
+    if (NativeMachine != IMAGE_FILE_PROCESS)
+    {
+        LOG(WINTUN_LOG_INFO, L"Spawning native process for the job");
+        WCHAR RequestedGUIDStr[MAX_GUID_STRING_LEN];
+        WCHAR Arguments[15 + MAX_POOL + 3 + MAX_ADAPTER_NAME + 2 + MAX_GUID_STRING_LEN + 1];
+        _snwprintf_s(
+            Arguments,
+            _countof(Arguments),
+            _TRUNCATE,
+            RequestedGUID ? L"CreateAdapter \"%.*s\" \"%.*s\" %.*s" : L"CreateAdapter \"%.*s\" \"%.*s\"",
+            MAX_POOL,
+            Pool,
+            MAX_ADAPTER_NAME,
+            Name,
+            RequestedGUID ? StringFromGUID2(RequestedGUID, RequestedGUIDStr, _countof(RequestedGUIDStr)) : 0,
+            RequestedGUIDStr);
+        DWORD Result = ExecuteRunDll32(Arguments);
+        if (Result != ERROR_SUCCESS)
+        {
+            LOG(WINTUN_LOG_ERR, L"Error executing worker process");
+            return Result;
+        }
+        return WintunGetAdapter(Pool, Name, Adapter);
+    }
+#endif
 
+#if defined(HAVE_EV) || defined(HAVE_WHQL)
     DWORD Result = ERROR_SUCCESS;
+    WCHAR RandomTempSubDirectory[MAX_PATH];
+    if ((Result = CreateTemporaryDirectory(RandomTempSubDirectory)) != ERROR_SUCCESS)
+        return LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder"), Result;
+
     WCHAR CatPath[MAX_PATH] = { 0 };
     WCHAR SysPath[MAX_PATH] = { 0 };
     WCHAR InfPath[MAX_PATH] = { 0 };
@@ -1278,6 +1402,26 @@ cleanupDirectory:
 WINTUN_STATUS WINAPI
 WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired)
 {
+#if defined(_M_IX86) || defined(_M_ARM)
+    if (NativeMachine != IMAGE_FILE_PROCESS)
+    {
+        LOG(WINTUN_LOG_INFO, L"Spawning native process for the job");
+        WCHAR GuidStr[MAX_GUID_STRING_LEN];
+        WCHAR Arguments[14 + MAX_GUID_STRING_LEN + 1];
+        _snwprintf_s(
+            Arguments,
+            _countof(Arguments),
+            _TRUNCATE,
+            L"DeleteAdapter %.*s",
+            StringFromGUID2(&Adapter->CfgInstanceID, GuidStr, _countof(GuidStr)),
+            GuidStr);
+        DWORD Result = ExecuteRunDll32(Arguments);
+        if (Result != ERROR_SUCCESS)
+            LOG(WINTUN_LOG_ERR, L"Error executing worker process");
+        return Result;
+    }
+#endif
+
     HDEVINFO DevInfo;
     SP_DEVINFO_DATA DevInfoData;
     DWORD Result = GetDevInfoData(&Adapter->CfgInstanceID, &DevInfo, &DevInfoData);

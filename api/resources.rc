@@ -18,6 +18,13 @@ wintun-whql.inf RCDATA "whql\\wintun.inf"
 wintun-whql.sys RCDATA "whql\\wintun.sys"
 #endif
 
+#if defined(_M_IX86)
+wintun-amd64.dll RCDATA "amd64\\wintun.dll"
+#endif
+#if defined(_M_IX86) || defined(_M_ARM)
+wintun-arm64.dll RCDATA "arm64\\wintun.dll"
+#endif
+
 #define STRINGIZE(x) #x
 #define EXPAND(x) STRINGIZE(x)
 
