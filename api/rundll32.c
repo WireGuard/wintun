@@ -7,7 +7,7 @@
 
 #if defined(_M_AMD64) || defined(_M_ARM64)
 
-static VOID CALLBACK
+static BOOL CALLBACK
 ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_ const WCHAR *LogLine)
 {
     const WCHAR *Template;
@@ -23,9 +23,10 @@ ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_ const WCHAR *LogLine)
         Template = L"[!] %s\n";
         break;
     default:
-        return;
+        return FALSE;
     }
     fwprintf(stderr, Template, LogLine);
+    return TRUE;
 }
 
 static BOOL ElevateToSystem(VOID)

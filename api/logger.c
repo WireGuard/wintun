@@ -5,11 +5,12 @@
 
 #include "pch.h"
 
-static VOID CALLBACK
+static BOOL CALLBACK
 NopLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
 {
     UNREFERENCED_PARAMETER(Level);
     UNREFERENCED_PARAMETER(LogLine);
+    return TRUE;
 }
 
 WINTUN_LOGGER_FUNC Logger = NopLogger;
