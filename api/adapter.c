@@ -127,13 +127,13 @@ GetDeviceRegistryMultiString(
 }
 
 static WINTUN_STATUS
-IsOurAdapter(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ BOOL *IsOur)
+IsOurAdapter(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ BOOL *IsOurs)
 {
     WCHAR *Hwids;
     DWORD Result = GetDeviceRegistryMultiString(DevInfo, DevInfoData, SPDRP_HARDWAREID, &Hwids);
     if (Result != ERROR_SUCCESS)
         return LOG(WINTUN_LOG_ERR, L"Failed to query hardware ID"), Result;
-    *IsOur = DriverIsOurHardwareID(Hwids);
+    *IsOurs = DriverIsOurHardwareID(Hwids);
     return ERROR_SUCCESS;
 }
 
@@ -237,8 +237,8 @@ AdapterDisableAllOurs(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
             }
             goto cleanupDeviceInfoData;
         }
-        BOOL IsOur;
-        if (IsOurAdapter(DevInfo, &DeviceNode->Data, &IsOur) != ERROR_SUCCESS || !IsOur)
+        BOOL IsOurs;
+        if (IsOurAdapter(DevInfo, &DeviceNode->Data, &IsOurs) != ERROR_SUCCESS || !IsOurs)
             goto cleanupDeviceInfoData;
 
         ULONG Status, ProblemCode;
@@ -311,8 +311,8 @@ AdapterDeleteAllOurs()
             continue;
         }
 
-        BOOL IsOur;
-        if (IsOurAdapter(DevInfo, &DevInfoData, &IsOur) != ERROR_SUCCESS || !IsOur)
+        BOOL IsOurs;
+        if (IsOurAdapter(DevInfo, &DevInfoData, &IsOurs) != ERROR_SUCCESS || !IsOurs)
             continue;
 
         LOG(WINTUN_LOG_INFO, L"Force closing all open handles for existing adapter");
@@ -645,14 +645,14 @@ WintunGetAdapter(
         }
 
         /* Check the Hardware ID to make sure it's a real Wintun device. */
-        BOOL IsOur;
-        Result = IsOurAdapter(DevInfo, &DevInfoData, &IsOur);
+        BOOL IsOurs;
+        Result = IsOurAdapter(DevInfo, &DevInfoData, &IsOurs);
         if (Result != ERROR_SUCCESS)
         {
             LOG(WINTUN_LOG_ERR, L"Failed to determine hardware ID");
             goto cleanupDevInfo;
         }
-        if (!IsOur)
+        if (!IsOurs)
         {
             LOG(WINTUN_LOG_ERR, L"Foreign adapter with the same name exists");
             Result = ERROR_ALREADY_EXISTS;
@@ -1478,8 +1478,8 @@ WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUM_
             continue;
         }
 
-        BOOL IsOur;
-        if (IsOurAdapter(DevInfo, &DevInfoData, &IsOur) != ERROR_SUCCESS || !IsOur)
+        BOOL IsOurs;
+        if (IsOurAdapter(DevInfo, &DevInfoData, &IsOurs) != ERROR_SUCCESS || !IsOurs)
             continue;
 
         BOOL IsMember;
