@@ -594,50 +594,6 @@ GetDeviceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) W
         Adapter->DevInstanceID);
 }
 
-static void
-GetTcpipAdapterRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
-{
-    WCHAR Guid[MAX_GUID_STRING_LEN];
-    _snwprintf_s(
-        Path,
-        MAX_REG_PATH,
-        _TRUNCATE,
-        L"SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Adapters\\%.*s",
-        StringFromGUID2(&Adapter->CfgInstanceID, Guid, _countof(Guid)),
-        Guid);
-}
-
-static WINTUN_STATUS
-GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
-{
-    DWORD Result;
-    HKEY TcpipAdapterRegKey;
-    WCHAR TcpipAdapterRegPath[MAX_REG_PATH];
-    GetTcpipAdapterRegPath(Adapter, TcpipAdapterRegPath);
-    Result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, TcpipAdapterRegPath, 0, KEY_QUERY_VALUE, &TcpipAdapterRegKey);
-    if (Result != ERROR_SUCCESS)
-        return LOG_ERROR(L"Failed to open registry key", Result);
-    WCHAR *Paths;
-    Result = RegistryQueryString(TcpipAdapterRegKey, L"IpConfig", &Paths);
-    if (Result != ERROR_SUCCESS)
-    {
-        LOG_ERROR(L"Failed to query IpConfig value", Result);
-        goto cleanupTcpipAdapterRegKey;
-    }
-    if (!Paths[0])
-    {
-        LOG(WINTUN_LOG_ERR, L"IpConfig is empty");
-        Result = ERROR_INVALID_DATA;
-        goto cleanupPaths;
-    }
-    _snwprintf_s(Path, MAX_REG_PATH, _TRUNCATE, L"SYSTEM\\CurrentControlSet\\Services\\%s", Paths);
-cleanupPaths:
-    HeapFree(GetProcessHeap(), 0, Paths);
-cleanupTcpipAdapterRegKey:
-    RegCloseKey(TcpipAdapterRegKey);
-    return Result;
-}
-
 void WINAPI
 WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
 {
@@ -828,27 +784,6 @@ WintunGetAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *H
     return GetDeviceObject(Adapter->DevInstanceID, Handle);
 }
 
-static BOOL
-IsNewer(_In_ const SP_DRVINFO_DATA_W *DrvInfoData, _In_ const FILETIME *DriverDate, _In_ DWORDLONG DriverVersion)
-{
-    if (DrvInfoData->DriverDate.dwHighDateTime > DriverDate->dwHighDateTime)
-        return TRUE;
-    if (DrvInfoData->DriverDate.dwHighDateTime < DriverDate->dwHighDateTime)
-        return FALSE;
-
-    if (DrvInfoData->DriverDate.dwLowDateTime > DriverDate->dwLowDateTime)
-        return TRUE;
-    if (DrvInfoData->DriverDate.dwLowDateTime < DriverDate->dwLowDateTime)
-        return FALSE;
-
-    if (DrvInfoData->DriverVersion > DriverVersion)
-        return TRUE;
-    if (DrvInfoData->DriverVersion < DriverVersion)
-        return FALSE;
-
-    return FALSE;
-}
-
 #if defined(HAVE_EV) || defined(HAVE_WHQL)
 
 /* We can't use RtlGetVersion, because appcompat's aclayers.dll shims it to report Vista
@@ -945,6 +880,73 @@ cleanupQueriedStore:
 }
 
 #endif
+
+#if defined(HAVE_EV) || defined(HAVE_WHQL)
+
+static BOOL
+IsNewer(_In_ const SP_DRVINFO_DATA_W *DrvInfoData, _In_ const FILETIME *DriverDate, _In_ DWORDLONG DriverVersion)
+{
+    if (DrvInfoData->DriverDate.dwHighDateTime > DriverDate->dwHighDateTime)
+        return TRUE;
+    if (DrvInfoData->DriverDate.dwHighDateTime < DriverDate->dwHighDateTime)
+        return FALSE;
+
+    if (DrvInfoData->DriverDate.dwLowDateTime > DriverDate->dwLowDateTime)
+        return TRUE;
+    if (DrvInfoData->DriverDate.dwLowDateTime < DriverDate->dwLowDateTime)
+        return FALSE;
+
+    if (DrvInfoData->DriverVersion > DriverVersion)
+        return TRUE;
+    if (DrvInfoData->DriverVersion < DriverVersion)
+        return FALSE;
+
+    return FALSE;
+}
+
+static void
+GetTcpipAdapterRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
+{
+    WCHAR Guid[MAX_GUID_STRING_LEN];
+    _snwprintf_s(
+        Path,
+        MAX_REG_PATH,
+        _TRUNCATE,
+        L"SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Adapters\\%.*s",
+        StringFromGUID2(&Adapter->CfgInstanceID, Guid, _countof(Guid)),
+        Guid);
+}
+
+static WINTUN_STATUS
+GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
+{
+    DWORD Result;
+    HKEY TcpipAdapterRegKey;
+    WCHAR TcpipAdapterRegPath[MAX_REG_PATH];
+    GetTcpipAdapterRegPath(Adapter, TcpipAdapterRegPath);
+    Result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, TcpipAdapterRegPath, 0, KEY_QUERY_VALUE, &TcpipAdapterRegKey);
+    if (Result != ERROR_SUCCESS)
+        return LOG_ERROR(L"Failed to open registry key", Result);
+    WCHAR *Paths;
+    Result = RegistryQueryString(TcpipAdapterRegKey, L"IpConfig", &Paths);
+    if (Result != ERROR_SUCCESS)
+    {
+        LOG_ERROR(L"Failed to query IpConfig value", Result);
+        goto cleanupTcpipAdapterRegKey;
+    }
+    if (!Paths[0])
+    {
+        LOG(WINTUN_LOG_ERR, L"IpConfig is empty");
+        Result = ERROR_INVALID_DATA;
+        goto cleanupPaths;
+    }
+    _snwprintf_s(Path, MAX_REG_PATH, _TRUNCATE, L"SYSTEM\\CurrentControlSet\\Services\\%s", Paths);
+cleanupPaths:
+    HeapFree(GetProcessHeap(), 0, Paths);
+cleanupTcpipAdapterRegKey:
+    RegCloseKey(TcpipAdapterRegKey);
+    return Result;
+}
 
 static WINTUN_STATUS
 CreateAdapter(
@@ -1231,6 +1233,8 @@ cleanupMutex:
     return Result;
 }
 
+#endif
+
 static WINTUN_STATUS
 CreateTemporaryDirectory(_Out_cap_c_(MAX_PATH) WCHAR *RandomTempSubDirectory)
 {
@@ -1324,6 +1328,7 @@ WintunCreateAdapter(
     _Inout_ BOOL *RebootRequired)
 {
 #if defined(_M_IX86) || defined(_M_ARM)
+    UNREFERENCED_PARAMETER(RebootRequired);
     if (NativeMachine != IMAGE_FILE_PROCESS)
     {
         LOG(WINTUN_LOG_INFO, L"Spawning native process for the job");
@@ -1396,6 +1401,8 @@ cleanupDelete:
 cleanupDirectory:
     RemoveDirectoryW(RandomTempSubDirectory);
     return Result;
+#else
+    return ERROR_NOT_SUPPORTED;
 #endif
 }
 
