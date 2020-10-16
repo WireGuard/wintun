@@ -7,10 +7,6 @@
 
 #if defined(_M_AMD64) || defined(_M_ARM64)
 
-// TODO: Log to Windows Event Log in production.
-
-#    ifdef _DEBUG
-
 static VOID CALLBACK
 ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_ const WCHAR *LogLine)
 {
@@ -29,10 +25,8 @@ ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_ const WCHAR *LogLine)
     default:
         return;
     }
-    fwprintf(stdout, Template, LogLine);
+    fwprintf(stderr, Template, LogLine);
 }
-
-#    endif
 
 static BOOL ElevateToSystem(VOID)
 {
@@ -128,30 +122,20 @@ cleanup:
     return FALSE;
 }
 
-static void
-Init(_In_ BOOL ShowConsole)
+static int Argc;
+static WCHAR **Argv;
+
+static void Init(VOID)
 {
-#    ifdef _DEBUG
-    if (ShowConsole)
-    {
-        AllocConsole();
-        FILE *Stream;
-        _wfreopen_s(&Stream, L"CONOUT$", L"w", stdout);
-    }
     WintunSetLogger(ConsoleLogger);
-#    else
-    UNREFERENCED_PARAMETER(ShowConsole);
-#    endif
+    Argv = CommandLineToArgvW(GetCommandLineW(), &Argc);
     ElevateToSystem();
 }
 
 static void Done(VOID)
 {
     RevertToSelf();
-#    ifdef _DEBUG
-    _putws(L"\nPress any key to close . . .");
-    (VOID) _getwch();
-#    endif
+    LocalFree(Argv);
 }
 
 __declspec(dllexport) VOID __stdcall CreateAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
@@ -159,30 +143,28 @@ __declspec(dllexport) VOID __stdcall CreateAdapter(HWND hwnd, HINSTANCE hinst, L
     UNREFERENCED_PARAMETER(hwnd);
     UNREFERENCED_PARAMETER(hinst);
     UNREFERENCED_PARAMETER(lpszCmdLine);
+    UNREFERENCED_PARAMETER(nCmdShow);
 
-    int Argc;
-    LPWSTR *Argv = CommandLineToArgvW(GetCommandLineW(), &Argc);
+    Init();
     if (Argc < 4)
-        goto cleanupArgv;
-
+        goto cleanup;
     if (wcslen(Argv[2]) >= MAX_POOL)
-        goto cleanupArgv;
+        goto cleanup;
     if (wcslen(Argv[3]) >= MAX_ADAPTER_NAME)
-        goto cleanupArgv;
+        goto cleanup;
     GUID RequestedGUID;
     if (Argc > 4 && FAILED(CLSIDFromString(Argv[4], &RequestedGUID)))
-        goto cleanupArgv;
+        goto cleanup;
+
     WINTUN_ADAPTER *Adapter;
     BOOL RebootRequired = FALSE;
-    Init(!!nCmdShow);
     DWORD Result = WintunCreateAdapter(Argv[2], Argv[3], Argc > 4 ? &RequestedGUID : NULL, &Adapter, &RebootRequired);
-    Done();
     if (Result != ERROR_SUCCESS)
-        goto cleanupArgv;
-
+        goto cleanup;
     WintunFreeAdapter(Adapter);
-cleanupArgv:
-    LocalFree(Argv);
+
+cleanup:
+    Done();
 }
 
 __declspec(dllexport) VOID __stdcall DeleteAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
@@ -190,22 +172,20 @@ __declspec(dllexport) VOID __stdcall DeleteAdapter(HWND hwnd, HINSTANCE hinst, L
     UNREFERENCED_PARAMETER(hwnd);
     UNREFERENCED_PARAMETER(hinst);
     UNREFERENCED_PARAMETER(lpszCmdLine);
+    UNREFERENCED_PARAMETER(nCmdShow);
 
-    int Argc;
-    LPWSTR *Argv = CommandLineToArgvW(GetCommandLineW(), &Argc);
+    Init();
     if (Argc < 3)
-        goto cleanupArgv;
+        goto cleanup;
 
     WINTUN_ADAPTER Adapter = { 0 };
     if (FAILED(CLSIDFromString(Argv[2], &Adapter.CfgInstanceID)))
-        goto cleanupArgv;
+        goto cleanup;
     BOOL RebootRequired = FALSE;
-    Init(!!nCmdShow);
     WintunDeleteAdapter(&Adapter, &RebootRequired);
-    Done();
 
-cleanupArgv:
-    LocalFree(Argv);
+cleanup:
+    Done();
 }
 
 #endif
