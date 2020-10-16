@@ -110,8 +110,8 @@
     <InstallerVersionMin Condition="'$(Platform)'=='ARM64'">500</InstallerVersionMin>
   </PropertyGroup>
   <PropertyGroup>
-    <OutDir>..\$(WintunPlatform)\$(Configuration)\</OutDir>
-    <IntDir>..\$(WintunPlatform)\$(Configuration)\$(ProjectName)-intermediate\</IntDir>
+    <OutDir>..\$(Configuration)\$(WintunPlatform)\</OutDir>
+    <IntDir>..\$(Configuration)\$(WintunPlatform)\$(ProjectName)-intermediate\</IntDir>
     <CodeAnalysisRuleSet>NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <RunCodeAnalysis>true</RunCodeAnalysis>
     <LocalDebuggerCommand>rundll32.exe</LocalDebuggerCommand>
@@ -122,8 +122,8 @@
     <WixArch Condition="'$(Platform)'=='ARM64'">arm64</WixArch>
     <WixCandleFlags>$(WixCandleFlags) -nologo -arch $(WixArch) -dWINTUN_PLATFORM=$(WintunPlatform) -dWINTUN_VERSION=$(WintunVersion) -dINSTALLER_VERSION_MIN=$(InstallerVersionMin) -sw1086</WixCandleFlags>
     <WixLightFlags>$(WixLightFlags) -nologo -b output_dir="$(OutDir.TrimEnd('\'))" -spdb -sw1076 -sw1079</WixLightFlags>
-    <WixLightFlags Condition="'$(Platform)'=='x64'">$(WixLightFlags) -b output_dir_wow64="..\x86\$(Configuration)"</WixLightFlags>
-    <WixLightFlags Condition="'$(Platform)'=='ARM64'">$(WixLightFlags) -b output_dir_wow64="..\arm\$(Configuration)"</WixLightFlags>
+    <WixLightFlags Condition="'$(Platform)'=='x64'">$(WixLightFlags) -b output_dir_wow64="..\$(Configuration)\x86"</WixLightFlags>
+    <WixLightFlags Condition="'$(Platform)'=='ARM64'">$(WixLightFlags) -b output_dir_wow64="..\$(Configuration)\arm"</WixLightFlags>
     <WixOutputPath>$(OutDir)</WixOutputPath>
     <WixOutputName>wintun</WixOutputName>
     <WixOutputExt>.msm</WixOutputExt>
@@ -136,12 +136,12 @@
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='Win32' Or '$(Platform)'=='x64' Or '$(Configuration)'=='Debug'">HAVE_EV;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="Exists('..\$(WintunPlatform)\$(Configuration)\whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="Exists('$(OutDir)whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <ResourceCompile>
-      <AdditionalIncludeDirectories>..\$(WintunPlatform)\$(Configuration);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\$(Configuration)\$(WintunPlatform);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions Condition="'$(Platform)'=='Win32' Or '$(Platform)'=='x64' Or '$(Configuration)'=='Debug'">HAVE_EV;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="Exists('..\$(WintunPlatform)\$(Configuration)\whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="Exists('$(OutDir)whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
       <ModuleDefinitionFile>exports.def</ModuleDefinitionFile>

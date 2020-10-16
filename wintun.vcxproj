@@ -106,8 +106,8 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
     <_ProjectFileVersion>15.0.28127.55</_ProjectFileVersion>
-    <IntDir>$(WintunPlatform)\$(ConfigurationName)\</IntDir>
-    <OutDir>$(WintunPlatform)\$(ConfigurationName)\</OutDir>
+    <IntDir>$(ConfigurationName)\$(WintunPlatform)\</IntDir>
+    <OutDir>$(ConfigurationName)\$(WintunPlatform)\</OutDir>
     <RunCodeAnalysis>true</RunCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release'">

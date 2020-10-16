@@ -4,14 +4,14 @@
 
 # Build Output
 /dist
-/amd64/Debug
-/amd64/Release
-/arm/Debug
-/arm/Release
-/arm64/Debug
-/arm64/Release
-/x86/Debug
-/x86/Release
+/Debug/amd64
+/Debug/arm
+/Debug/arm64
+/Debug/x86
+/Release/amd64
+/Release/arm
+/Release/arm64
+/Release/x86
 
 # Static Driver Verifier Output
 /sdv

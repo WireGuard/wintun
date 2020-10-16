@@ -134,8 +134,8 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <OutDir>..\$(WintunPlatform)\$(Configuration)\</OutDir>
-    <IntDir>..\$(WintunPlatform)\$(Configuration)\$(ProjectName)-intermediate\</IntDir>
+    <OutDir>..\$(Configuration)\$(WintunPlatform)\</OutDir>
+    <IntDir>..\$(Configuration)\$(WintunPlatform)\$(ProjectName)-intermediate\</IntDir>
     <TargetName>wintun</TargetName>
     <CodeAnalysisRuleSet>NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <RunCodeAnalysis>true</RunCodeAnalysis>
@@ -144,14 +144,14 @@
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='Win32' Or '$(Platform)'=='x64' Or '$(Configuration)|$(Platform)'=='Debug|ARM64'">HAVE_EV;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="Exists('..\$(WintunPlatform)\$(Configuration)\whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="Exists('$(OutDir)whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
     </ClCompile>
     <ResourceCompile>
-      <AdditionalIncludeDirectories>..\$(WintunPlatform)\$(Configuration);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\$(Configuration)\$(WintunPlatform);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions Condition="'$(Platform)'=='Win32' Or '$(Platform)'=='x64' Or '$(Configuration)|$(Platform)'=='Debug|ARM64'">HAVE_EV;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="Exists('..\$(WintunPlatform)\$(Configuration)\whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="Exists('$(OutDir)whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
       <AdditionalDependencies>Bcrypt.lib;Cfgmgr32.lib;Crypt32.lib;Iphlpapi.lib;newdev.lib;ntdll.lib;Setupapi.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>

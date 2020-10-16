@@ -15,10 +15,10 @@
   <Target Name="Build" DependsOnTargets="Driver-x86;Driver-amd64;Driver-arm64" />
   <Target Name="MSM" DependsOnTargets="MSM-x86;MSM-amd64;MSM-arm64" />
   <Target Name="Clean">
-    <RemoveDir Directories="amd64\Release\" />
-    <RemoveDir Directories="arm\Release\" />
-    <RemoveDir Directories="arm64\Release\" />
-    <RemoveDir Directories="x86\Release\" />
+    <RemoveDir Directories="Release\amd64\" />
+    <RemoveDir Directories="Release\arm\" />
+    <RemoveDir Directories="Release\arm64\" />
+    <RemoveDir Directories="Release\x86\" />
     <RemoveDir Directories="$(SDVDir)" />
     <RemoveDir Directories="$(DistributionDir)" />
     <Delete Files="smvbuild.log;smvstats.txt;wintun.DVL.XML" />
@@ -33,17 +33,17 @@
     <DriverInputs>atomic.h;undocumented.h;wintun.c;wintun.inf;wintun.props;wintun.rc;wintun.vcxproj;$(DriverInputs)</DriverInputs>
   </PropertyGroup>
   <Target Name="Driver-x86"
-    Outputs="x86\Release\wintun\wintun.sys;x86\Release\wintun\wintun.inf;x86\Release\wintun\wintun.cat"
+    Outputs="Release\x86\wintun\wintun.sys;Release\x86\wintun\wintun.inf;Release\x86\wintun\wintun.cat"
     Inputs="$(DriverInputs)">
     <MSBuild Projects="wintun.vcxproj" Targets="Build" Properties="Configuration=Release;Platform=Win32" />
   </Target>
   <Target Name="Driver-amd64"
-    Outputs="amd64\Release\wintun\wintun.sys;amd64\Release\wintun\wintun.inf;amd64\Release\wintun\wintun.cat"
+    Outputs="Release\amd64\wintun\wintun.sys;Release\amd64\wintun\wintun.inf;Release\amd64\wintun\wintun.cat"
     Inputs="$(DriverInputs)">
     <MSBuild Projects="wintun.vcxproj" Targets="Build" Properties="Configuration=Release;Platform=x64" />
   </Target>
   <Target Name="Driver-arm64"
-    Outputs="arm64\Release\wintun\wintun.sys;arm64\Release\wintun\wintun.inf;arm64\Release\wintun\wintun.cat"
+    Outputs="Release\arm64\wintun\wintun.sys;Release\arm64\wintun\wintun.inf;Release\arm64\wintun\wintun.cat"
     Inputs="$(DriverInputs)">
     <MSBuild Projects="wintun.vcxproj" Targets="Build" Properties="Configuration=Release;Platform=ARM64" />
   </Target>
@@ -51,7 +51,7 @@
   <!--
     Static Driver Verifier
   -->
-  <Target Name="SDV" Outputs="$(SDVDir)SDV.DVL.xml;amd64\Release\vc.nativecodeanalysis.all.xml">
+  <Target Name="SDV" Outputs="$(SDVDir)SDV.DVL.xml;Release\amd64\vc.nativecodeanalysis.all.xml">
     <MSBuild Projects="wintun.vcxproj" Targets="sdv" Properties="Inputs=/check:*;Configuration=Release;Platform=x64" />
   </Target>
   <Target Name="SDVView">
@@ -63,7 +63,7 @@
   -->
   <Target Name="DVL" DependsOnTargets="SDV"
     Outputs="wintun.DVL.XML"
-    Inputs="$(SDVDir)SDV.DVL.xml;amd64\Release\vc.nativecodeanalysis.all.xml">
+    Inputs="$(SDVDir)SDV.DVL.xml;Release\amd64\vc.nativecodeanalysis.all.xml">
     <MSBuild Projects="wintun.vcxproj" Targets="dvl" Properties="Configuration=Release;Platform=x64" />
   </Target>
 
