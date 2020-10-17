@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "api.h"
+#include "wintun.h"
 #include <Windows.h>
 
 /**

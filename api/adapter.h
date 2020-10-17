@@ -5,11 +5,9 @@
 
 #pragma once
 
-#include "api.h"
+#include "wintun.h"
 #include <SetupAPI.h>
-#include <IPExport.h>
 
-#define MAX_POOL 256
 #define MAX_INSTANCE_ID MAX_PATH /* TODO: Is MAX_PATH always enough? */
 
 typedef struct _SP_DEVINFO_DATA_LIST
@@ -80,6 +78,9 @@ AdapterInit();
 void
 AdapterCleanup();
 
+/**
+ * Wintun adapter descriptor.
+ */
 typedef struct _WINTUN_ADAPTER
 {
     GUID CfgInstanceID;
@@ -90,107 +91,13 @@ typedef struct _WINTUN_ADAPTER
 } WINTUN_ADAPTER;
 
 /**
- * Releases Wintun adapter resources.
- *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
+ * @copydoc WINTUN_FREE_ADAPTER_FUNC
  */
 void WINAPI
 WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter);
 
 /**
- * Finds a Wintun adapter by its name.
- *
- * @param Pool          Name of the adapter pool.
- *
- * @param Name          Adapter name.
- *
- * @param Adapter       Pointer to a handle to receive the adapter handle. Must be released with WintunFreeAdapter.
- *
- * @return ERROR_SUCCESS on success; ERROR_FILE_NOT_FOUND if adapter with given name is not found; ERROR_ALREADY_EXISTS
- * if adapter is found but not a Wintun-class or not a member of the pool; Win32 error code otherwise
- */
-WINTUN_STATUS WINAPI
-WintunGetAdapter(
-    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
-    _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
-    _Out_ WINTUN_ADAPTER **Adapter);
-
-/**
- * Returns the name of the Wintun adapter.
- *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
- *
- * @param Name          Pointer to a string to receive adapter name
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
-WINTUN_STATUS WINAPI
-WintunGetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_ADAPTER_NAME) WCHAR *Name);
-
-/**
- * Sets name of the Wintun adapter.
- *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
- *
- * @param Name          Adapter name
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
-WINTUN_STATUS WINAPI
-WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name);
-
-/**
- * Returns the GUID of the adapter.
- *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
- *
- * @param Guid          Pointer to GUID to receive adapter ID.
- */
-void WINAPI
-WintunGetAdapterGUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ GUID *Guid);
-
-/**
- * Returns the LUID of the adapter.
- *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
- *
- * @param Luid          Pointer to LUID to receive adapter LUID.
- */
-void WINAPI
-WintunGetAdapterLUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ LUID *Luid);
-
-/**
- * Returns a handle to the adapter device object.
- *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
- *
- * @param Handle        Pointer to receive the adapter device object handle. Must be released with CloseHandle.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
-WINTUN_STATUS WINAPI
-WintunGetAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *Handle);
-
-/**
- * Creates a Wintun adapter.
- *
- * @param Pool          Name of the adapter pool.
- *
- * @param Name          The requested name of the adapter.
- *
- * @param RequestedGUID  The GUID of the created network adapter, which then influences NLA generation
- *                      deterministically. If it is set to NULL, the GUID is chosen by the system at random, and hence
- *                      a new NLA entry is created for each new adapter. It is called "requested" GUID because the API
- *                      it uses is completely undocumented, and so there could be minor interesting complications with
- *                      its usage.
- *
- * @param Adapter       Pointer to a handle to receive the adapter handle. Must be released with
- *                      WintunFreeAdapter.
- *
- * @param RebootRequired  Pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot. Must be
- *                      initialised to FALSE manually before this function is called.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ * @copydoc WINTUN_CREATE_ADAPTER_FUNC
  */
 WINTUN_STATUS WINAPI
 WintunCreateAdapter(
@@ -201,31 +108,8 @@ WintunCreateAdapter(
     _Inout_ BOOL *RebootRequired);
 
 /**
- * Deletes a Wintun adapter.
- *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
- *
- * @param RebootRequired  Pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot. Must be
- *                      initialised to FALSE manually before this function is called.
- *
- * @return ERROR_SUCCESS on success or the adapter was not found; Win32 error code otherwise.
+ * @copydoc WINTUN_DELETE_ADAPTER_FUNC
  */
 WINTUN_STATUS WINAPI
 WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired);
 
-typedef BOOL(CALLBACK *WINTUN_ENUM_FUNC)(_In_ const WINTUN_ADAPTER *Adapter, _In_ LPARAM Param);
-
-/**
- * Enumerates all Wintun adapters.
- *
- * @param Pool          Name of the adapter pool.
- *
- * @param Func          Callback function. To continue enumeration, the callback function must return TRUE; to stop
- *                      enumeration, it must return FALSE.
- *
- * @param Param         An application-defined value to be passed to the callback function.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
-WINTUN_STATUS WINAPI
-WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUM_FUNC Func, _In_ LPARAM Param);

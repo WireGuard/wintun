@@ -13,6 +13,7 @@
 #include "nci.h"
 #include "registry.h"
 #include "resource.h"
+#include "wintun.h"
 
 #include <bcrypt.h>
 #include <cfgmgr32.h>

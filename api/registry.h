@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "api.h"
+#include "wintun.h"
 
 #define MAX_REG_PATH \
     256 /* Maximum registry path length \

@@ -5,20 +5,14 @@
 
 #pragma once
 
-#include <Windows.h>
-
-typedef enum _WINTUN_LOGGER_LEVEL
-{
-    WINTUN_LOG_INFO = 0,
-    WINTUN_LOG_WARN,
-    WINTUN_LOG_ERR
-} WINTUN_LOGGER_LEVEL;
-
-typedef BOOL(CALLBACK *WINTUN_LOGGER_FUNC)(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Message);
+#include "wintun.h"
 
 extern WINTUN_LOGGER_FUNC Logger;
 
-VOID WINAPI
+/**
+ * @copydoc WINTUN_SET_LOGGER_FUNC
+ */
+void WINAPI
 WintunSetLogger(_In_ WINTUN_LOGGER_FUNC NewLogger);
 
 _Post_equals_last_error_ DWORD

@@ -202,6 +202,7 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="registry.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="wintun.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="api.c" />
