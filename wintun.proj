@@ -13,7 +13,6 @@
   <Import Project="wintun.vcxproj.user" Condition="exists('wintun.vcxproj.user')" />
 
   <Target Name="Build" DependsOnTargets="Driver-x86;Driver-amd64;Driver-arm64" />
-  <Target Name="MSM" DependsOnTargets="MSM-x86;MSM-amd64;MSM-arm64" />
   <Target Name="Clean">
     <RemoveDir Directories="Release\amd64\" />
     <RemoveDir Directories="Release\arm\" />
@@ -68,18 +67,50 @@
   </Target>
 
   <!--
-    MSM Building
+    wintun.dll Building
   -->
-  <Target Name="MSM-x86"
-    Outputs="$(DistributionDir)wintun-x86-$(WintunVersionStr).msm">
-    <MSBuild Projects="installer\installer.vcxproj" Targets="MSM" Properties="Configuration=Release;Platform=Win32" />
+  <Target Name="Dll-x86"
+    Outputs="Release\x86\wintun.dll"
+    DependsOnTargets="Dll-amd64;Dll-arm64">
+    <MSBuild Projects="api\api.vcxproj" Targets="Build" Properties="Configuration=Release;Platform=Win32" />
   </Target>
-  <Target Name="MSM-amd64"
-    Outputs="$(DistributionDir)wintun-amd64-$(WintunVersionStr).msm">
-    <MSBuild Projects="installer\installer.vcxproj" Targets="MSM" Properties="Configuration=Release;Platform=x64" />
+  <Target Name="Dll-amd64"
+    Outputs="Release\amd64\wintun.dll">
+    <MSBuild Projects="api\api.vcxproj" Targets="Build" Properties="Configuration=Release;Platform=x64" />
   </Target>
-  <Target Name="MSM-arm64"
-    Outputs="$(DistributionDir)wintun-arm64-$(WintunVersionStr).msm">
-    <MSBuild Projects="installer\installer.vcxproj" Targets="MSM" Properties="Configuration=Release;Platform=ARM64" />
+  <Target Name="Dll-arm"
+    Outputs="Release\arm\wintun.dll"
+    DependsOnTargets="Dll-arm64">
+    <MSBuild Projects="api\api.vcxproj" Targets="Build" Properties="Configuration=Release;Platform=ARM" />
+  </Target>
+  <Target Name="Dll-arm64"
+    Outputs="Release\arm64\wintun.dll">
+    <MSBuild Projects="api\api.vcxproj" Targets="Build" Properties="Configuration=Release;Platform=ARM64" />
+  </Target>
+
+  <!--
+    Zip Building
+  -->
+  <PropertyGroup>
+    <ZipTargetPath>$(DistributionDir)wintun-$(WintunVersionStr).zip</ZipTargetPath>
+    <ZipIntDir>$(DistributionDir).tmp\</ZipIntDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <ZipFilesSrc Include="COPYING"                  /><ZipFilesDst Include="$(ZipIntDir)COPYING"              />
+    <ZipFilesSrc Include="README.md"                /><ZipFilesDst Include="$(ZipIntDir)README.md"            />
+    <ZipFilesSrc Include="api\wintun.h"             /><ZipFilesDst Include="$(ZipIntDir)include\wintun.h"     />
+    <ZipFilesSrc Include="Release\amd64\wintun.dll" /><ZipFilesDst Include="$(ZipIntDir)bin\amd64\wintun.dll" />
+    <ZipFilesSrc Include="Release\arm\wintun.dll"   /><ZipFilesDst Include="$(ZipIntDir)bin\arm\wintun.dll"   />
+    <ZipFilesSrc Include="Release\arm64\wintun.dll" /><ZipFilesDst Include="$(ZipIntDir)bin\arm64\wintun.dll" />
+    <ZipFilesSrc Include="Release\x86\wintun.dll"   /><ZipFilesDst Include="$(ZipIntDir)bin\x86\wintun.dll"   />
+  </ItemGroup>
+  <Target Name="Zip"
+    Inputs="@(ZipFilesSrc)"
+    Outputs="$(ZipTargetPath)"
+    DependsOnTargets="Dll-x86;Dll-amd64;Dll-arm;Dll-arm64">
+    <RemoveDir Directories="$(ZipIntDir)" />
+    <Copy SourceFiles="@(ZipFilesSrc)" DestinationFiles="@(ZipFilesDst)" />
+    <ZipDirectory DestinationFile="$(ZipTargetPath)" Overwrite="true" SourceDirectory="$(ZipIntDir)" />
+    <RemoveDir Directories="$(ZipIntDir)" />
   </Target>
 </Project>
