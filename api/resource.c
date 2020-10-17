@@ -6,7 +6,7 @@
 #include "pch.h"
 
 WINTUN_STATUS
-ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const VOID **Address, _Out_ DWORD *Size)
+ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const void **Address, _Out_ DWORD *Size)
 {
     HRSRC FoundResource = FindResourceW(ResourceModule, ResourceName, RT_RCDATA);
     if (!FoundResource)
@@ -29,7 +29,7 @@ ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const VOID **Address,
 WINTUN_STATUS
 ResourceCopyToFile(_In_z_ const WCHAR *DestinationPath, _In_z_ const WCHAR *ResourceName)
 {
-    const VOID *LockedResource;
+    const void *LockedResource;
     DWORD SizeResource;
     DWORD Result = ResourceGetAddress(ResourceName, &LockedResource, &SizeResource);
     if (Result != ERROR_SUCCESS)

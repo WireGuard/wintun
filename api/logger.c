@@ -15,7 +15,7 @@ NopLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
 
 WINTUN_LOGGER_FUNC Logger = NopLogger;
 
-VOID CALLBACK
+void CALLBACK
 WintunSetLogger(_In_ WINTUN_LOGGER_FUNC NewLogger)
 {
     Logger = NewLogger;
@@ -30,7 +30,7 @@ LoggerError(_In_z_ const WCHAR *Prefix, _In_ DWORD Error)
         NULL,
         HRESULT_FROM_SETUPAPI(Error),
         MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-        (VOID *)&SystemMessage,
+        (void *)&SystemMessage,
         0,
         NULL);
     FormatMessageW(
@@ -39,7 +39,7 @@ LoggerError(_In_z_ const WCHAR *Prefix, _In_ DWORD Error)
         SystemMessage ? L"%1: %3(Code 0x%2!08X!)" : L"%1: Code 0x%2!08X!",
         0,
         0,
-        (VOID *)&FormattedMessage,
+        (void *)&FormattedMessage,
         0,
         (va_list *)(DWORD_PTR[]){ (DWORD_PTR)Prefix, (DWORD_PTR)Error, (DWORD_PTR)SystemMessage });
     if (FormattedMessage)

@@ -26,7 +26,8 @@ DriverIsOurDrvInfoDetail(_In_ const SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData)
 
 #if defined(HAVE_EV) || defined(HAVE_WHQL)
 
-WINTUN_STATUS DriverRemoveAllOurs(VOID)
+WINTUN_STATUS
+DriverRemoveAllOurs(void)
 {
     HDEVINFO DevInfo = SetupDiGetClassDevsW(&GUID_DEVCLASS_NET, NULL, NULL, 0);
     if (!DevInfo)

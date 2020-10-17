@@ -29,7 +29,7 @@ ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_ const WCHAR *LogLine)
     return TRUE;
 }
 
-static BOOL ElevateToSystem(VOID)
+static BOOL ElevateToSystem(void)
 {
     HANDLE CurrentProcessToken, ThreadToken, ProcessSnapshot, WinlogonProcess, WinlogonToken, DuplicatedToken;
     PROCESSENTRY32W ProcessEntry = { .dwSize = sizeof(PROCESSENTRY32W) };
@@ -126,14 +126,14 @@ cleanup:
 static int Argc;
 static WCHAR **Argv;
 
-static void Init(VOID)
+static void Init(void)
 {
     WintunSetLogger(ConsoleLogger);
     Argv = CommandLineToArgvW(GetCommandLineW(), &Argc);
     ElevateToSystem();
 }
 
-static void Done(VOID)
+static void Done(void)
 {
     RevertToSelf();
     LocalFree(Argv);

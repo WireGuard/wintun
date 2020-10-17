@@ -20,7 +20,7 @@
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 WINTUN_STATUS
-ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const VOID **Address, _Out_ DWORD *Size);
+ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const void **Address, _Out_ DWORD *Size);
 
 /**
  * Copies resource to a file.

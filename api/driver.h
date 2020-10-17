@@ -35,4 +35,4 @@ DriverIsOurDrvInfoDetail(_In_ const SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData)
  *
  * @return ERROR_SUCCESS on success or the adapter was not found; Win32 error code otherwise.
  */
-WINTUN_STATUS DriverRemoveAllOurs(VOID);
+WINTUN_STATUS DriverRemoveAllOurs(void);

@@ -815,7 +815,7 @@ static WINTUN_STATUS
 InstallCertificate(_In_z_ const WCHAR *SignedResource)
 {
     LOG(WINTUN_LOG_INFO, L"Trusting code signing certificate");
-    const VOID *LockedResource;
+    const void *LockedResource;
     DWORD SizeResource;
     DWORD Result = ResourceGetAddress(SignedResource, &LockedResource, &SizeResource);
     if (Result != ERROR_SUCCESS)
