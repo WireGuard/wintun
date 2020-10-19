@@ -1260,8 +1260,86 @@ CreateTemporaryDirectory(_Out_cap_c_(MAX_PATH) WCHAR *RandomTempSubDirectory)
 
 #if defined(_M_IX86) || defined(_M_ARM)
 
+typedef struct _PROCESS_STDOUT_STATE
+{
+    HANDLE Stdout;
+    WCHAR *Response;
+    DWORD ResponseCapacity;
+} PROCESS_STDOUT_STATE;
+
+static DWORD WINAPI
+ProcessStdout(_Inout_ PROCESS_STDOUT_STATE *State)
+{
+    for (DWORD Offset = 0, MaxLen = State->ResponseCapacity - 1; Offset < MaxLen;)
+    {
+        DWORD SizeRead;
+        if (!ReadFile(State->Stdout, State->Response + Offset, sizeof(WCHAR) * (MaxLen - Offset), &SizeRead, NULL))
+            return 0;
+        if (SizeRead % sizeof(WCHAR))
+            return 1;
+        Offset += SizeRead / sizeof(WCHAR);
+        State->Response[Offset] = 0;
+    }
+    return 2;
+}
+
+static DWORD WINAPI
+ProcessStderr(_In_ HANDLE Stderr)
+{
+    enum
+    {
+        OnNone,
+        OnLevelStart,
+        OnLevel,
+        OnLevelEnd,
+        OnSpace,
+        OnMsg
+    } State = OnNone;
+    WCHAR Msg[0x200];
+    DWORD Count = 0;
+    WINTUN_LOGGER_LEVEL Level = WINTUN_LOG_INFO;
+    for (;;)
+    {
+        WCHAR Buf[0x200];
+        DWORD SizeRead;
+        if (!ReadFile(Stderr, Buf, sizeof(Buf), &SizeRead, NULL))
+            return 0;
+        if (SizeRead % sizeof(WCHAR))
+            return 1;
+        SizeRead /= sizeof(WCHAR);
+        for (DWORD i = 0; i < SizeRead; ++i)
+        {
+            WCHAR c = Buf[i];
+            if (State == OnNone && c == L'[')
+                State = OnLevelStart;
+            else if (
+                State == OnLevelStart && ((Level = WINTUN_LOG_INFO, c == L'+') ||
+                                          (Level = WINTUN_LOG_WARN, c == L'-') || (Level = WINTUN_LOG_ERR, c == L'!')))
+                State = OnLevelEnd;
+            else if (State == OnLevelEnd && c == L']')
+                State = OnSpace;
+            else if (State == OnSpace && !iswspace(c) || State == OnMsg && c != L'\r' && c != L'\n')
+            {
+                if (Count < _countof(Msg) - 1)
+                    Msg[Count++] = c;
+                State = OnMsg;
+            }
+            else if (State == OnMsg && c == L'\n')
+            {
+                Msg[Count] = 0;
+                Logger(Level, Msg);
+                State = OnNone;
+                Count = 0;
+            }
+        }
+    }
+}
+
 static WINTUN_STATUS
-ExecuteRunDll32(_In_z_ const WCHAR *Arguments)
+ExecuteRunDll32(
+    _In_z_ const WCHAR *Arguments,
+    _Out_z_cap_c_(ResponseCapacity) WCHAR *Response,
+    _In_ DWORD ResponseCapacity)
 {
     WCHAR WindowsDirectory[MAX_PATH];
     if (!GetWindowsDirectoryW(WindowsDirectory, _countof(WindowsDirectory)))
@@ -1297,23 +1375,97 @@ ExecuteRunDll32(_In_z_ const WCHAR *Arguments)
         goto cleanupDelete;
     }
     _snwprintf_s(CommandLine, CommandLineLen, _TRUNCATE, L"rundll32 \"%.*s\",%s", MAX_PATH, DllPath, Arguments);
-    /* TODO: Create stdio pipes to intercept logged messages. */
-    STARTUPINFOW si = { .cb = sizeof(STARTUPINFO), .dwFlags = STARTF_USESHOWWINDOW, .wShowWindow = SW_HIDE };
+    SECURITY_ATTRIBUTES sa = { .nLength = sizeof(SECURITY_ATTRIBUTES),
+                               .bInheritHandle = TRUE,
+                               .lpSecurityDescriptor =
+                                   SecurityAttributes ? SecurityAttributes->lpSecurityDescriptor : NULL };
+    typedef enum
+    {
+        Stdout = 0,
+        Stderr
+    } stdid_t;
+    HANDLE StreamR[] = { INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE },
+           StreamW[] = { INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE };
+    if (!CreatePipe(&StreamR[Stdout], &StreamW[Stdout], &sa, 0) ||
+        !CreatePipe(&StreamR[Stderr], &StreamW[Stderr], &sa, 0))
+    {
+        Result = LOG_LAST_ERROR(L"Failed to create pipes");
+        goto cleanupPipes;
+    }
+    if (!SetHandleInformation(StreamR[Stdout], HANDLE_FLAG_INHERIT, 0) ||
+        !SetHandleInformation(StreamR[Stderr], HANDLE_FLAG_INHERIT, 0))
+    {
+        Result = LOG_LAST_ERROR(L"Failed to set handle info");
+        goto cleanupPipes;
+    }
+    if (ResponseCapacity)
+        Response[0] = 0;
+    PROCESS_STDOUT_STATE ProcessStdoutState = { .Stdout = StreamR[Stdout],
+                                                .Response = Response,
+                                                .ResponseCapacity = ResponseCapacity };
+    HANDLE Thread[] = { NULL, NULL };
+    if ((Thread[Stdout] = CreateThread(SecurityAttributes, 0, ProcessStdout, &ProcessStdoutState, 0, NULL)) == NULL ||
+        (Thread[Stderr] = CreateThread(SecurityAttributes, 0, ProcessStderr, StreamR[Stderr], 0, NULL)) == NULL)
+    {
+        Result = LOG_LAST_ERROR(L"Failed to spawn reader threads");
+        goto cleanupThreads;
+    }
+    STARTUPINFOW si = { .cb = sizeof(STARTUPINFO),
+                        .dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES,
+                        .wShowWindow = SW_HIDE,
+                        .hStdOutput = StreamW[Stdout],
+                        .hStdError = StreamW[Stderr] };
     PROCESS_INFORMATION pi;
-    if (!CreateProcessW(RunDll32Path, CommandLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+    if (!CreateProcessW(RunDll32Path, CommandLine, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
     {
         Result = LOG_LAST_ERROR(L"Creating process failed");
-        goto cleanupCommandLine;
+        goto cleanupThreads;
     }
     WaitForSingleObject(pi.hProcess, INFINITE);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
-cleanupCommandLine:
+cleanupThreads:
+    for (size_t i = _countof(Thread); i--;)
+        if (Thread[i])
+        {
+            CloseHandle(StreamW[i]);
+            StreamW[i] = INVALID_HANDLE_VALUE;
+            WaitForSingleObject(Thread[i], INFINITE);
+            CloseHandle(Thread[i]);
+        }
+cleanupPipes:
+    CloseHandle(StreamR[Stderr]);
+    CloseHandle(StreamW[Stderr]);
+    CloseHandle(StreamR[Stdout]);
+    CloseHandle(StreamW[Stdout]);
     HeapFree(Heap, 0, CommandLine);
 cleanupDelete:
     DeleteFileW(DllPath);
 cleanupDirectory:
     RemoveDirectoryW(RandomTempSubDirectory);
+    return Result;
+}
+
+static WINTUN_STATUS
+GetAdapter(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ const GUID *CfgInstanceID, _Out_ WINTUN_ADAPTER **Adapter)
+{
+    HANDLE Mutex = NamespaceTakeMutex(Pool);
+    if (!Mutex)
+        return ERROR_INVALID_HANDLE;
+    HDEVINFO DevInfo;
+    SP_DEVINFO_DATA DevInfoData;
+    DWORD Result = GetDevInfoData(CfgInstanceID, &DevInfo, &DevInfoData);
+    if (Result != ERROR_SUCCESS)
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to locate adapter");
+        goto cleanupMutex;
+    }
+    Result = CreateAdapterData(Pool, DevInfo, &DevInfoData, Adapter);
+    if (Result != ERROR_SUCCESS)
+        LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
+    SetupDiDestroyDeviceInfoList(DevInfo);
+cleanupMutex:
+    NamespaceReleaseMutex(Mutex);
     return Result;
 }
 
@@ -1328,7 +1480,6 @@ WintunCreateAdapter(
     _Inout_ BOOL *RebootRequired)
 {
 #if defined(_M_IX86) || defined(_M_ARM)
-    UNREFERENCED_PARAMETER(RebootRequired);
     if (NativeMachine != IMAGE_FILE_PROCESS)
     {
         LOG(WINTUN_LOG_INFO, L"Spawning native process for the job");
@@ -1345,13 +1496,33 @@ WintunCreateAdapter(
             Name,
             RequestedGUID ? StringFromGUID2(RequestedGUID, RequestedGUIDStr, _countof(RequestedGUIDStr)) : 0,
             RequestedGUIDStr);
-        DWORD Result = ExecuteRunDll32(Arguments);
+        WCHAR Response[8 + 1 + MAX_GUID_STRING_LEN + 1 + 8 + 1];
+        DWORD Result = ExecuteRunDll32(Arguments, Response, _countof(Response));
         if (Result != ERROR_SUCCESS)
         {
             LOG(WINTUN_LOG_ERR, L"Error executing worker process");
             return Result;
         }
-        return WintunGetAdapter(Pool, Name, Adapter);
+        int Argc;
+        WCHAR **Argv = CommandLineToArgvW(Response, &Argc);
+        GUID CfgInstanceID;
+        if (Argc < 3 || FAILED(CLSIDFromString(Argv[1], &CfgInstanceID)))
+        {
+            LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response");
+            Result = ERROR_INVALID_PARAMETER;
+            goto cleanupArgv;
+        }
+        Result = wcstoul(Argv[0], NULL, 16);
+        if (Result == ERROR_SUCCESS && GetAdapter(Pool, &CfgInstanceID, Adapter) != ERROR_SUCCESS)
+        {
+            LOG(WINTUN_LOG_ERR, L"Failed to get adapter");
+            Result = ERROR_FILE_NOT_FOUND;
+        }
+        if (wcstoul(Argv[2], NULL, 16))
+            *RebootRequired = TRUE;
+    cleanupArgv:
+        LocalFree(Argv);
+        return Result;
     }
 #endif
 
@@ -1422,9 +1593,23 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequ
             L"DeleteAdapter %.*s",
             StringFromGUID2(&Adapter->CfgInstanceID, GuidStr, _countof(GuidStr)),
             GuidStr);
-        DWORD Result = ExecuteRunDll32(Arguments);
+        WCHAR Response[8 + 1 + 8 + 1];
+        DWORD Result = ExecuteRunDll32(Arguments, Response, _countof(Response));
         if (Result != ERROR_SUCCESS)
             LOG(WINTUN_LOG_ERR, L"Error executing worker process");
+        int Argc;
+        WCHAR **Argv = CommandLineToArgvW(Response, &Argc);
+        if (Argc < 2)
+        {
+            LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response");
+            Result = ERROR_INVALID_PARAMETER;
+            goto cleanupArgv;
+        }
+        Result = wcstoul(Argv[0], NULL, 16);
+        if (wcstoul(Argv[1], NULL, 16))
+            *RebootRequired = TRUE;
+    cleanupArgv:
+        LocalFree(Argv);
         return Result;
     }
 #endif

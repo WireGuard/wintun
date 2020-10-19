@@ -206,6 +206,8 @@ typedef BOOL(CALLBACK *WINTUN_LOGGER_FUNC)(_In_ WINTUN_LOGGER_LEVEL Level, _In_z
 /**
  * Sets logger callback function.
  *
- * @param NewLogger     Pointer to callback function to use as a new global logger.
+ * @param NewLogger     Pointer to callback function to use as a new global logger. NewLogger may be called from various
+ *                      threads concurrently. Should the logging require serialization, you must handle serialization in
+ *                      NewLogger.
  */
 typedef void(WINAPI *WINTUN_SET_LOGGER_FUNC)(_In_ WINTUN_LOGGER_FUNC NewLogger);

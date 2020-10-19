@@ -5,7 +5,34 @@
 
 #include "pch.h"
 
-#if defined(_M_AMD64) || defined(_M_ARM64)
+#define EXPORT comment(linker, "/EXPORT:" __FUNCTION__ "=" __FUNCDNAME__)
+
+#if defined(_M_AMD64) || defined(_M_ARM64) || defined(_DEBUG)
+
+static DWORD
+WriteFormatted(_In_ DWORD StdHandle, _In_z_ const WCHAR *Template, ...)
+{
+    WCHAR *FormattedMessage = NULL;
+    DWORD SizeWritten;
+    va_list Arguments;
+    va_start(Arguments, Template);
+    WriteFile(
+        GetStdHandle(StdHandle),
+        FormattedMessage,
+        sizeof(WCHAR) * FormatMessageW(
+                            FORMAT_MESSAGE_FROM_STRING | FORMAT_MESSAGE_ALLOCATE_BUFFER,
+                            Template,
+                            0,
+                            0,
+                            (void *)&FormattedMessage,
+                            0,
+                            &Arguments),
+        &SizeWritten,
+        NULL);
+    LocalFree(FormattedMessage);
+    va_end(Arguments);
+    return SizeWritten / sizeof(WCHAR);
+}
 
 static BOOL CALLBACK
 ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_ const WCHAR *LogLine)
@@ -14,22 +41,23 @@ ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_ const WCHAR *LogLine)
     switch (Level)
     {
     case WINTUN_LOG_INFO:
-        Template = L"[+] %s\n";
+        Template = L"[+] %1\n";
         break;
     case WINTUN_LOG_WARN:
-        Template = L"[-] %s\n";
+        Template = L"[-] %1\n";
         break;
     case WINTUN_LOG_ERR:
-        Template = L"[!] %s\n";
+        Template = L"[!] %1\n";
         break;
     default:
         return FALSE;
     }
-    fwprintf(stderr, Template, LogLine);
+    WriteFormatted(STD_ERROR_HANDLE, Template, LogLine);
     return TRUE;
 }
 
-static BOOL ElevateToSystem(void)
+static BOOL
+ElevateToSystem(void)
 {
     HANDLE CurrentProcessToken, ThreadToken, ProcessSnapshot, WinlogonProcess, WinlogonToken, DuplicatedToken;
     PROCESSENTRY32W ProcessEntry = { .dwSize = sizeof(PROCESSENTRY32W) };
@@ -126,21 +154,24 @@ cleanup:
 static int Argc;
 static WCHAR **Argv;
 
-static void Init(void)
+static void
+Init(void)
 {
     WintunSetLogger(ConsoleLogger);
     Argv = CommandLineToArgvW(GetCommandLineW(), &Argc);
     ElevateToSystem();
 }
 
-static void Done(void)
+static void
+Done(void)
 {
     RevertToSelf();
     LocalFree(Argv);
 }
 
-__declspec(dllexport) VOID __stdcall CreateAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
+VOID __stdcall CreateAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
 {
+#    pragma EXPORT
     UNREFERENCED_PARAMETER(hwnd);
     UNREFERENCED_PARAMETER(hinst);
     UNREFERENCED_PARAMETER(lpszCmdLine);
@@ -160,16 +191,23 @@ __declspec(dllexport) VOID __stdcall CreateAdapter(HWND hwnd, HINSTANCE hinst, L
     WINTUN_ADAPTER *Adapter;
     BOOL RebootRequired = FALSE;
     DWORD Result = WintunCreateAdapter(Argv[2], Argv[3], Argc > 4 ? &RequestedGUID : NULL, &Adapter, &RebootRequired);
-    if (Result != ERROR_SUCCESS)
-        goto cleanup;
+    WCHAR GuidStr[MAX_GUID_STRING_LEN];
+    WriteFormatted(
+        STD_OUTPUT_HANDLE,
+        L"%1!X! %2!.*s! %3!X!",
+        Result,
+        StringFromGUID2(Result == ERROR_SUCCESS ? &Adapter->CfgInstanceID : &GUID_NULL, GuidStr, _countof(GuidStr)),
+        GuidStr,
+        RebootRequired);
     WintunFreeAdapter(Adapter);
 
 cleanup:
     Done();
 }
 
-__declspec(dllexport) VOID __stdcall DeleteAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
+VOID __stdcall DeleteAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
 {
+#    pragma EXPORT
     UNREFERENCED_PARAMETER(hwnd);
     UNREFERENCED_PARAMETER(hinst);
     UNREFERENCED_PARAMETER(lpszCmdLine);
@@ -183,7 +221,7 @@ __declspec(dllexport) VOID __stdcall DeleteAdapter(HWND hwnd, HINSTANCE hinst, L
     if (FAILED(CLSIDFromString(Argv[2], &Adapter.CfgInstanceID)))
         goto cleanup;
     BOOL RebootRequired = FALSE;
-    WintunDeleteAdapter(&Adapter, &RebootRequired);
+    WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X! %2!X!", WintunDeleteAdapter(&Adapter, &RebootRequired), RebootRequired);
 
 cleanup:
     Done();
