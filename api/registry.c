@@ -180,7 +180,8 @@ RegistryQuery(
     _In_opt_z_ const WCHAR *Name,
     _Out_opt_ DWORD *ValueType,
     _Out_ void **Buf,
-    _Inout_ DWORD *BufLen)
+    _Inout_ DWORD *BufLen,
+    _In_ BOOL Log)
 {
     HANDLE Heap = GetProcessHeap();
     for (;;)
@@ -193,15 +194,15 @@ RegistryQuery(
             return ERROR_SUCCESS;
         HeapFree(Heap, 0, *Buf);
         if (Result != ERROR_MORE_DATA)
-            return LOG_ERROR(L"Querying value failed", Result);
+            return Log ? LOG_ERROR(L"Querying value failed", Result) : Result;
     }
 }
 
 WINTUN_STATUS
-RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ WCHAR **Value)
+RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ WCHAR **Value, _In_ BOOL Log)
 {
     DWORD ValueType, Size = 256 * sizeof(WCHAR);
-    DWORD Result = RegistryQuery(Key, Name, &ValueType, Value, &Size);
+    DWORD Result = RegistryQuery(Key, Name, &ValueType, Value, &Size, Log);
     if (Result != ERROR_SUCCESS)
         return Result;
     switch (ValueType)
@@ -236,7 +237,7 @@ RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD 
             LOG_ERROR(L"Failed to setup notification", Result);
             break;
         }
-        Result = RegistryQueryString(Key, Name, Value);
+        Result = RegistryQueryString(Key, Name, Value, FALSE);
         if (Result != ERROR_FILE_NOT_FOUND && Result != ERROR_PATH_NOT_FOUND)
             break;
         LONGLONG TimeLeft = Deadline - GetTickCount64();

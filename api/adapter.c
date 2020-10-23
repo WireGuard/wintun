@@ -391,10 +391,10 @@ GetNetCfgInstanceId(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _O
     if (Key == INVALID_HANDLE_VALUE)
         return LOG_LAST_ERROR(L"Opening device registry key failed");
     WCHAR *ValueStr;
-    DWORD Result = RegistryQueryString(Key, L"NetCfgInstanceId", &ValueStr);
+    DWORD Result = RegistryQueryString(Key, L"NetCfgInstanceId", &ValueStr, TRUE);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to query NetCfgInstanceId value", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to query NetCfgInstanceId value");
         goto cleanupKey;
     }
     if (FAILED(CLSIDFromString(ValueStr, CfgInstanceID)))
@@ -532,10 +532,10 @@ CreateAdapterData(
 
     /* Read the NetCfgInstanceId value and convert to GUID. */
     WCHAR *ValueStr;
-    Result = RegistryQueryString(Key, L"NetCfgInstanceId", &ValueStr);
+    Result = RegistryQueryString(Key, L"NetCfgInstanceId", &ValueStr, TRUE);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to query NetCfgInstanceId value", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to query NetCfgInstanceId value");
         goto cleanupAdapter;
     }
     if (FAILED(CLSIDFromString(ValueStr, &(*Adapter)->CfgInstanceID)))
@@ -928,10 +928,10 @@ GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG
     if (Result != ERROR_SUCCESS)
         return LOG_ERROR(L"Failed to open registry key", Result);
     WCHAR *Paths;
-    Result = RegistryQueryString(TcpipAdapterRegKey, L"IpConfig", &Paths);
+    Result = RegistryQueryString(TcpipAdapterRegKey, L"IpConfig", &Paths, TRUE);
     if (Result != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to query IpConfig value", Result);
+        LOG(WINTUN_LOG_ERR, L"Failed to query IpConfig value");
         goto cleanupTcpipAdapterRegKey;
     }
     if (!Paths[0])

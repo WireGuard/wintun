@@ -81,11 +81,15 @@ RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType
  *                      string from the multi-string is returned. The string must be released with
  *                      HeapFree(GetProcessHeap(), 0, Value) after use.
  *
+ * @Log                 Set to TRUE to log all failures; FALSE to skip logging the innermost errors. Skipping innermost
+ *                      errors reduces log clutter when we are using RegistryQueryString() from
+ *                      RegistryQueryStringWait() and some errors are expected to occur.
+ *
  * @return ERROR_SUCCESS on success; ERROR_INVALID_DATATYPE when the registry value is not a string; Win32 error code
  * otherwise.
  */
 WINTUN_STATUS
-RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ WCHAR **Value);
+RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ WCHAR **Value, _In_ BOOL Log);
 
 /**
  * Reads string value from registry key. It waits for the registry value to become available.
