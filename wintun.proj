@@ -112,5 +112,9 @@
     <Copy SourceFiles="@(ZipFilesSrc)" DestinationFiles="@(ZipFilesDst)" />
     <ZipDirectory DestinationFile="$(ZipTargetPath)" Overwrite="true" SourceDirectory="$(ZipIntDir)" />
     <RemoveDir Directories="$(ZipIntDir)" />
+    <GetFileHash Files="$(ZipTargetPath)" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Items" ItemName="InstallerLibraryHash" />
+    </GetFileHash>
+    <Message Text="SHA256(&quot;$(ZipTargetPath)&quot;) = @(InstallerLibraryHash->Metadata('FileHash')->ToLower())"/>
   </Target>
 </Project>
