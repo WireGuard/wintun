@@ -211,3 +211,126 @@ typedef BOOL(CALLBACK *WINTUN_LOGGER_FUNC)(_In_ WINTUN_LOGGER_LEVEL Level, _In_z
  *                      NewLogger.
  */
 typedef void(WINAPI *WINTUN_SET_LOGGER_FUNC)(_In_ WINTUN_LOGGER_FUNC NewLogger);
+
+/**
+ * Minimum ring capacity.
+ */
+#define WINTUN_MIN_RING_CAPACITY 0x20000 /* 128kiB */
+
+/**
+ * Maximum ring capacity.
+ */
+#define WINTUN_MAX_RING_CAPACITY 0x4000000 /* 64MiB */
+
+/**
+ * A handle representing Wintun session
+ */
+typedef void *WINTUN_SESSION_HANDLE;
+
+/**
+ * Starts Wintun session.
+ *
+ * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+ *
+ * @param Capacity      Rings capacity. Must be between WINTUN_MIN_RING_CAPACITY and WINTUN_MAX_RING_CAPACITY (incl.)
+ *                      Must be a power of two.
+ *
+ * @param Session       Pointer to a variable to receive Wintun session handle
+ *
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ */
+typedef WINTUN_STATUS(WINAPI *WINTUN_START_SESSION_FUNC)(
+    _In_ WINTUN_ADAPTER_HANDLE Adapter,
+    _In_ DWORD Capacity,
+    _Out_ WINTUN_SESSION_HANDLE *Session);
+
+/**
+ * Ends Wintun session.
+ *
+ * @param Session       Wintun session handle obtained with WintunStartSession
+ */
+typedef void(WINAPI *WINTUN_END_SESSION_FUNC)(_In_ WINTUN_SESSION_HANDLE Session);
+
+/**
+ * Maximum IP packet size
+ */
+#define WINTUN_MAX_IP_PACKET_SIZE 0xFFFF
+
+/**
+ * Packet with data
+ */
+typedef struct _WINTUN_PACKET
+{
+    /**
+     * Pointer to next packet in queue
+     */
+    struct _WINTUN_PACKET *Next;
+
+    /**
+     * Size of packet (max WINTUN_MAX_IP_PACKET_SIZE).
+     */
+    DWORD Size;
+
+    /**
+     * Pointer to layer 3 IPv4 or IPv6 packet
+     */
+    BYTE *Data;
+} WINTUN_PACKET;
+
+/**
+ * Peeks if there is a packet available for reading.
+ *
+ * @param Session       Wintun session handle obtained with WintunStartSession
+ *
+ * @return Non-zero if there is a packet available; zero otherwise.
+ */
+BOOL(WINAPI *WINTUN_IS_PACKET_AVAILABLE_FUNC)(_In_ WINTUN_SESSION_HANDLE Session);
+
+/**
+ * Waits for a packet to become available for reading.
+ *
+ * @param Session       Wintun session handle obtained with WintunStartSession
+ *
+ * @param Milliseconds  The time-out interval, in milliseconds. If a nonzero value is specified, the function waits
+ *                      until a packet is available or the interval elapses. If Milliseconds is zero, the function
+ *                      does not enter a wait state if a packet is not available; it always returns immediately.
+ *                      If Milliseconds is INFINITE, the function will return only when a packet is available.
+ *
+ * @return See WaitForSingleObject() for return values.
+ */
+WINTUN_STATUS(WINAPI *WINTUN_WAIT_FOR_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _In_ DWORD Milliseconds);
+
+/**
+ * Reads one or more packets.
+ *
+ * @param Session       Wintun session handle obtained with WintunStartSession
+ *
+ * @param Queue         A linked list of nodes to fill with packets read. The list must be NULL terminated. May
+ *                      contain only one node to read one packet at a time. All nodes should be big enough to
+ *                      accommodate WINTUN_MAX_IP_PACKET_SIZE packet. The Size field of every node should be
+ *                      initialized to something bigger than WINTUN_MAX_IP_PACKET_SIZE allowing post-festum
+ *                      detection which nodes were actually filled with packets.
+ *
+ * @return
+ * ERROR_HANDLE_EOF     Wintun adapter is terminating.
+ * ERROR_NO_MORE_ITEMS  Wintun buffer is exhausted.
+ * ERROR_INVALID_DATA   Wintun buffer is corrupt.
+ * ERROR_SUCCESS        Requested amount of packets was read successfully.
+ * Regardless, if the error was returned, some packets might have been read nevertheless.
+ */
+WINTUN_STATUS(WINAPI *WINTUN_RECEIVE_PACKETS_FUNC)
+(_In_ WINTUN_SESSION_HANDLE Session, _Inout_ WINTUN_PACKET *Queue);
+
+/**
+ * Sends packets.
+ *
+ * @param Session       Wintun session handle obtained with WintunStartSession
+ * 
+ * @param Queue         Linked list of packets to send. The list must be NULL terminated.
+ * 
+ * @return
+ * ERROR_HANDLE_EOF     Wintun adapter is terminating.
+ * ERROR_BUFFER_OVERFLOW  Wintun buffer is full. One or more packets were dropped.
+ * ERROR_SUCCESS        All packets were sent successfully.
+ */
+WINTUN_STATUS(WINAPI *WINTUN_SEND_PACKETS_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _In_ const WINTUN_PACKET *Queue);

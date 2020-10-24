@@ -195,6 +195,7 @@
   <ItemGroup>
     <ClInclude Include="api.h" />
     <ClInclude Include="adapter.h" />
+    <ClInclude Include="atomic.h" />
     <ClInclude Include="driver.h" />
     <ClInclude Include="logger.h" />
     <ClInclude Include="namespace.h" />
@@ -216,6 +217,7 @@
     </ClCompile>
     <ClCompile Include="registry.c" />
     <ClCompile Include="resource.c" />
+    <ClCompile Include="session.c" />
     <ClCompile Include="rundll32.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

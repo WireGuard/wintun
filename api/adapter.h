@@ -97,6 +97,12 @@ void WINAPI
 WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter);
 
 /**
+ * @copydoc WINTUN_GET_ADAPTER_DEVICE_OBJECT_FUNC
+ */
+WINTUN_STATUS WINAPI
+WintunGetAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *Handle);
+
+/**
  * @copydoc WINTUN_CREATE_ADAPTER_FUNC
  */
 WINTUN_STATUS WINAPI
@@ -112,4 +118,3 @@ WintunCreateAdapter(
  */
 WINTUN_STATUS WINAPI
 WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired);
-

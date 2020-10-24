@@ -6,6 +6,7 @@
 #pragma once
 
 #include "adapter.h"
+#include "atomic.h"
 #include "api.h"
 #include "driver.h"
 #include "logger.h"

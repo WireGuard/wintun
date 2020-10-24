@@ -55,6 +55,9 @@
     <ClInclude Include="wintun.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="atomic.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="api.c">
@@ -85,6 +88,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="adapter.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="session.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

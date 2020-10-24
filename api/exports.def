@@ -1,6 +1,7 @@
 EXPORTS
 	WintunCreateAdapter
 	WintunDeleteAdapter
+	WintunEndSession
 	WintunEnumAdapters
 	WintunFreeAdapter
 	WintunGetAdapter
@@ -9,5 +10,10 @@ EXPORTS
 	WintunGetAdapterLUID
 	WintunGetAdapterName
 	WintunGetVersion
+	WintunIsPacketAvailable
+	WintunReceivePackets
+	WintunSendPackets
 	WintunSetAdapterName
 	WintunSetLogger
+	WintunStartSession
+	WintunWaitForPacket
