@@ -8,6 +8,10 @@
 #include <Windows.h>
 #include <IPExport.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef _Return_type_success_(return == ERROR_SUCCESS) DWORD WINTUN_STATUS;
 
 /**
@@ -334,3 +338,7 @@ WINTUN_STATUS(WINAPI *WINTUN_RECEIVE_PACKETS_FUNC)
  * ERROR_SUCCESS        All packets were sent successfully.
  */
 WINTUN_STATUS(WINAPI *WINTUN_SEND_PACKETS_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _In_ const WINTUN_PACKET *Queue);
+
+#ifdef __cplusplus
+}
+#endif
