@@ -31,18 +31,17 @@ AdapterGetDrvInfoDetail(
     _In_ SP_DRVINFO_DATA_W *DrvInfoData,
     _Out_ SP_DRVINFO_DETAIL_DATA_W **DrvInfoDetailData)
 {
-    HANDLE Heap = GetProcessHeap();
     DWORD Size = sizeof(SP_DRVINFO_DETAIL_DATA_W) + 0x100;
     for (;;)
     {
-        *DrvInfoDetailData = HeapAlloc(Heap, 0, Size);
+        *DrvInfoDetailData = HeapAlloc(ModuleHeap, 0, Size);
         if (!*DrvInfoDetailData)
             return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
         (*DrvInfoDetailData)->cbSize = sizeof(SP_DRVINFO_DETAIL_DATA_W);
         if (SetupDiGetDriverInfoDetailW(DevInfo, DevInfoData, DrvInfoData, *DrvInfoDetailData, Size, &Size))
             return ERROR_SUCCESS;
         DWORD Result = GetLastError();
-        HeapFree(Heap, 0, *DrvInfoDetailData);
+        HeapFree(ModuleHeap, 0, *DrvInfoDetailData);
         if (Result != ERROR_INSUFFICIENT_BUFFER)
             return LOG_ERROR(L"Failed", Result);
     }
@@ -57,16 +56,15 @@ GetDeviceRegistryProperty(
     _Out_ void **Buf,
     _Inout_ DWORD *BufLen)
 {
-    HANDLE Heap = GetProcessHeap();
     for (;;)
     {
-        *Buf = HeapAlloc(Heap, 0, *BufLen);
+        *Buf = HeapAlloc(ModuleHeap, 0, *BufLen);
         if (!*Buf)
             return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
         if (SetupDiGetDeviceRegistryPropertyW(DevInfo, DevInfoData, Property, ValueType, *Buf, *BufLen, BufLen))
             return ERROR_SUCCESS;
         DWORD Result = GetLastError();
-        HeapFree(Heap, 0, *Buf);
+        HeapFree(ModuleHeap, 0, *Buf);
         if (Result != ERROR_INSUFFICIENT_BUFFER)
             return LOG_ERROR(L"Querying property failed", Result);
     }
@@ -90,11 +88,11 @@ GetDeviceRegistryString(
     case REG_MULTI_SZ:
         Result = RegistryGetString(Buf, Size / sizeof(WCHAR), ValueType);
         if (Result != ERROR_SUCCESS)
-            HeapFree(GetProcessHeap(), 0, *Buf);
+            HeapFree(ModuleHeap, 0, *Buf);
         return Result;
     default:
         LOG(WINTUN_LOG_ERR, L"Property is not a string");
-        HeapFree(GetProcessHeap(), 0, *Buf);
+        HeapFree(ModuleHeap, 0, *Buf);
         return ERROR_INVALID_DATATYPE;
     }
 }
@@ -117,11 +115,11 @@ GetDeviceRegistryMultiString(
     case REG_MULTI_SZ:
         Result = RegistryGetMultiString(Buf, Size / sizeof(WCHAR), ValueType);
         if (Result != ERROR_SUCCESS)
-            HeapFree(GetProcessHeap(), 0, *Buf);
+            HeapFree(ModuleHeap, 0, *Buf);
         return Result;
     default:
         LOG(WINTUN_LOG_ERR, L"Property is not a string");
-        HeapFree(GetProcessHeap(), 0, *Buf);
+        HeapFree(ModuleHeap, 0, *Buf);
         return ERROR_INVALID_DATATYPE;
     }
 }
@@ -140,7 +138,6 @@ IsOurAdapter(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ BOO
 static WINTUN_STATUS
 GetDeviceObject(_In_opt_z_ const WCHAR *InstanceId, _Out_ HANDLE *Handle)
 {
-    HANDLE Heap = GetProcessHeap();
     ULONG InterfacesLen;
     DWORD Result = CM_Get_Device_Interface_List_SizeW(
         &InterfacesLen, (GUID *)&GUID_DEVINTERFACE_NET, (DEVINSTID_W)InstanceId, CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
@@ -149,7 +146,7 @@ GetDeviceObject(_In_opt_z_ const WCHAR *InstanceId, _Out_ HANDLE *Handle)
         LOG(WINTUN_LOG_ERR, L"Failed to get device associated device instances size");
         return ERROR_GEN_FAILURE;
     }
-    WCHAR *Interfaces = HeapAlloc(Heap, 0, InterfacesLen * sizeof(WCHAR));
+    WCHAR *Interfaces = HeapAlloc(ModuleHeap, 0, InterfacesLen * sizeof(WCHAR));
     if (!Interfaces)
         return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
     Result = CM_Get_Device_Interface_ListW(
@@ -174,7 +171,7 @@ GetDeviceObject(_In_opt_z_ const WCHAR *InstanceId, _Out_ HANDLE *Handle)
         NULL);
     Result = *Handle != INVALID_HANDLE_VALUE ? ERROR_SUCCESS : LOG_LAST_ERROR(L"Failed to connect to device");
 cleanupBuf:
-    HeapFree(Heap, 0, Interfaces);
+    HeapFree(ModuleHeap, 0, Interfaces);
     return Result;
 }
 
@@ -188,8 +185,7 @@ ForceCloseWintunAdapterHandle(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevIn
     if (SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, NULL, 0, &RequiredBytes) ||
         (Result = GetLastError()) != ERROR_INSUFFICIENT_BUFFER)
         return LOG_ERROR(L"Failed to query device instance ID size", Result);
-    HANDLE Heap = GetProcessHeap();
-    WCHAR *InstanceId = HeapAlloc(Heap, HEAP_ZERO_MEMORY, sizeof(*InstanceId) * RequiredBytes);
+    WCHAR *InstanceId = HeapAlloc(ModuleHeap, HEAP_ZERO_MEMORY, sizeof(*InstanceId) * RequiredBytes);
     if (!InstanceId)
         return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
     if (!SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, InstanceId, RequiredBytes, &RequiredBytes))
@@ -209,7 +205,7 @@ ForceCloseWintunAdapterHandle(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevIn
                  : LOG_LAST_ERROR(L"Failed to perform ioctl");
     CloseHandle(NdisHandle);
 out:
-    HeapFree(Heap, 0, InstanceId);
+    HeapFree(ModuleHeap, 0, InstanceId);
     return Result;
 }
 
@@ -221,10 +217,9 @@ AdapterDisableAllOurs(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
                                     .StateChange = DICS_DISABLE,
                                     .Scope = DICS_FLAG_GLOBAL };
     DWORD Result = ERROR_SUCCESS;
-    HANDLE Heap = GetProcessHeap();
     for (DWORD EnumIndex = 0;; ++EnumIndex)
     {
-        SP_DEVINFO_DATA_LIST *DeviceNode = HeapAlloc(Heap, 0, sizeof(SP_DEVINFO_DATA_LIST));
+        SP_DEVINFO_DATA_LIST *DeviceNode = HeapAlloc(ModuleHeap, 0, sizeof(SP_DEVINFO_DATA_LIST));
         if (!DeviceNode)
             return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
         DeviceNode->Data.cbSize = sizeof(SP_DEVINFO_DATA);
@@ -232,7 +227,7 @@ AdapterDisableAllOurs(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
         {
             if (GetLastError() == ERROR_NO_MORE_ITEMS)
             {
-                HeapFree(Heap, 0, DeviceNode);
+                HeapFree(ModuleHeap, 0, DeviceNode);
                 break;
             }
             goto cleanupDeviceInfoData;
@@ -265,7 +260,7 @@ AdapterDisableAllOurs(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
         continue;
 
     cleanupDeviceInfoData:
-        HeapFree(Heap, 0, &DeviceNode->Data);
+        HeapFree(ModuleHeap, 0, &DeviceNode->Data);
     }
     return Result;
 }
@@ -404,7 +399,7 @@ GetNetCfgInstanceId(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _O
     }
     else
         Result = ERROR_SUCCESS;
-    HeapFree(GetProcessHeap(), 0, ValueStr);
+    HeapFree(ModuleHeap, 0, ValueStr);
 cleanupKey:
     RegCloseKey(Key);
     return Result;
@@ -471,7 +466,6 @@ IsPoolMember(
     _In_ SP_DEVINFO_DATA *DevInfoData,
     _Out_ BOOL *IsMember)
 {
-    HANDLE Heap = GetProcessHeap();
     WCHAR *DeviceDesc, *FriendlyName;
     DWORD Result = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_DEVICEDESC, &DeviceDesc);
     if (Result != ERROR_SUCCESS)
@@ -501,9 +495,9 @@ IsPoolMember(
     }
     *IsMember = FALSE;
 cleanupFriendlyName:
-    HeapFree(Heap, 0, FriendlyName);
+    HeapFree(ModuleHeap, 0, FriendlyName);
 cleanupDeviceDesc:
-    HeapFree(Heap, 0, DeviceDesc);
+    HeapFree(ModuleHeap, 0, DeviceDesc);
     return Result;
 }
 
@@ -521,8 +515,7 @@ CreateAdapterData(
     if (Key == INVALID_HANDLE_VALUE)
         return LOG_LAST_ERROR(L"Opening device registry key failed");
 
-    HANDLE Heap = GetProcessHeap();
-    *Adapter = HeapAlloc(Heap, 0, sizeof(WINTUN_ADAPTER));
+    *Adapter = HeapAlloc(ModuleHeap, 0, sizeof(WINTUN_ADAPTER));
     if (!*Adapter)
     {
         LOG(WINTUN_LOG_ERR, L"Out of memory");
@@ -541,11 +534,11 @@ CreateAdapterData(
     if (FAILED(CLSIDFromString(ValueStr, &(*Adapter)->CfgInstanceID)))
     {
         LOG(WINTUN_LOG_ERR, L"NetCfgInstanceId is not a GUID");
-        HeapFree(Heap, 0, ValueStr);
+        HeapFree(ModuleHeap, 0, ValueStr);
         Result = ERROR_INVALID_DATA;
         goto cleanupAdapter;
     }
-    HeapFree(Heap, 0, ValueStr);
+    HeapFree(ModuleHeap, 0, ValueStr);
 
     /* Read the NetLuidIndex value. */
     Result = RegistryQueryDWORD(Key, L"NetLuidIndex", &(*Adapter)->LuidIndex);
@@ -576,7 +569,7 @@ CreateAdapterData(
 
 cleanupAdapter:
     if (Result != ERROR_SUCCESS)
-        HeapFree(Heap, 0, *Adapter);
+        HeapFree(ModuleHeap, 0, *Adapter);
 cleanupKey:
     RegCloseKey(Key);
     return Result;
@@ -597,7 +590,7 @@ GetDeviceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) W
 void WINAPI
 WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
 {
-    HeapFree(GetProcessHeap(), 0, Adapter);
+    HeapFree(ModuleHeap, 0, Adapter);
 }
 
 WINTUN_STATUS WINAPI
@@ -942,7 +935,7 @@ GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG
     }
     _snwprintf_s(Path, MAX_REG_PATH, _TRUNCATE, L"SYSTEM\\CurrentControlSet\\Services\\%s", Paths);
 cleanupPaths:
-    HeapFree(GetProcessHeap(), 0, Paths);
+    HeapFree(ModuleHeap, 0, Paths);
 cleanupTcpipAdapterRegKey:
     RegCloseKey(TcpipAdapterRegKey);
     return Result;
@@ -976,7 +969,6 @@ CreateAdapter(
         goto cleanupDevInfo;
     }
 
-    HANDLE Heap = GetProcessHeap();
     WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
     GetPoolDeviceTypeName(Pool, PoolDeviceTypeName);
     SP_DEVINFO_DATA DevInfoData = { .cbSize = sizeof(SP_DEVINFO_DATA) };
@@ -1043,10 +1035,10 @@ CreateAdapter(
         }
         if (!DriverIsOurDrvInfoDetail(DrvInfoDetailData))
         {
-            HeapFree(Heap, 0, DrvInfoDetailData);
+            HeapFree(ModuleHeap, 0, DrvInfoDetailData);
             continue;
         }
-        HeapFree(Heap, 0, DrvInfoDetailData);
+        HeapFree(ModuleHeap, 0, DrvInfoDetailData);
 
         if (!SetupDiSetSelectedDriverW(DevInfo, &DevInfoData, &DrvInfoData))
             continue;
@@ -1131,7 +1123,7 @@ CreateAdapter(
         LOG(WINTUN_LOG_ERR, L"Failed to query NetCfgInstanceId value");
         goto cleanupNetDevRegKey;
     }
-    HeapFree(Heap, 0, DummyStr);
+    HeapFree(ModuleHeap, 0, DummyStr);
     DWORD DummyDWORD;
     Result = RegistryQueryDWORDWait(NetDevRegKey, L"NetLuidIndex", WAIT_FOR_REGISTRY_TIMEOUT, &DummyDWORD);
     if (Result != ERROR_SUCCESS)
@@ -1173,7 +1165,7 @@ CreateAdapter(
         LOG(WINTUN_LOG_ERR, L"Failed to query IpConfig value");
         goto cleanupTcpipAdapterRegKey;
     }
-    HeapFree(Heap, 0, DummyStr);
+    HeapFree(ModuleHeap, 0, DummyStr);
 
     HKEY TcpipInterfaceRegKey;
     WCHAR TcpipInterfaceRegPath[MAX_REG_PATH];
@@ -1209,7 +1201,7 @@ cleanupTcpipAdapterRegKey:
     RegCloseKey(TcpipAdapterRegKey);
 cleanupAdapter:
     if (Result != ERROR_SUCCESS)
-        HeapFree(Heap, 0, *Adapter);
+        HeapFree(ModuleHeap, 0, *Adapter);
 cleanupNetDevRegKey:
     RegCloseKey(NetDevRegKey);
 cleanupDevice:
@@ -1365,9 +1357,8 @@ ExecuteRunDll32(
         LOG(WINTUN_LOG_ERR, L"Failed to copy resource");
         goto cleanupDelete;
     }
-    HANDLE Heap = GetProcessHeap();
     size_t CommandLineLen = 10 + MAX_PATH + 2 + wcslen(Arguments) + 1;
-    WCHAR *CommandLine = HeapAlloc(Heap, 0, CommandLineLen * sizeof(WCHAR));
+    WCHAR *CommandLine = HeapAlloc(ModuleHeap, 0, CommandLineLen * sizeof(WCHAR));
     if (!CommandLine)
     {
         LOG(WINTUN_LOG_ERR, L"Out of memory");
@@ -1438,7 +1429,7 @@ cleanupPipes:
     CloseHandle(StreamW[Stderr]);
     CloseHandle(StreamR[Stdout]);
     CloseHandle(StreamW[Stdout]);
-    HeapFree(Heap, 0, CommandLine);
+    HeapFree(ModuleHeap, 0, CommandLine);
 cleanupDelete:
     DeleteFileW(DllPath);
 cleanupDirectory:
@@ -1651,7 +1642,6 @@ WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUM_
         Result = LOG_LAST_ERROR(L"Failed to get present class devices");
         goto cleanupMutex;
     }
-    HANDLE Heap = GetProcessHeap();
     BOOL Continue = TRUE;
     for (DWORD EnumIndex = 0; Continue; ++EnumIndex)
     {
@@ -1685,7 +1675,7 @@ WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUM_
             break;
         }
         Continue = Func(Adapter, Param);
-        HeapFree(Heap, 0, Adapter);
+        HeapFree(ModuleHeap, 0, Adapter);
     }
     SetupDiDestroyDeviceInfoList(DevInfo);
 cleanupMutex:

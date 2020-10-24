@@ -73,17 +73,15 @@ RegistryOpenKeyWait(
 WINTUN_STATUS
 RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
 {
-    HANDLE Heap = GetProcessHeap();
-
     if (wcsnlen(*Buf, Len) >= Len)
     {
         /* String is missing zero-terminator. */
-        WCHAR *BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
+        WCHAR *BufZ = HeapAlloc(ModuleHeap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
         if (!BufZ)
             return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
         wmemcpy(BufZ, *Buf, Len);
         BufZ[Len] = 0;
-        HeapFree(Heap, 0, *Buf);
+        HeapFree(ModuleHeap, 0, *Buf);
         *Buf = BufZ;
     }
 
@@ -98,23 +96,23 @@ RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
     Len = Len * 2 + 64;
     for (;;)
     {
-        WCHAR *Expanded = HeapAlloc(Heap, 0, Len * sizeof(WCHAR));
+        WCHAR *Expanded = HeapAlloc(ModuleHeap, 0, Len * sizeof(WCHAR));
         if (!Expanded)
             return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
         DWORD Result = ExpandEnvironmentStringsW(*Buf, Expanded, Len);
         if (!Result)
         {
             Result = LOG_LAST_ERROR(L"Failed to expand environment variables");
-            HeapFree(Heap, 0, Expanded);
+            HeapFree(ModuleHeap, 0, Expanded);
             return Result;
         }
         if (Result > Len)
         {
-            HeapFree(Heap, 0, Expanded);
+            HeapFree(ModuleHeap, 0, Expanded);
             Len = Result;
             continue;
         }
-        HeapFree(Heap, 0, *Buf);
+        HeapFree(ModuleHeap, 0, *Buf);
         *Buf = Expanded;
         return ERROR_SUCCESS;
     }
@@ -123,8 +121,6 @@ RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
 WINTUN_STATUS
 RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
 {
-    HANDLE Heap = GetProcessHeap();
-
     if (ValueType == REG_MULTI_SZ)
     {
         for (size_t i = 0;; i += wcsnlen(*Buf + i, Len - i) + 1)
@@ -132,25 +128,25 @@ RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType
             if (i > Len)
             {
                 /* Missing string and list terminators. */
-                WCHAR *BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 2) * sizeof(WCHAR));
+                WCHAR *BufZ = HeapAlloc(ModuleHeap, 0, ((size_t)Len + 2) * sizeof(WCHAR));
                 if (!BufZ)
                     return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
                 wmemcpy(BufZ, *Buf, Len);
                 BufZ[Len] = 0;
                 BufZ[Len + 1] = 0;
-                HeapFree(Heap, 0, *Buf);
+                HeapFree(ModuleHeap, 0, *Buf);
                 *Buf = BufZ;
                 return ERROR_SUCCESS;
             }
             if (i == Len)
             {
                 /* Missing list terminator. */
-                WCHAR *BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
+                WCHAR *BufZ = HeapAlloc(ModuleHeap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
                 if (!BufZ)
                     return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
                 wmemcpy(BufZ, *Buf, Len);
                 BufZ[Len] = 0;
-                HeapFree(Heap, 0, *Buf);
+                HeapFree(ModuleHeap, 0, *Buf);
                 *Buf = BufZ;
                 return ERROR_SUCCESS;
             }
@@ -164,12 +160,12 @@ RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType
     if (Result != ERROR_SUCCESS)
         return Result;
     Len = (DWORD)wcslen(*Buf) + 1;
-    WCHAR *BufZ = HeapAlloc(Heap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
+    WCHAR *BufZ = HeapAlloc(ModuleHeap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
     if (!BufZ)
         return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
     wmemcpy(BufZ, *Buf, Len);
     BufZ[Len] = 0;
-    HeapFree(Heap, 0, *Buf);
+    HeapFree(ModuleHeap, 0, *Buf);
     *Buf = BufZ;
     return ERROR_SUCCESS;
 }
@@ -183,16 +179,15 @@ RegistryQuery(
     _Inout_ DWORD *BufLen,
     _In_ BOOL Log)
 {
-    HANDLE Heap = GetProcessHeap();
     for (;;)
     {
-        *Buf = HeapAlloc(Heap, 0, *BufLen);
+        *Buf = HeapAlloc(ModuleHeap, 0, *BufLen);
         if (!*Buf)
             return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
         LSTATUS Result = RegQueryValueExW(Key, Name, NULL, ValueType, (BYTE *)*Buf, BufLen);
         if (Result == ERROR_SUCCESS)
             return ERROR_SUCCESS;
-        HeapFree(Heap, 0, *Buf);
+        HeapFree(ModuleHeap, 0, *Buf);
         if (Result != ERROR_MORE_DATA)
             return Log ? LOG_ERROR(L"Querying value failed", Result) : Result;
     }
@@ -212,11 +207,11 @@ RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ WCHAR **V
     case REG_MULTI_SZ:
         Result = RegistryGetString(Value, Size / sizeof(WCHAR), ValueType);
         if (Result != ERROR_SUCCESS)
-            HeapFree(GetProcessHeap(), 0, *Value);
+            HeapFree(ModuleHeap, 0, *Value);
         return Result;
     default:
         LOG(WINTUN_LOG_ERR, L"Value is not a string");
-        HeapFree(GetProcessHeap(), 0, *Value);
+        HeapFree(ModuleHeap, 0, *Value);
         return ERROR_INVALID_DATATYPE;
     }
 }

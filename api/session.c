@@ -52,8 +52,7 @@ typedef struct _TUN_SESSION
 WINTUN_STATUS WINAPI
 WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity, _Out_ TUN_SESSION **Session)
 {
-    HANDLE Heap = GetProcessHeap();
-    *Session = HeapAlloc(Heap, 0, sizeof(TUN_SESSION));
+    *Session = HeapAlloc(ModuleHeap, 0, sizeof(TUN_SESSION));
     if (!*Session)
         return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
     const ULONG RingSize = TUN_RING_SIZE(Capacity);
@@ -113,7 +112,7 @@ cleanupSendTailMoved:
 cleanupAllocatedRegion:
     VirtualFree(AllocatedRegion, 0, MEM_RELEASE);
 cleanupRings:
-    HeapFree(Heap, 0, *Session);
+    HeapFree(ModuleHeap, 0, *Session);
     *Session = NULL;
     return Result;
 }
@@ -126,7 +125,7 @@ WintunEndSession(_In_ TUN_SESSION *Session)
     CloseHandle(Session->Descriptor.Send.TailMoved);
     CloseHandle(Session->Descriptor.Receive.TailMoved);
     VirtualFree(Session->Descriptor.Send.Ring, 0, MEM_RELEASE);
-    HeapFree(GetProcessHeap(), 0, Session);
+    HeapFree(ModuleHeap, 0, Session);
 }
 
 BOOL WINAPI

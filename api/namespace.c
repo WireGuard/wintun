@@ -12,18 +12,17 @@ static BCRYPT_ALG_HANDLE AlgProvider;
 static WCHAR *
 NormalizeStringAlloc(_In_ NORM_FORM NormForm, _In_z_ const WCHAR *Source)
 {
-    HANDLE Heap = GetProcessHeap();
     int Len = NormalizeString(NormForm, Source, -1, NULL, 0);
     for (;;)
     {
-        WCHAR *Str = HeapAlloc(Heap, 0, sizeof(WCHAR) * Len);
+        WCHAR *Str = HeapAlloc(ModuleHeap, 0, sizeof(WCHAR) * Len);
         if (!Str)
             return LOG(WINTUN_LOG_ERR, L"Out of memory"), NULL;
         Len = NormalizeString(NormForm, Source, -1, Str, Len);
         if (Len > 0)
             return Str;
         DWORD Result = GetLastError();
-        HeapFree(Heap, 0, Str);
+        HeapFree(ModuleHeap, 0, Str);
         if (Result != ERROR_INSUFFICIENT_BUFFER)
             return LOG_ERROR(L"Failed", Result), NULL;
         Len = -Len;
@@ -152,7 +151,7 @@ NamespaceTakeMutex(_In_z_ const WCHAR *Pool)
     CloseHandle(Mutex);
     Mutex = NULL;
 cleanupPoolNorm:
-    HeapFree(GetProcessHeap(), 0, PoolNorm);
+    HeapFree(ModuleHeap, 0, PoolNorm);
 cleanupSha256:
     BCryptDestroyHash(Sha256);
     return Mutex;

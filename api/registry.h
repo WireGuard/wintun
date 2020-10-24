@@ -38,9 +38,8 @@ RegistryOpenKeyWait(
  * Validates and/or sanitizes string value read from registry.
  *
  * @param Buf           On input, it contains a pointer to pointer where the data is stored. The data must be allocated
- *                      using HeapAlloc(GetProcessHeap(), 0). On output, it contains a pointer to pointer where the
- *                      sanitized data is stored. It must be released with HeapFree(GetProcessHeap(), 0, *Buf) after
- *                      use.
+ *                      using HeapAlloc(ModuleHeap, 0). On output, it contains a pointer to pointer where the sanitized
+ *                      data is stored. It must be released with HeapFree(ModuleHeap, 0, *Buf) after use.
  *
  * @param Len           Length of data string in wide characters.
  *
@@ -56,9 +55,8 @@ RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType);
  * Validates and/or sanitizes multi-string value read from registry.
  *
  * @param Buf           On input, it contains a pointer to pointer where the data is stored. The data must be allocated
- *                      using HeapAlloc(GetProcessHeap(), 0). On output, it contains a pointer to pointer where the
- *                      sanitized data is stored. It must be released with HeapFree(GetProcessHeap(), 0, *Buf) after
- *                      use.
+ *                      using HeapAlloc(ModuleHeap, 0). On output, it contains a pointer to pointer where the sanitized
+ *                      data is stored. It must be released with HeapFree(ModuleHeap, 0, *Buf) after use.
  *
  * @param Len           Length of data string in wide characters.
  *
@@ -79,7 +77,7 @@ RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType
  * @param Value         Pointer to string to retrieve registry value. If the value type is REG_EXPAND_SZ the value is
  *                      expanded using ExpandEnvironmentStrings(). If the value type is REG_MULTI_SZ, only the first
  *                      string from the multi-string is returned. The string must be released with
- *                      HeapFree(GetProcessHeap(), 0, Value) after use.
+ *                      HeapFree(ModuleHeap, 0, Value) after use.
  *
  * @Log                 Set to TRUE to log all failures; FALSE to skip logging the innermost errors. Skipping innermost
  *                      errors reduces log clutter when we are using RegistryQueryString() from
@@ -103,7 +101,7 @@ RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ WCHAR **V
  * @param Value         Pointer to string to retrieve registry value. If the value type is REG_EXPAND_SZ the value is
  *                      expanded using ExpandEnvironmentStrings(). If the value type is REG_MULTI_SZ, only the first
  *                      string from the multi-string is returned. The string must be released with
- *                      HeapFree(GetProcessHeap(), 0, Value) after use.
+ *                      HeapFree(ModuleHeap, 0, Value) after use.
  *
  * @return ERROR_SUCCESS on success; WAIT_TIMEOUT on timeout; ERROR_INVALID_DATATYPE when the registry value is not a
  * string; Win32 error code otherwise.

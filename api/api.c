@@ -6,8 +6,9 @@
 #include "pch.h"
 
 HINSTANCE ResourceModule;
+HANDLE ModuleHeap;
 static SECURITY_ATTRIBUTES SecurityAttributesSystem = { .nLength = sizeof(SECURITY_ATTRIBUTES) };
-SECURITY_ATTRIBUTES *SecurityAttributes = NULL;
+SECURITY_ATTRIBUTES *SecurityAttributes;
 
 WINTUN_STATUS WINAPI
 WintunGetVersion(
@@ -56,6 +57,7 @@ DllMain(_In_ HINSTANCE hinstDLL, _In_ DWORD fdwReason, _In_ LPVOID lpvReserved)
     {
     case DLL_PROCESS_ATTACH:
         ResourceModule = hinstDLL;
+        ModuleHeap = HeapCreate(0, 0, 0);
 #ifndef _DEBUG
         ConvertStringSecurityDescriptorToSecurityDescriptorW(
             L"O:SYD:P(A;;GA;;;SY)", SDDL_REVISION_1, &SecurityAttributesSystem.lpSecurityDescriptor, NULL);
@@ -73,6 +75,7 @@ DllMain(_In_ HINSTANCE hinstDLL, _In_ DWORD fdwReason, _In_ LPVOID lpvReserved)
 #ifndef _DEBUG
         LocalFree(SecurityAttributesSystem.lpSecurityDescriptor);
 #endif
+        HeapDestroy(ModuleHeap);
         break;
     }
     return TRUE;

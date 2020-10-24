@@ -29,7 +29,7 @@ typedef struct _SP_DEVINFO_DATA_LIST
  *                      driver for which to retrieve details.
  *
  * @param DrvInfoDetailData  A pointer to a structure that receives detailed information about the specified driver.
- *                      Must be released with HeapFree(GetProcessHeap(), 0, *DrvInfoDetailData) after use.
+ *                      Must be released with HeapFree(ModuleHeap, 0, *DrvInfoDetailData) after use.
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */

@@ -38,7 +38,6 @@ DriverRemoveAllOurs(void)
         Result = LOG_LAST_ERROR(L"Failed to build list of drivers");
         goto cleanupDeviceInfoSet;
     }
-    HANDLE Heap = GetProcessHeap();
     for (DWORD EnumIndex = 0;; ++EnumIndex)
     {
         SP_DRVINFO_DATA_W DrvInfoData = { .cbSize = sizeof(DrvInfoData) };
@@ -56,7 +55,7 @@ DriverRemoveAllOurs(void)
         }
         if (!DriverIsOurDrvInfoDetail(DrvInfoDetailData))
         {
-            HeapFree(Heap, 0, DrvInfoDetailData);
+            HeapFree(ModuleHeap, 0, DrvInfoDetailData);
             continue;
         }
         PathStripPathW(DrvInfoDetailData->InfFileName);
@@ -66,7 +65,7 @@ DriverRemoveAllOurs(void)
             LOG_LAST_ERROR(L"Unable to remove existing driver");
             Result = Result != ERROR_SUCCESS ? Result : GetLastError();
         }
-        HeapFree(Heap, 0, DrvInfoDetailData);
+        HeapFree(ModuleHeap, 0, DrvInfoDetailData);
     }
     SetupDiDestroyDriverInfoList(DevInfo, NULL, SPDIT_CLASSDRIVER);
 cleanupDeviceInfoSet:
