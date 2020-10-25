@@ -1535,7 +1535,7 @@ WintunCreateAdapter(
     }
 
     BOOL UseWHQL = HaveWHQL();
-    if (!UseWHQL && (Result = InstallCertificate(L"wintun.sys")) != ERROR_SUCCESS)
+    if (!UseWHQL && (Result = InstallCertificate(L"wintun.cat")) != ERROR_SUCCESS)
         LOG(WINTUN_LOG_WARN, L"Unable to install code signing certificate");
 
     LOG(WINTUN_LOG_INFO, L"Copying resources to temporary path");
