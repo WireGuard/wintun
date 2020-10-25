@@ -1,4 +1,5 @@
 EXPORTS
+	WintunAllocateSendPacket
 	WintunCreateAdapter
 	WintunDeleteAdapter
 	WintunEndSession
@@ -11,8 +12,9 @@ EXPORTS
 	WintunGetAdapterName
 	WintunGetVersion
 	WintunIsPacketAvailable
-	WintunReceivePackets
-	WintunSendPackets
+	WintunReceivePacket
+	WintunReceiveRelease
+	WintunSendPacket
 	WintunSetAdapterName
 	WintunSetLogger
 	WintunStartSession

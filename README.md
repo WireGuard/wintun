@@ -59,8 +59,10 @@ Once adapter is created, use the following functions to start a session and tran
 - `WintunEndSession()` ends and frees the session.
 - `WintunIsPacketAvailable()` checks if there is a receive packet available.
 - `WintunWaitForPacket()` waits for a receive packet to become available.
-- `WintunReceivePackets()` receives one or more packets.
-- `WintunSendPackets()` sends one or more packets.
+- `WintunReceivePacket()` receives one packet.
+- `WintunReceiveRelease()` releases internal buffer after client processed the receive packet.
+- `WintunAllocateSendPacket()` allocates memory for send packet.
+- `WintunSendPacket()` sends the packet.
 
 #### Writing to and from rings
 
@@ -73,12 +75,13 @@ for (;;) {
         WintunWaitForPacket(Session, INFINITE);
     for (WINTUN_PACKET *p = Queue; p && p->Size <= WINTUN_MAX_IP_PACKET_SIZE; p = p->Next)
         p->Size = DWORD_MAX;
-    DWORD Result = WintunReceivePackets(Session, Queue);
-    if (Result != ERROR_SUCCESS && Result != ERROR_NO_MORE_ITEMS)
+    BYTE *Packet;
+    DWORD PacketSize;
+    DWORD Result = WintunReceivePacket(Session, &Packet, &PacketSize);
+    if (Result != ERROR_SUCCESS)
         return Result;
-    for (WINTUN_PACKET *p = Queue; p && p->Size <= WINTUN_MAX_IP_PACKET_SIZE; p = p->Next) {
-        // TODO: Process packet p.
-    }
+    // TODO: Process packet.
+    WintunReceiveRelease(Session, Packet);
 }
 ```
 
@@ -87,8 +90,13 @@ It may be desirable to spin on `WintunIsPacketAvailable()` for some time under h
 Writing packets to the adapter may be done as:
 
 ```C
-// TODO: Prepare WINTUN_PACKET *Queue linked list with packets.
-DWORD Result = WintunSendPackets(Session, Queue);
+// TODO: Calculate packet size.
+BYTE *Packet;
+DWORD Result = WintunAllocateSendPacket(Session, PacketSize, &Packet);
+if (Result != ERROR_SUCCESS)
+    return Result;
+// TODO: Fill the packet.
+WintunSendPacket(Session, Packet);
 ```
 
 ### Misc functions

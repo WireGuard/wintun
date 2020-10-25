@@ -261,27 +261,6 @@ typedef void(WINAPI *WINTUN_END_SESSION_FUNC)(_In_ WINTUN_SESSION_HANDLE Session
 #define WINTUN_MAX_IP_PACKET_SIZE 0xFFFF
 
 /**
- * Packet with data
- */
-typedef struct _WINTUN_PACKET
-{
-    /**
-     * Pointer to next packet in queue
-     */
-    struct _WINTUN_PACKET *Next;
-
-    /**
-     * Size of packet (max WINTUN_MAX_IP_PACKET_SIZE).
-     */
-    DWORD Size;
-
-    /**
-     * Pointer to layer 3 IPv4 or IPv6 packet
-     */
-    BYTE *Data;
-} WINTUN_PACKET;
-
-/**
  * Peeks if there is a packet available for reading.
  *
  * @param Session       Wintun session handle obtained with WintunStartSession
@@ -302,42 +281,67 @@ BOOL(WINAPI *WINTUN_IS_PACKET_AVAILABLE_FUNC)(_In_ WINTUN_SESSION_HANDLE Session
  *
  * @return See WaitForSingleObject() for return values.
  */
-WINTUN_STATUS(WINAPI *WINTUN_WAIT_FOR_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _In_ DWORD Milliseconds);
+typedef WINTUN_STATUS(WINAPI *WINTUN_WAIT_FOR_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _In_ DWORD Milliseconds);
 
 /**
- * Reads one or more packets.
+ * Retrieves one or packet. After the packet content is consumed, call WintunReceiveRelease with Packet returned
+ * from this function to release internal buffer. This function is thread-safe.
  *
  * @param Session       Wintun session handle obtained with WintunStartSession
  *
- * @param Queue         A linked list of nodes to fill with packets read. The list must be NULL terminated. May
- *                      contain only one node to read one packet at a time. All nodes should be big enough to
- *                      accommodate WINTUN_MAX_IP_PACKET_SIZE packet. The Size field of every node should be
- *                      initialized to something bigger than WINTUN_MAX_IP_PACKET_SIZE allowing post-festum
- *                      detection which nodes were actually filled with packets.
+ * @param Packet        Pointer to receive pointer to layer 3 IPv4 or IPv6 packet. Client may modify its content at
+ *                      will.
  *
- * @return
- * ERROR_HANDLE_EOF     Wintun adapter is terminating.
- * ERROR_NO_MORE_ITEMS  Wintun buffer is exhausted.
- * ERROR_INVALID_DATA   Wintun buffer is corrupt.
- * ERROR_SUCCESS        Requested amount of packets was read successfully.
+ * @param PacketSize    Pointer to receive Packet size.
+ *
+ * @return Returns one of the following values:
+ * ERROR_HANDLE_EOF     Wintun adapter is terminating;
+ * ERROR_NO_MORE_ITEMS  Wintun buffer is exhausted;
+ * ERROR_INVALID_DATA   Wintun buffer is corrupt;
+ * ERROR_SUCCESS        on success.
  * Regardless, if the error was returned, some packets might have been read nevertheless.
  */
-WINTUN_STATUS(WINAPI *WINTUN_RECEIVE_PACKETS_FUNC)
-(_In_ WINTUN_SESSION_HANDLE Session, _Inout_ WINTUN_PACKET *Queue);
+typedef WINTUN_STATUS(WINAPI *WINTUN_RECEIVE_PACKETS_FUNC)
+(_In_ WINTUN_SESSION_HANDLE *Session, _Out_bytecapcount_(*PacketSize) BYTE **Packet, _Out_ DWORD *PacketSize);
 
 /**
- * Sends packets.
+ * Releases internal buffer after the received packet has been processed by the client. This function is thread-safe.
  *
  * @param Session       Wintun session handle obtained with WintunStartSession
- * 
- * @param Queue         Linked list of packets to send. The list must be NULL terminated.
- * 
- * @return
- * ERROR_HANDLE_EOF     Wintun adapter is terminating.
- * ERROR_BUFFER_OVERFLOW  Wintun buffer is full. One or more packets were dropped.
- * ERROR_SUCCESS        All packets were sent successfully.
+ *
+ * @param Packet        Packet obtained with WintunReceivePacket
  */
-WINTUN_STATUS(WINAPI *WINTUN_SEND_PACKETS_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _In_ const WINTUN_PACKET *Queue);
+typedef void(WINAPI *WINTUN_RECEIVE_RELEASE_FUNC)(_In_ WINTUN_SESSION_HANDLE *Session, _In_ const BYTE *Packet);
+
+/**
+ * Allocates memory for a packet to send. After the memory is filled with packet data, call WintunSendPacket to send
+ * and release internal buffer. WintunAllocateSendPacket is thread-safe and the WintunAllocateSendPacket order of
+ * calls define the packet sending order.
+ *
+ * @param Session       Wintun session handle obtained with WintunStartSession
+ *
+ * @param PacketSize    Exact packet size. Must be less or equal to WINTUN_MAX_IP_PACKET_SIZE.
+ *
+ * @param Packet        Pointer to receive pointer to memory where to prepare layer 3 IPv4 or IPv6 packet for sending.
+ *
+ * @return Returns one of the following values:
+ * ERROR_HANDLE_EOF     Wintun adapter is terminating;
+ * ERROR_BUFFER_OVERFLOW  Wintun buffer is full;
+ * ERROR_SUCCESS        on success.
+ */
+typedef WINTUN_STATUS(WINAPI *WINTUN_ALLOCATE_SEND_PACKET_FUNC)
+(_In_ WINTUN_SESSION_HANDLE *Session, _In_ DWORD PacketSize, _Out_bytecapcount_(PacketSize) BYTE **Packet);
+
+/**
+ * Sends the packet and releases internal buffer. WintunSendPacket is thread-safe, but the WintunAllocateSendPacket
+ * order of calls define the packet sending order. This means the packet is not guaranteed to be sent in the
+ * WintunSendPacket yet.
+ *
+ * @param Session       Wintun session handle obtained with WintunStartSession
+ *
+ * @param Packet        Packet obtained with WintunAllocateSendPacket
+ */
+typedef void(WINAPI *WINTUN_SEND_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE *Session, _In_ const BYTE *Packet);
 
 #ifdef __cplusplus
 }

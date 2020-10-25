@@ -14,12 +14,13 @@
 #define TUN_RING_CAPACITY(Size) ((Size) - sizeof(TUN_RING) - (TUN_MAX_PACKET_SIZE - TUN_ALIGNMENT))
 #define TUN_RING_SIZE(Capacity) (sizeof(TUN_RING) + (Capacity) + (TUN_MAX_PACKET_SIZE - TUN_ALIGNMENT))
 #define TUN_RING_WRAP(Value, Capacity) ((Value) & (Capacity - 1))
+#define LOCK_SPIN_COUNT 0x10000
+#define TUN_PACKET_RELEASE ((DWORD)0x80000000)
 
 typedef struct _TUN_PACKET
 {
     ULONG Size;
-    UCHAR _Field_size_bytes_(Size)
-    Data[];
+    UCHAR Data[];
 } TUN_PACKET;
 
 typedef struct _TUN_RING
@@ -45,6 +46,20 @@ typedef struct _TUN_REGISTER_RINGS
 typedef struct _TUN_SESSION
 {
     ULONG Capacity;
+    struct
+    {
+        ULONG Tail;
+        ULONG TailRelease;
+        ULONG PacketsToRelease;
+        CRITICAL_SECTION Lock;
+    } Receive;
+    struct
+    {
+        ULONG Head;
+        ULONG HeadRelease;
+        ULONG PacketsToRelease;
+        CRITICAL_SECTION Lock;
+    } Send;
     TUN_REGISTER_RINGS Descriptor;
     HANDLE Handle;
 } TUN_SESSION;
@@ -52,7 +67,7 @@ typedef struct _TUN_SESSION
 WINTUN_STATUS WINAPI
 WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity, _Out_ TUN_SESSION **Session)
 {
-    *Session = HeapAlloc(ModuleHeap, 0, sizeof(TUN_SESSION));
+    *Session = HeapAlloc(ModuleHeap, HEAP_ZERO_MEMORY, sizeof(TUN_SESSION));
     if (!*Session)
         return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
     const ULONG RingSize = TUN_RING_SIZE(Capacity);
@@ -102,6 +117,8 @@ WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity, _Out
         goto cleanupHandle;
     }
     (*Session)->Capacity = Capacity;
+    (void)InitializeCriticalSectionAndSpinCount(&(*Session)->Receive.Lock, LOCK_SPIN_COUNT);
+    (void)InitializeCriticalSectionAndSpinCount(&(*Session)->Send.Lock, LOCK_SPIN_COUNT);
     return ERROR_SUCCESS;
 cleanupHandle:
     CloseHandle((*Session)->Handle);
@@ -121,6 +138,8 @@ void WINAPI
 WintunEndSession(_In_ TUN_SESSION *Session)
 {
     SetEvent(Session->Descriptor.Send.TailMoved); // wake the reader if it's sleeping
+    DeleteCriticalSection(&Session->Send.Lock);
+    DeleteCriticalSection(&Session->Receive.Lock);
     CloseHandle(Session->Handle);
     CloseHandle(Session->Descriptor.Send.TailMoved);
     CloseHandle(Session->Descriptor.Receive.TailMoved);
@@ -131,8 +150,7 @@ WintunEndSession(_In_ TUN_SESSION *Session)
 BOOL WINAPI
 WintunIsPacketAvailable(_In_ TUN_SESSION *Session)
 {
-    return InterlockedGetU(&Session->Descriptor.Send.Ring->Head) !=
-           InterlockedGetU(&Session->Descriptor.Send.Ring->Tail);
+    return Session->Send.Head != InterlockedGetU(&Session->Descriptor.Send.Ring->Tail);
 }
 
 WINTUN_STATUS WINAPI
@@ -142,71 +160,126 @@ WintunWaitForPacket(_In_ TUN_SESSION *Session, _In_ DWORD Milliseconds)
 }
 
 WINTUN_STATUS WINAPI
-WintunReceivePackets(_In_ TUN_SESSION *Session, _Inout_ WINTUN_PACKET *Queue)
+WintunReceivePacket(_In_ TUN_SESSION *Session, _Out_bytecapcount_(*PacketSize) BYTE **Packet, _Out_ DWORD *PacketSize)
 {
-    ULONG BuffHead = InterlockedGetU(&Session->Descriptor.Send.Ring->Head);
-    if (BuffHead >= Session->Capacity)
-        return ERROR_HANDLE_EOF;
-
-    for (; Queue; Queue = Queue->Next)
+    DWORD Result;
+    EnterCriticalSection(&Session->Send.Lock);
+    if (Session->Send.Head >= Session->Capacity)
     {
-        const ULONG BuffTail = InterlockedGetU(&Session->Descriptor.Send.Ring->Tail);
-        if (BuffTail >= Session->Capacity)
-            return ERROR_HANDLE_EOF;
-
-        if (BuffHead == BuffTail)
-            return ERROR_NO_MORE_ITEMS;
-
-        const ULONG BuffContent = TUN_RING_WRAP(BuffTail - BuffHead, Session->Capacity);
-        if (BuffContent < sizeof(TUN_PACKET))
-            return ERROR_INVALID_DATA;
-
-        const TUN_PACKET *Packet = (TUN_PACKET *)&Session->Descriptor.Send.Ring->Data[BuffHead];
-        if (Packet->Size > WINTUN_MAX_IP_PACKET_SIZE)
-            return ERROR_INVALID_DATA;
-
-        const ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + Packet->Size);
-        if (AlignedPacketSize > BuffContent)
-            return ERROR_INVALID_DATA;
-
-        Queue->Size = Packet->Size;
-        memcpy(Queue->Data, Packet->Data, Packet->Size);
-        BuffHead = TUN_RING_WRAP(BuffHead + AlignedPacketSize, Session->Capacity);
-        InterlockedSetU(&Session->Descriptor.Send.Ring->Head, BuffHead);
+        Result = ERROR_HANDLE_EOF;
+        goto cleanup;
     }
+    const ULONG BuffTail = InterlockedGetU(&Session->Descriptor.Send.Ring->Tail);
+    if (BuffTail >= Session->Capacity)
+    {
+        Result = ERROR_HANDLE_EOF;
+        goto cleanup;
+    }
+    if (Session->Send.Head == BuffTail)
+    {
+        Result = ERROR_NO_MORE_ITEMS;
+        goto cleanup;
+    }
+    const ULONG BuffContent = TUN_RING_WRAP(BuffTail - Session->Send.Head, Session->Capacity);
+    if (BuffContent < sizeof(TUN_PACKET))
+    {
+        Result = ERROR_INVALID_DATA;
+        goto cleanup;
+    }
+    TUN_PACKET *BuffPacket = (TUN_PACKET *)&Session->Descriptor.Send.Ring->Data[Session->Send.Head];
+    if (BuffPacket->Size > WINTUN_MAX_IP_PACKET_SIZE)
+    {
+        Result = ERROR_INVALID_DATA;
+        goto cleanup;
+    }
+    const ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + BuffPacket->Size);
+    if (AlignedPacketSize > BuffContent)
+    {
+        Result = ERROR_INVALID_DATA;
+        goto cleanup;
+    }
+    *PacketSize = BuffPacket->Size;
+    *Packet = BuffPacket->Data;
+    Session->Send.Head = TUN_RING_WRAP(Session->Send.Head + AlignedPacketSize, Session->Capacity);
+    Session->Send.PacketsToRelease++;
+    Result = ERROR_SUCCESS;
+cleanup:
+    LeaveCriticalSection(&Session->Send.Lock);
+    return Result;
+}
 
-    return ERROR_SUCCESS;
+void WINAPI
+WintunReceiveRelease(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
+{
+    EnterCriticalSection(&Session->Send.Lock);
+    TUN_PACKET *ReleasedBuffPacket = (TUN_PACKET *)(Packet - offsetof(TUN_PACKET, Data));
+    ReleasedBuffPacket->Size |= TUN_PACKET_RELEASE;
+    while (Session->Send.PacketsToRelease)
+    {
+        const TUN_PACKET *BuffPacket = (TUN_PACKET *)&Session->Descriptor.Send.Ring->Data[Session->Send.HeadRelease];
+        if ((BuffPacket->Size & TUN_PACKET_RELEASE) == 0)
+            break;
+        const ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + (BuffPacket->Size & ~TUN_PACKET_RELEASE));
+        Session->Send.HeadRelease = TUN_RING_WRAP(Session->Send.HeadRelease + AlignedPacketSize, Session->Capacity);
+        Session->Send.PacketsToRelease--;
+    }
+    InterlockedSetU(&Session->Descriptor.Send.Ring->Head, Session->Send.HeadRelease);
+    LeaveCriticalSection(&Session->Send.Lock);
 }
 
 WINTUN_STATUS WINAPI
-WintunSendPackets(_In_ TUN_SESSION *Session, _In_ const WINTUN_PACKET *Queue)
+WintunAllocateSendPacket(_In_ TUN_SESSION *Session, _In_ DWORD PacketSize, _Out_bytecapcount_(PacketSize) BYTE **Packet)
 {
-    ULONG BuffTail = InterlockedGetU(&Session->Descriptor.Receive.Ring->Tail);
-    if (BuffTail >= Session->Capacity)
-        return ERROR_HANDLE_EOF;
-
-    for (; Queue; Queue = Queue->Next)
+    DWORD Result;
+    EnterCriticalSection(&Session->Receive.Lock);
+    if (Session->Receive.Tail >= Session->Capacity)
     {
-        const ULONG PacketSize = Queue->Size;
-        const ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize);
-
-        const ULONG BuffHead = InterlockedGetU(&Session->Descriptor.Receive.Ring->Head);
-        if (BuffHead >= Session->Capacity)
-            return ERROR_HANDLE_EOF;
-
-        const ULONG BuffSpace = TUN_RING_WRAP(BuffHead - BuffTail - TUN_ALIGNMENT, Session->Capacity);
-        if (AlignedPacketSize > BuffSpace)
-            return ERROR_BUFFER_OVERFLOW; /* Dropping when ring is full. */
-
-        TUN_PACKET *Packet = (TUN_PACKET *)&Session->Descriptor.Receive.Ring->Data[BuffTail];
-        Packet->Size = PacketSize;
-        memcpy(Packet->Data, Queue->Data, PacketSize);
-        BuffTail = TUN_RING_WRAP(BuffTail + AlignedPacketSize, Session->Capacity);
-        InterlockedSetU(&Session->Descriptor.Receive.Ring->Tail, BuffTail);
-
-        if (InterlockedGet(&Session->Descriptor.Receive.Ring->Alertable))
-            SetEvent(Session->Descriptor.Receive.TailMoved);
+        Result = ERROR_HANDLE_EOF;
+        goto cleanup;
     }
+    const ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize);
+    const ULONG BuffHead = InterlockedGetU(&Session->Descriptor.Receive.Ring->Head);
+    if (BuffHead >= Session->Capacity)
+    {
+        Result = ERROR_HANDLE_EOF;
+        goto cleanup;
+    }
+    const ULONG BuffSpace = TUN_RING_WRAP(BuffHead - Session->Receive.Tail - TUN_ALIGNMENT, Session->Capacity);
+    if (AlignedPacketSize > BuffSpace)
+    {
+        Result = ERROR_BUFFER_OVERFLOW;
+        goto cleanup;
+    }
+    TUN_PACKET *BuffPacket = (TUN_PACKET *)&Session->Descriptor.Receive.Ring->Data[Session->Receive.Tail];
+    BuffPacket->Size = PacketSize | TUN_PACKET_RELEASE;
+    *Packet = BuffPacket->Data;
+    Session->Receive.Tail = TUN_RING_WRAP(Session->Receive.Tail + AlignedPacketSize, Session->Capacity);
+    Session->Receive.PacketsToRelease++;
+    Result = ERROR_SUCCESS;
+cleanup:
+    LeaveCriticalSection(&Session->Receive.Lock);
+    return Result;
+}
 
-    return ERROR_SUCCESS;
+void WINAPI
+WintunSendPacket(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
+{
+    EnterCriticalSection(&Session->Receive.Lock);
+    TUN_PACKET *ReleasedBuffPacket = (TUN_PACKET *)(Packet - offsetof(TUN_PACKET, Data));
+    ReleasedBuffPacket->Size &= ~TUN_PACKET_RELEASE;
+    while (Session->Receive.PacketsToRelease)
+    {
+        const TUN_PACKET *BuffPacket =
+            (TUN_PACKET *)&Session->Descriptor.Receive.Ring->Data[Session->Receive.TailRelease];
+        if (BuffPacket->Size & TUN_PACKET_RELEASE)
+            break;
+        const ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + BuffPacket->Size);
+        Session->Receive.TailRelease =
+            TUN_RING_WRAP(Session->Receive.TailRelease + AlignedPacketSize, Session->Capacity);
+        Session->Receive.PacketsToRelease--;
+    }
+    InterlockedSetU(&Session->Descriptor.Receive.Ring->Tail, Session->Receive.TailRelease);
+    if (InterlockedGet(&Session->Descriptor.Receive.Ring->Alertable))
+        SetEvent(Session->Descriptor.Receive.TailMoved);
+    LeaveCriticalSection(&Session->Receive.Lock);
 }
