@@ -99,13 +99,13 @@
     <ZipIntDir>$(DistributionDir).tmp\</ZipIntDir>
   </PropertyGroup>
   <ItemGroup>
-    <ZipFilesSrc Include="COPYING"                           /><ZipFilesDst Include="$(ZipIntDir)COPYING"              />
-    <ZipFilesSrc Include="README.md"                         /><ZipFilesDst Include="$(ZipIntDir)README.md"            />
-    <ZipFilesSrc Include="api\wintun.h"                      /><ZipFilesDst Include="$(ZipIntDir)include\wintun.h"     />
-    <ZipFilesSrc Include="$(Configuration)\amd64\wintun.dll" /><ZipFilesDst Include="$(ZipIntDir)bin\amd64\wintun.dll" />
-    <ZipFilesSrc Include="$(Configuration)\arm\wintun.dll"   /><ZipFilesDst Include="$(ZipIntDir)bin\arm\wintun.dll"   />
-    <ZipFilesSrc Include="$(Configuration)\arm64\wintun.dll" /><ZipFilesDst Include="$(ZipIntDir)bin\arm64\wintun.dll" />
-    <ZipFilesSrc Include="$(Configuration)\x86\wintun.dll"   /><ZipFilesDst Include="$(ZipIntDir)bin\x86\wintun.dll"   />
+    <ZipFilesSrc Include="COPYING"                           /><ZipFilesDst Include="$(ZipIntDir)wintun\COPYING"              />
+    <ZipFilesSrc Include="README.md"                         /><ZipFilesDst Include="$(ZipIntDir)wintun\README.md"            />
+    <ZipFilesSrc Include="api\wintun.h"                      /><ZipFilesDst Include="$(ZipIntDir)wintun\include\wintun.h"     />
+    <ZipFilesSrc Include="$(Configuration)\amd64\wintun.dll" /><ZipFilesDst Include="$(ZipIntDir)wintun\bin\amd64\wintun.dll" />
+    <ZipFilesSrc Include="$(Configuration)\arm\wintun.dll"   /><ZipFilesDst Include="$(ZipIntDir)wintun\bin\arm\wintun.dll"   />
+    <ZipFilesSrc Include="$(Configuration)\arm64\wintun.dll" /><ZipFilesDst Include="$(ZipIntDir)wintun\bin\arm64\wintun.dll" />
+    <ZipFilesSrc Include="$(Configuration)\x86\wintun.dll"   /><ZipFilesDst Include="$(ZipIntDir)wintun\bin\x86\wintun.dll"   />
   </ItemGroup>
   <Target Name="Zip"
     Inputs="@(ZipFilesSrc)"
