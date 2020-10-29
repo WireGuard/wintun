@@ -147,12 +147,6 @@ WintunEndSession(_In_ TUN_SESSION *Session)
     HeapFree(ModuleHeap, 0, Session);
 }
 
-BOOL WINAPI
-WintunIsPacketAvailable(_In_ TUN_SESSION *Session)
-{
-    return Session->Send.Head != InterlockedGetU(&Session->Descriptor.Send.Ring->Tail);
-}
-
 WINTUN_STATUS WINAPI
 WintunWaitForPacket(_In_ TUN_SESSION *Session, _In_ DWORD Milliseconds)
 {

@@ -261,15 +261,6 @@ typedef void(WINAPI *WINTUN_END_SESSION_FUNC)(_In_ WINTUN_SESSION_HANDLE Session
 #define WINTUN_MAX_IP_PACKET_SIZE 0xFFFF
 
 /**
- * Peeks if there is a packet available for reading.
- *
- * @param Session       Wintun session handle obtained with WintunStartSession
- *
- * @return Non-zero if there is a packet available; zero otherwise.
- */
-BOOL(WINAPI *WINTUN_IS_PACKET_AVAILABLE_FUNC)(_In_ WINTUN_SESSION_HANDLE Session);
-
-/**
  * Waits for a packet to become available for reading.
  *
  * @param Session       Wintun session handle obtained with WintunStartSession

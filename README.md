@@ -58,7 +58,6 @@ Once adapter is created, use the following functions to start a session and tran
 - `WintunStartSession()` starts a session. One adapter may have only one session.
 - `WintunEndSession()` ends and frees the session.
 - `WintunIsPacketAvailable()` checks if there is a receive packet available.
-- `WintunWaitForPacket()` waits for a receive packet to become available.
 - `WintunReceivePacket()` receives one packet.
 - `WintunReceiveRelease()` releases internal buffer after client processed the receive packet.
 - `WintunAllocateSendPacket()` allocates memory for send packet.
@@ -69,23 +68,24 @@ Once adapter is created, use the following functions to start a session and tran
 Reading packets from the adapter may be done as:
 
 ```C
-// TODO: Preallocate WINTUN_PACKET *Queue linked list with WINTUN_MAX_IP_PACKET_SIZE packets.
 for (;;) {
-    if (!WintunIsPacketAvailable(Session))
-        WintunWaitForPacket(Session, INFINITE);
-    for (WINTUN_PACKET *p = Queue; p && p->Size <= WINTUN_MAX_IP_PACKET_SIZE; p = p->Next)
-        p->Size = DWORD_MAX;
     BYTE *Packet;
     DWORD PacketSize;
     DWORD Result = WintunReceivePacket(Session, &Packet, &PacketSize);
-    if (Result != ERROR_SUCCESS)
-        return Result;
-    // TODO: Process packet.
-    WintunReceiveRelease(Session, Packet);
+    switch (Result) {
+    case ERROR_SUCCESS:
+        // TODO: Process packet.
+        WintunReceiveRelease(Session, Packet);
+        break;
+    case ERROR_NO_MORE_ITEMS:
+        WintunWaitForPacket(Session, INFINITE);
+        continue;
+    }
+    return Result;
 }
 ```
 
-It may be desirable to spin on `WintunIsPacketAvailable()` for some time under heavy use before waiting with `WintunWaitForPacket()`, in order to reduce latency.
+It may be desirable to spin on `WintunReceivePacket()` while it returns `ERROR_NO_MORE_ITEMS` for some time under heavy use before waiting with `WintunWaitForPacket()`, in order to reduce latency.
 
 Writing packets to the adapter may be done as:
 
