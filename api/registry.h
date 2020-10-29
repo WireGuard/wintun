@@ -118,11 +118,15 @@ RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD 
  *
  * @param Value         Pointer to DWORD to retrieve registry value.
  *
+ * @Log                 Set to TRUE to log all failures; FALSE to skip logging the innermost errors. Skipping innermost
+ *                      errors reduces log clutter when we are using RegistryQueryDWORD() from
+ *                      RegistryQueryDWORDWait() and some errors are expected to occur.
+ *
  * @return ERROR_SUCCESS on success; ERROR_INVALID_DATATYPE when registry value exist but not REG_DWORD type;
  * ERROR_INVALID_DATA when registry value size is not 4 bytes; Win32 error code otherwise.
  */
 WINTUN_STATUS
-RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ DWORD *Value);
+RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ DWORD *Value, _In_ BOOL Log);
 
 /**
  * Reads a 32-bit DWORD value from registry key. It waits for the registry value to become available.

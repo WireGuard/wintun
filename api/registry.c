@@ -249,12 +249,16 @@ RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD 
 }
 
 WINTUN_STATUS
-RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ DWORD *Value)
+RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ DWORD *Value, _In_ BOOL Log)
 {
     DWORD ValueType, Size = sizeof(DWORD);
     DWORD Result = RegQueryValueExW(Key, Name, NULL, &ValueType, (BYTE *)Value, &Size);
     if (Result != ERROR_SUCCESS)
-        return LOG_ERROR(L"Querying failed", Result);
+    {
+        if (Log)
+            LOG_ERROR(L"Querying failed", Result);
+        return Result;
+    }
     if (ValueType != REG_DWORD)
     {
         LOG(WINTUN_LOG_ERR, L"Value is not a DWORD");
@@ -284,7 +288,7 @@ RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD T
             LOG_ERROR(L"Failed to setup notification", Result);
             break;
         }
-        Result = RegistryQueryDWORD(Key, Name, Value);
+        Result = RegistryQueryDWORD(Key, Name, Value, FALSE);
         if (Result != ERROR_FILE_NOT_FOUND && Result != ERROR_PATH_NOT_FOUND)
             break;
         LONGLONG TimeLeft = Deadline - GetTickCount64();

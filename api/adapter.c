@@ -541,7 +541,7 @@ CreateAdapterData(
     HeapFree(ModuleHeap, 0, ValueStr);
 
     /* Read the NetLuidIndex value. */
-    Result = RegistryQueryDWORD(Key, L"NetLuidIndex", &(*Adapter)->LuidIndex);
+    Result = RegistryQueryDWORD(Key, L"NetLuidIndex", &(*Adapter)->LuidIndex, TRUE);
     if (Result != ERROR_SUCCESS)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to query NetLuidIndex value");
@@ -549,7 +549,7 @@ CreateAdapterData(
     }
 
     /* Read the NetLuidIndex value. */
-    Result = RegistryQueryDWORD(Key, L"*IfType", &(*Adapter)->IfType);
+    Result = RegistryQueryDWORD(Key, L"*IfType", &(*Adapter)->IfType, TRUE);
     if (Result != ERROR_SUCCESS)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to query *IfType value");

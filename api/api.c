@@ -22,25 +22,19 @@ WintunGetVersion(
         RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Services\\Wintun", 0, KEY_QUERY_VALUE, &Key);
     if (Result != ERROR_SUCCESS)
         return LOG_ERROR(L"Failed to open registry key", Result);
-    Result = RegistryQueryDWORD(Key, L"DriverMajorVersion", DriverVersionMaj);
-    if (Result != ERROR_SUCCESS)
+    if (RegistryQueryDWORD(Key, L"DriverMajorVersion", DriverVersionMaj, FALSE) != ERROR_SUCCESS ||
+        RegistryQueryDWORD(Key, L"DriverMinorVersion", DriverVersionMin, FALSE) != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to query DriverMajorVersion value");
-        goto cleanupKey;
+        *DriverVersionMaj = WINTUN_VERSION_MAJ;
+        *DriverVersionMin = WINTUN_VERSION_MIN;
     }
-    Result = RegistryQueryDWORD(Key, L"DriverMinorVersion", DriverVersionMin);
-    if (Result != ERROR_SUCCESS)
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to query DriverMinorVersion value");
-        goto cleanupKey;
-    }
-    Result = RegistryQueryDWORD(Key, L"NdisMajorVersion", NdisVersionMaj);
+    Result = RegistryQueryDWORD(Key, L"NdisMajorVersion", NdisVersionMaj, TRUE);
     if (Result != ERROR_SUCCESS)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to query NdisMajorVersion value");
         goto cleanupKey;
     }
-    Result = RegistryQueryDWORD(Key, L"NdisMinorVersion", NdisVersionMin);
+    Result = RegistryQueryDWORD(Key, L"NdisMinorVersion", NdisVersionMin, TRUE);
     if (Result != ERROR_SUCCESS)
         LOG(WINTUN_LOG_ERR, L"Failed to query NdisMinorVersion value");
 cleanupKey:
