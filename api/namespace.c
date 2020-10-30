@@ -52,8 +52,6 @@ NamespaceRuntimeInit(void)
         return ERROR_SUCCESS;
     }
 
-    /* TODO: wireguard-go uses Blake2s hashing in tun\wintun\namespace_windows.go, unfortunately not available in
-     * Windows API. SHA-256 is used instead. */
     if (!BCRYPT_SUCCESS(BCryptOpenAlgorithmProvider(&AlgProvider, BCRYPT_SHA256_ALGORITHM, NULL, 0)))
     {
         Result = ERROR_GEN_FAILURE;
@@ -116,19 +114,16 @@ NamespaceTakeMutex(_In_z_ const WCHAR *Pool)
     if (NamespaceRuntimeInit() != ERROR_SUCCESS)
         return NULL;
 
-    /* TODO: wireguard-go uses Blake2s hashing in tun\wintun\namespace_windows.go, unfortunately not available in
-     * Windows API. SHA-256 is used instead. */
     BCRYPT_HASH_HANDLE Sha256 = NULL;
     if (!BCRYPT_SUCCESS(BCryptCreateHash(AlgProvider, &Sha256, NULL, 0, NULL, 0, 0)))
         return NULL;
-    static const char mutex_label[] = "WireGuard Adapter Name Mutex Stable Suffix v1 jason@zx2c4.com";
-    if (!BCRYPT_SUCCESS(BCryptHashData(Sha256, (PUCHAR)mutex_label, sizeof(mutex_label) - sizeof(char), 0)))
+    static const WCHAR mutex_label[] = L"Wintun Adapter Name Mutex Stable Suffix v1 jason@zx2c4.com";
+    if (!BCRYPT_SUCCESS(BCryptHashData(Sha256, (PUCHAR)mutex_label, sizeof(mutex_label) /* Including NULL 2 bytes */, 0)))
         goto cleanupSha256;
     WCHAR *PoolNorm = NormalizeStringAlloc(NormalizationC, Pool);
     if (!PoolNorm)
         goto cleanupSha256;
-    /* TODO: wireguard-go hashes UTF-8 normalized pool name. We hash UTF-16 here. */
-    if (!BCRYPT_SUCCESS(BCryptHashData(Sha256, (PUCHAR)PoolNorm, (int)wcslen(PoolNorm), 0)))
+    if (!BCRYPT_SUCCESS(BCryptHashData(Sha256, (PUCHAR)PoolNorm, (int)wcslen(PoolNorm) + 2 /* Add in NULL 2 bytes */, 0)))
         goto cleanupPoolNorm;
     BYTE Hash[32];
     if (!BCRYPT_SUCCESS(BCryptFinishHash(Sha256, Hash, sizeof(Hash), 0)))
