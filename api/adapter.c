@@ -1279,13 +1279,13 @@ ProcessStdout(_Inout_ PROCESS_STDOUT_STATE *State)
     {
         DWORD SizeRead;
         if (!ReadFile(State->Stdout, State->Response + Offset, sizeof(WCHAR) * (MaxLen - Offset), &SizeRead, NULL))
-            return 0;
+            return ERROR_SUCCESS;
         if (SizeRead % sizeof(WCHAR))
-            return 1;
+            return ERROR_INVALID_DATA;
         Offset += SizeRead / sizeof(WCHAR);
         State->Response[Offset] = 0;
     }
-    return 2;
+    return ERROR_BUFFER_OVERFLOW;
 }
 
 static DWORD WINAPI
@@ -1308,9 +1308,9 @@ ProcessStderr(_In_ HANDLE Stderr)
         WCHAR Buf[0x200];
         DWORD SizeRead;
         if (!ReadFile(Stderr, Buf, sizeof(Buf), &SizeRead, NULL))
-            return 0;
+            return ERROR_SUCCESS;
         if (SizeRead % sizeof(WCHAR))
-            return 1;
+            return ERROR_INVALID_DATA;
         SizeRead /= sizeof(WCHAR);
         for (DWORD i = 0; i < SizeRead; ++i)
         {
@@ -1401,33 +1401,27 @@ ExecuteRunDll32(
                                .bInheritHandle = TRUE,
                                .lpSecurityDescriptor =
                                    SecurityAttributes ? SecurityAttributes->lpSecurityDescriptor : NULL };
-    typedef enum
-    {
-        Stdout = 0,
-        Stderr
-    } stdid_t;
-    HANDLE StreamR[] = { INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE },
-           StreamW[] = { INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE };
-    if (!CreatePipe(&StreamR[Stdout], &StreamW[Stdout], &sa, 0) ||
-        !CreatePipe(&StreamR[Stderr], &StreamW[Stderr], &sa, 0))
+    HANDLE StreamRStdout = INVALID_HANDLE_VALUE, StreamRStderr = INVALID_HANDLE_VALUE,
+           StreamWStdout = INVALID_HANDLE_VALUE, StreamWStderr = INVALID_HANDLE_VALUE;
+    if (!CreatePipe(&StreamRStdout, &StreamWStdout, &sa, 0) || !CreatePipe(&StreamRStderr, &StreamWStderr, &sa, 0))
     {
         Result = LOG_LAST_ERROR(L"Failed to create pipes");
         goto cleanupPipes;
     }
-    if (!SetHandleInformation(StreamR[Stdout], HANDLE_FLAG_INHERIT, 0) ||
-        !SetHandleInformation(StreamR[Stderr], HANDLE_FLAG_INHERIT, 0))
+    if (!SetHandleInformation(StreamRStdout, HANDLE_FLAG_INHERIT, 0) ||
+        !SetHandleInformation(StreamRStderr, HANDLE_FLAG_INHERIT, 0))
     {
         Result = LOG_LAST_ERROR(L"Failed to set handle info");
         goto cleanupPipes;
     }
     if (ResponseCapacity)
         Response[0] = 0;
-    PROCESS_STDOUT_STATE ProcessStdoutState = { .Stdout = StreamR[Stdout],
+    PROCESS_STDOUT_STATE ProcessStdoutState = { .Stdout = StreamRStdout,
                                                 .Response = Response,
                                                 .ResponseCapacity = ResponseCapacity };
-    HANDLE Thread[] = { NULL, NULL };
-    if ((Thread[Stdout] = CreateThread(SecurityAttributes, 0, ProcessStdout, &ProcessStdoutState, 0, NULL)) == NULL ||
-        (Thread[Stderr] = CreateThread(SecurityAttributes, 0, ProcessStderr, StreamR[Stderr], 0, NULL)) == NULL)
+    HANDLE ThreadStdout = NULL, ThreadStderr = NULL;
+    if ((ThreadStdout = CreateThread(SecurityAttributes, 0, ProcessStdout, &ProcessStdoutState, 0, NULL)) == NULL ||
+        (ThreadStderr = CreateThread(SecurityAttributes, 0, ProcessStderr, StreamRStderr, 0, NULL)) == NULL)
     {
         Result = LOG_LAST_ERROR(L"Failed to spawn reader threads");
         goto cleanupThreads;
@@ -1435,8 +1429,8 @@ ExecuteRunDll32(
     STARTUPINFOW si = { .cb = sizeof(STARTUPINFO),
                         .dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES,
                         .wShowWindow = SW_HIDE,
-                        .hStdOutput = StreamW[Stdout],
-                        .hStdError = StreamW[Stderr] };
+                        .hStdOutput = StreamWStdout,
+                        .hStdError = StreamWStderr };
     PROCESS_INFORMATION pi;
     if (!CreateProcessW(RunDll32Path, CommandLine, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
     {
@@ -1447,19 +1441,29 @@ ExecuteRunDll32(
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 cleanupThreads:
-    for (size_t i = _countof(Thread); i--;)
-        if (Thread[i])
-        {
-            CloseHandle(StreamW[i]);
-            StreamW[i] = INVALID_HANDLE_VALUE;
-            WaitForSingleObject(Thread[i], INFINITE);
-            CloseHandle(Thread[i]);
-        }
+    if (ThreadStderr)
+    {
+        CloseHandle(StreamWStderr);
+        StreamWStderr = INVALID_HANDLE_VALUE;
+        WaitForSingleObject(ThreadStderr, INFINITE);
+        CloseHandle(ThreadStderr);
+    }
+    if (ThreadStdout)
+    {
+        CloseHandle(StreamWStdout);
+        StreamWStdout = INVALID_HANDLE_VALUE;
+        WaitForSingleObject(ThreadStdout, INFINITE);
+        if (!GetExitCodeThread(ThreadStdout, &Result))
+            Result = LOG_LAST_ERROR(L"Failed to retrieve thread result");
+        else if (Result != ERROR_SUCCESS)
+            LOG_ERROR(L"Failed to read process output", Result);
+        CloseHandle(ThreadStdout);
+    }
 cleanupPipes:
-    CloseHandle(StreamR[Stderr]);
-    CloseHandle(StreamW[Stderr]);
-    CloseHandle(StreamR[Stdout]);
-    CloseHandle(StreamW[Stdout]);
+    CloseHandle(StreamRStderr);
+    CloseHandle(StreamWStderr);
+    CloseHandle(StreamRStdout);
+    CloseHandle(StreamWStdout);
     HeapFree(ModuleHeap, 0, CommandLine);
 cleanupDelete:
     DeleteFileW(DllPath);
