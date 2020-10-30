@@ -41,7 +41,7 @@ Bin2Hex(_In_bytecount_(Size) const void *Source, size_t Size, _Out_capcount_(Siz
 }
 
 static WINTUN_STATUS
-NamespaceRuntimeInit()
+NamespaceRuntimeInit(void)
 {
     DWORD Result;
 
@@ -165,13 +165,13 @@ NamespaceReleaseMutex(_In_ HANDLE Mutex)
 }
 
 void
-NamespaceInit()
+NamespaceInit(void)
 {
     InitializeCriticalSection(&Initializing);
 }
 
 void
-NamespaceCleanup()
+NamespaceCleanup(void)
 {
     EnterCriticalSection(&Initializing);
     if (HasInitialized)

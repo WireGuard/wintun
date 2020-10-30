@@ -70,13 +70,13 @@ AdapterEnableAll(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA_LIST *AdaptersToEna
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 WINTUN_STATUS
-AdapterDeleteAllOurs();
+AdapterDeleteAllOurs(void);
 
 void
-AdapterInit();
+AdapterInit(void);
 
 void
-AdapterCleanup();
+AdapterCleanup(void);
 
 /**
  * Wintun adapter descriptor.

@@ -287,7 +287,7 @@ AdapterEnableAll(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA_LIST *AdaptersToEna
 }
 
 WINTUN_STATUS
-AdapterDeleteAllOurs()
+AdapterDeleteAllOurs(void)
 {
     DWORD Result = ERROR_SUCCESS;
     HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
@@ -328,7 +328,7 @@ AdapterDeleteAllOurs()
 }
 
 void
-AdapterInit()
+AdapterInit(void)
 {
     Locale = _wcreate_locale(LC_ALL, L"");
 
@@ -350,7 +350,7 @@ AdapterInit()
 }
 
 void
-AdapterCleanup()
+AdapterCleanup(void)
 {
     _free_locale(Locale);
 }
@@ -791,7 +791,7 @@ extern VOID NTAPI
 RtlGetNtVersionNumbers(_Out_opt_ DWORD *MajorVersion, _Out_opt_ DWORD *MinorVersion, _Out_opt_ DWORD *BuildNumber);
 
 static BOOL
-HaveWHQL()
+HaveWHQL(void)
 {
 #    if defined(HAVE_EV) && defined(HAVE_WHQL)
     DWORD MajorVersion;

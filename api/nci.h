@@ -16,7 +16,7 @@ extern DWORD(WINAPI *NciGetConnectionName)(
     _Out_opt_ DWORD *OutDestNameBytes);
 
 void
-NciInit();
+NciInit(void);
 
 void
-NciCleanup();
+NciCleanup(void);

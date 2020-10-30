@@ -15,7 +15,7 @@ void
 NamespaceReleaseMutex(_In_ HANDLE Mutex);
 
 void
-NamespaceInit();
+NamespaceInit(void);
 
 void
-NamespaceCleanup();
+NamespaceCleanup(void);

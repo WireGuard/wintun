@@ -16,7 +16,7 @@ DWORD(WINAPI *NciGetConnectionName)
  _Out_opt_ DWORD *OutDestNameBytes);
 
 void
-NciInit()
+NciInit(void)
 {
     NciModule = LoadLibraryW(L"nci.dll");
     if (!NciModule)
@@ -28,7 +28,7 @@ NciInit()
 }
 
 void
-NciCleanup()
+NciCleanup(void)
 {
     if (NciModule)
         FreeLibrary(NciModule);
