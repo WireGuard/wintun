@@ -24,8 +24,6 @@ DriverIsOurDrvInfoDetail(_In_ const SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData)
                DriverIsOurHardwareID(DrvInfoDetailData->HardwareID + DrvInfoDetailData->CompatIDsOffset);
 }
 
-#if defined(HAVE_EV) || defined(HAVE_WHQL)
-
 WINTUN_STATUS
 DriverRemoveAllOurs(void)
 {
@@ -72,5 +70,3 @@ cleanupDeviceInfoSet:
     SetupDiDestroyDeviceInfoList(DevInfo);
     return Result;
 }
-
-#endif

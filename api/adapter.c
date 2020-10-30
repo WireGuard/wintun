@@ -776,8 +776,6 @@ WintunGetAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *H
     return GetDeviceObject(Adapter->DevInstanceID, Handle);
 }
 
-#if defined(HAVE_EV) || defined(HAVE_WHQL)
-
 /* We can't use RtlGetVersion, because appcompat's aclayers.dll shims it to report Vista
  * when run from legacy contexts. So, we instead use the undocumented RtlGetNtVersionNumbers.
  *
@@ -792,15 +790,15 @@ RtlGetNtVersionNumbers(_Out_opt_ DWORD *MajorVersion, _Out_opt_ DWORD *MinorVers
 static BOOL
 HaveWHQL(void)
 {
-#    if defined(HAVE_EV) && defined(HAVE_WHQL)
+#if defined(HAVE_EV) && defined(HAVE_WHQL)
     DWORD MajorVersion;
     RtlGetNtVersionNumbers(&MajorVersion, NULL, NULL);
     return MajorVersion >= 10;
-#    elif defined(HAVE_EV)
-    return FALSE;
-#    elif defined(HAVE_WHQL)
+#elif defined(HAVE_WHQL)
     return TRUE;
-#    endif
+#else
+    return FALSE;
+#endif
 }
 
 static WINTUN_STATUS
@@ -870,10 +868,6 @@ cleanupQueriedStore:
     CertCloseStore(QueriedStore, 0);
     return Result;
 }
-
-#endif
-
-#if defined(HAVE_EV) || defined(HAVE_WHQL)
 
 static BOOL
 IsNewer(_In_ const SP_DRVINFO_DATA_W *DrvInfoData, _In_ const FILETIME *DriverDate, _In_ DWORDLONG DriverVersion)
@@ -1238,8 +1232,6 @@ cleanupMutex:
     return Result;
 }
 
-#endif
-
 static WINTUN_STATUS
 CreateTemporaryDirectory(_Out_cap_c_(MAX_PATH) WCHAR *RandomTempSubDirectory)
 {
@@ -1559,7 +1551,6 @@ WintunCreateAdapter(
         return CreateAdapterNatively(Pool, Name, RequestedGUID, Adapter, RebootRequired);
 #endif
 
-#if defined(HAVE_EV) || defined(HAVE_WHQL)
     DWORD Result = ERROR_SUCCESS;
     WCHAR RandomTempSubDirectory[MAX_PATH];
     if ((Result = CreateTemporaryDirectory(RandomTempSubDirectory)) != ERROR_SUCCESS)
@@ -1605,9 +1596,6 @@ cleanupDelete:
 cleanupDirectory:
     RemoveDirectoryW(RandomTempSubDirectory);
     return Result;
-#else
-    return ERROR_NOT_SUPPORTED;
-#endif
 }
 
 #if defined(_M_IX86) || defined(_M_ARM)
