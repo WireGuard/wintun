@@ -157,8 +157,8 @@
       <PreprocessorDefinitions Condition="'$(Platform)'=='ARM64'">_M_ARM64=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
-      <DelayLoadDLLs>bcrypt.dll;iphlpapi.dll</DelayLoadDLLs>
-      <AdditionalDependencies>Bcrypt.lib;Crypt32.lib;Cfgmgr32.lib;Iphlpapi.lib;ntdll.lib;Setupapi.lib;shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <DelayLoadDLLs>bcrypt.dll;iphlpapi.dll;newdev.dll;version.dll</DelayLoadDLLs>
+      <AdditionalDependencies>Bcrypt.lib;Crypt32.lib;Cfgmgr32.lib;Iphlpapi.lib;newdev.lib;ntdll.lib;Setupapi.lib;shlwapi.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>exports.def</ModuleDefinitionFile>
       <SubSystem>Windows</SubSystem>
     </Link>
