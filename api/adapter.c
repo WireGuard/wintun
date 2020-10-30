@@ -329,7 +329,7 @@ AdapterDeleteAllOurs(void)
 void
 AdapterInit(void)
 {
-#if defined(_M_IX86) || defined(_M_ARM)
+#ifdef MAYBE_WOW64
     typedef BOOL(WINAPI * IsWow64Process2_t)(
         _In_ HANDLE hProcess, _Out_ USHORT * pProcessMachine, _Out_opt_ USHORT * pNativeMachine);
     HANDLE Kernel32;
@@ -1255,7 +1255,7 @@ CreateTemporaryDirectory(_Out_cap_c_(MAX_PATH) WCHAR *RandomTempSubDirectory)
     return ERROR_SUCCESS;
 }
 
-#if defined(_M_IX86) || defined(_M_ARM)
+#ifdef MAYBE_WOW64
 
 typedef struct _PROCESS_STDOUT_STATE
 {
@@ -1546,7 +1546,7 @@ WintunCreateAdapter(
     _Out_ WINTUN_ADAPTER **Adapter,
     _Inout_ BOOL *RebootRequired)
 {
-#if defined(_M_IX86) || defined(_M_ARM)
+#ifdef MAYBE_WOW64
     if (NativeMachine != IMAGE_FILE_PROCESS)
         return CreateAdapterNatively(Pool, Name, RequestedGUID, Adapter, RebootRequired);
 #endif
@@ -1598,7 +1598,7 @@ cleanupDirectory:
     return Result;
 }
 
-#if defined(_M_IX86) || defined(_M_ARM)
+#ifdef MAYBE_WOW64
 
 static WINTUN_STATUS
 DeleteAdapterNatively(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired)
@@ -1639,7 +1639,7 @@ cleanupArgv:
 WINTUN_STATUS WINAPI
 WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired)
 {
-#if defined(_M_IX86) || defined(_M_ARM)
+#ifdef MAYBE_WOW64
     if (NativeMachine != IMAGE_FILE_PROCESS)
         return DeleteAdapterNatively(Adapter, RebootRequired);
 #endif

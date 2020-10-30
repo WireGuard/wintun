@@ -7,7 +7,7 @@
 
 #define EXPORT comment(linker, "/EXPORT:" __FUNCTION__ "=" __FUNCDNAME__)
 
-#if defined(_M_AMD64) || defined(_M_ARM64) || defined(_DEBUG)
+#ifdef ACCEPT_WOW64
 
 static DWORD
 WriteFormatted(_In_ DWORD StdHandle, _In_z_ const WCHAR *Template, ...)
