@@ -799,12 +799,10 @@ RtlGetNtVersionNumbers(_Out_opt_ DWORD *MajorVersion, _Out_opt_ DWORD *MinorVers
 static BOOL
 HaveWHQL(void)
 {
-#if defined(HAVE_EV) && defined(HAVE_WHQL)
+#if defined(HAVE_WHQL)
     DWORD MajorVersion;
     RtlGetNtVersionNumbers(&MajorVersion, NULL, NULL);
     return MajorVersion >= 10;
-#elif defined(HAVE_WHQL)
-    return TRUE;
 #else
     return FALSE;
 #endif
