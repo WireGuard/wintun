@@ -1397,19 +1397,16 @@ ExecuteRunDll32(
         Result = ERROR_INVALID_PARAMETER;
         goto cleanupDelete;
     }
-    SECURITY_ATTRIBUTES sa = { .nLength = sizeof(SECURITY_ATTRIBUTES),
-                               .bInheritHandle = TRUE,
-                               .lpSecurityDescriptor =
-                                   SecurityAttributes ? SecurityAttributes->lpSecurityDescriptor : NULL };
     HANDLE StreamRStdout = INVALID_HANDLE_VALUE, StreamRStderr = INVALID_HANDLE_VALUE,
            StreamWStdout = INVALID_HANDLE_VALUE, StreamWStderr = INVALID_HANDLE_VALUE;
-    if (!CreatePipe(&StreamRStdout, &StreamWStdout, &sa, 0) || !CreatePipe(&StreamRStderr, &StreamWStderr, &sa, 0))
+    if (!CreatePipe(&StreamRStdout, &StreamWStdout, SecurityAttributes, 0) ||
+        !CreatePipe(&StreamRStderr, &StreamWStderr, SecurityAttributes, 0))
     {
         Result = LOG_LAST_ERROR(L"Failed to create pipes");
         goto cleanupPipes;
     }
-    if (!SetHandleInformation(StreamRStdout, HANDLE_FLAG_INHERIT, 0) ||
-        !SetHandleInformation(StreamRStderr, HANDLE_FLAG_INHERIT, 0))
+    if (!SetHandleInformation(StreamWStdout, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) ||
+        !SetHandleInformation(StreamWStderr, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT))
     {
         Result = LOG_LAST_ERROR(L"Failed to set handle info");
         goto cleanupPipes;
