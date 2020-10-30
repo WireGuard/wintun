@@ -816,7 +816,10 @@ static NTSTATUS TunInitializeDispatchSecurityDescriptor(VOID)
         return STATUS_INSUFFICIENT_RESOURCES;
     Status = RtlAbsoluteToSelfRelativeSD(&SecurityDescriptor, TunDispatchSecurityDescriptor, &RequiredBytes);
     if (!NT_SUCCESS(Status))
+    {
+        ExFreePoolWithTag(TunDispatchSecurityDescriptor, TUN_MEMORY_TAG);
         return Status;
+    }
     return STATUS_SUCCESS;
 }
 
