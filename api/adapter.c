@@ -1012,47 +1012,45 @@ out:
 static DWORDLONG
 RunningWintunVersion(void)
 {
-    DWORD RequiredSize = 0, CurrentSize = 0;
-    VOID **Drivers = NULL;
     DWORDLONG Version = 0;
+    PRTL_PROCESS_MODULES Modules;
+    ULONG BufferSize = 2048;
     for (;;)
     {
-        if (!EnumDeviceDrivers(Drivers, CurrentSize, &RequiredSize))
-        {
-            LOG(WINTUN_LOG_ERR, L"Failed to enumerate drivers");
-            return Version;
-        }
-        if (CurrentSize == RequiredSize)
-            break;
-        if (Drivers)
-            HeapFree(ModuleHeap, 0, Drivers);
-        Drivers = HeapAlloc(ModuleHeap, 0, RequiredSize);
-        if (!Drivers)
+        Modules = HeapAlloc(ModuleHeap, 0, BufferSize);
+        if (!Modules)
         {
             LOG(WINTUN_LOG_ERR, L"Out of memory");
             return Version;
         }
-        CurrentSize = RequiredSize;
+        NTSTATUS Status = NtQuerySystemInformation(SystemModuleInformation, Modules, BufferSize, &BufferSize);
+        if (NT_SUCCESS(Status))
+            break;
+        HeapFree(ModuleHeap, 0, Modules);
+        if (Status == STATUS_INFO_LENGTH_MISMATCH)
+            continue;
+        LOG(WINTUN_LOG_ERR, L"Failed to enumerate drivers");
+        return Version;
     }
-    WCHAR MaybeWintun[11];
-    for (DWORD i = CurrentSize / sizeof(Drivers[0]); i-- > 0;)
+    for (ULONG i = 0; i < Modules->NumberOfModules; ++i)
     {
-        if (GetDeviceDriverBaseNameW(Drivers[i], MaybeWintun, _countof(MaybeWintun)) == 10 &&
-            !_wcsicmp(MaybeWintun, L"wintun.sys"))
+        if (!_stricmp((const char *)&Modules->Modules[i].FullPathName[Modules->Modules[i].OffsetToFileName], "wintun.sys"))
         {
-            WCHAR WintunPath[MAX_PATH + 2];
-            DWORD Len = GetDeviceDriverFileNameW(Drivers[i], WintunPath, _countof(WintunPath));
-            if (!Len || Len == _countof(WintunPath) - 1)
+            size_t Size = strlen((const char *)Modules->Modules[i].FullPathName) + 1;
+            WCHAR *FilePathName = HeapAlloc(ModuleHeap, 0, Size * 2);
+            if (!FilePathName)
             {
-                LOG(WINTUN_LOG_ERR, L"Failed to locate driver path");
+                LOG(WINTUN_LOG_ERR, L"Out of memory");
                 goto out;
             }
-            Version = VersionOfFile(WintunPath);
+            mbstowcs_s(&Size, FilePathName, Size, (const char *)Modules->Modules[i].FullPathName, _TRUNCATE);
+            Version = VersionOfFile(FilePathName);
+            HeapFree(ModuleHeap, 0, FilePathName);
             goto out;
         }
     }
 out:
-    HeapFree(ModuleHeap, 0, Drivers);
+    HeapFree(ModuleHeap, 0, Modules);
     return Version;
 }
 

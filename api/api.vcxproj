@@ -199,6 +199,7 @@
     <ClInclude Include="logger.h" />
     <ClInclude Include="namespace.h" />
     <ClInclude Include="nci.h" />
+    <ClInclude Include="ntldr.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="registry.h" />
     <ClInclude Include="resource.h" />
