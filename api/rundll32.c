@@ -121,10 +121,11 @@ VOID __stdcall DeleteAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int 
         goto cleanup;
 
     WINTUN_ADAPTER Adapter = { 0 };
-    if (FAILED(CLSIDFromString(Argv[2], &Adapter.CfgInstanceID)))
+    BOOL ForceCloseSessions = wcstoul(Argv[2], NULL, 10);
+    if (FAILED(CLSIDFromString(Argv[3], &Adapter.CfgInstanceID)))
         goto cleanup;
     BOOL RebootRequired = FALSE;
-    WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X! %2!X!", WintunDeleteAdapter(&Adapter, &RebootRequired), RebootRequired);
+    WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X! %2!X!", WintunDeleteAdapter(&Adapter, ForceCloseSessions, &RebootRequired), RebootRequired);
 
 cleanup:
     Done();

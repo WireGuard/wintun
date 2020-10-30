@@ -115,4 +115,4 @@ WintunCreateAdapter(
  * @copydoc WINTUN_DELETE_ADAPTER_FUNC
  */
 WINTUN_STATUS WINAPI
-WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired);
+WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSessions, _Inout_ BOOL *RebootRequired);

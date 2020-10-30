@@ -1657,16 +1657,17 @@ cleanupToken:
 #ifdef MAYBE_WOW64
 
 static WINTUN_STATUS
-DeleteAdapterNatively(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired)
+DeleteAdapterNatively(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSessions, _Inout_ BOOL *RebootRequired)
 {
     LOG(WINTUN_LOG_INFO, L"Spawning native process");
     WCHAR GuidStr[MAX_GUID_STRING_LEN];
-    WCHAR Arguments[14 + MAX_GUID_STRING_LEN + 1];
+    WCHAR Arguments[16 + MAX_GUID_STRING_LEN + 1];
     if (_snwprintf_s(
             Arguments,
             _countof(Arguments),
             _TRUNCATE,
-            L"DeleteAdapter %.*s",
+            L"DeleteAdapter %d %.*s",
+            ForceCloseSessions ? 1 : 0,
             StringFromGUID2(&Adapter->CfgInstanceID, GuidStr, _countof(GuidStr)),
             GuidStr) == -1)
         return LOG(WINTUN_LOG_ERR, L"Command line too long"), ERROR_INVALID_PARAMETER;
@@ -1693,7 +1694,7 @@ cleanupArgv:
 #endif
 
 WINTUN_STATUS WINAPI
-WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired)
+WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSessions, _Inout_ BOOL *RebootRequired)
 {
     if (!ElevateToSystem())
         return LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user"), ERROR_ACCESS_DENIED;
@@ -1702,7 +1703,7 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequ
 #ifdef MAYBE_WOW64
     if (NativeMachine != IMAGE_FILE_PROCESS)
     {
-        Result = DeleteAdapterNatively(Adapter, RebootRequired);
+        Result = DeleteAdapterNatively(Adapter, ForceCloseSessions, RebootRequired);
         RevertToSelf();
         return Result;
     }
@@ -1722,7 +1723,7 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequ
         goto cleanupToken;
     }
 
-    if (ForceCloseWintunAdapterHandle(DevInfo, &DevInfoData) != ERROR_SUCCESS)
+    if (ForceCloseSessions && ForceCloseWintunAdapterHandle(DevInfo, &DevInfoData) != ERROR_SUCCESS)
         LOG(WINTUN_LOG_WARN, L"Failed to force close adapter handles");
 
     SetQuietInstall(DevInfo, &DevInfoData);
