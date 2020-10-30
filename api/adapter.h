@@ -75,9 +75,6 @@ AdapterDeleteAllOurs(void);
 void
 AdapterInit(void);
 
-void
-AdapterCleanup(void);
-
 /**
  * Wintun adapter descriptor.
  */

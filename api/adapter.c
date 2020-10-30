@@ -21,7 +21,6 @@
 #    error Unsupported architecture
 #endif
 
-static _locale_t Locale;
 static USHORT NativeMachine = IMAGE_FILE_PROCESS;
 
 WINTUN_STATUS
@@ -330,8 +329,6 @@ AdapterDeleteAllOurs(void)
 void
 AdapterInit(void)
 {
-    Locale = _wcreate_locale(LC_ALL, L"");
-
 #if defined(_M_IX86) || defined(_M_ARM)
     typedef BOOL(WINAPI * IsWow64Process2_t)(
         _In_ HANDLE hProcess, _Out_ USHORT * pProcessMachine, _Out_opt_ USHORT * pNativeMachine);
@@ -347,12 +344,6 @@ AdapterInit(void)
             IsWow64Process(GetCurrentProcess(), &IsWoW64) && IsWoW64 ? IMAGE_FILE_MACHINE_AMD64 : IMAGE_FILE_PROCESS;
     }
 #endif
-}
-
-void
-AdapterCleanup(void)
-{
-    _free_locale(Locale);
 }
 
 static BOOL
@@ -481,14 +472,14 @@ IsPoolMember(
     }
     WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
     GetPoolDeviceTypeName(Pool, PoolDeviceTypeName);
-    if (!_wcsicmp_l(FriendlyName, PoolDeviceTypeName, Locale) || !_wcsicmp_l(DeviceDesc, PoolDeviceTypeName, Locale))
+    if (!_wcsicmp(FriendlyName, PoolDeviceTypeName) || !_wcsicmp(DeviceDesc, PoolDeviceTypeName))
     {
         *IsMember = TRUE;
         goto cleanupFriendlyName;
     }
     RemoveNumberedSuffix(FriendlyName, FriendlyName);
     RemoveNumberedSuffix(DeviceDesc, DeviceDesc);
-    if (!_wcsicmp_l(FriendlyName, PoolDeviceTypeName, Locale) || !_wcsicmp_l(DeviceDesc, PoolDeviceTypeName, Locale))
+    if (!_wcsicmp(FriendlyName, PoolDeviceTypeName) || !_wcsicmp(DeviceDesc, PoolDeviceTypeName))
     {
         *IsMember = TRUE;
         goto cleanupFriendlyName;
@@ -630,10 +621,10 @@ WintunGetAdapter(
         if (NciGetConnectionName(&CfgInstanceID, Name2, sizeof(Name2), NULL) != ERROR_SUCCESS)
             continue;
         Name2[_countof(Name2) - 1] = 0;
-        if (_wcsicmp_l(Name, Name2, Locale))
+        if (_wcsicmp(Name, Name2))
         {
             RemoveNumberedSuffix(Name2, Name2);
-            if (_wcsicmp_l(Name, Name2, Locale))
+            if (_wcsicmp(Name, Name2))
                 continue;
         }
 
