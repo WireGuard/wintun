@@ -421,27 +421,14 @@ GetDevInfoData(_In_ const GUID *CfgInstanceID, _Out_ HDEVINFO *DevInfo, _Out_ SP
 }
 
 static void
-RemoveNumberedSuffix(_In_z_ const WCHAR *Name, _Out_ WCHAR *Removed)
+RemoveNumberedSuffix(_Inout_z_ WCHAR *Name)
 {
-    size_t Len = wcslen(Name);
-    if (Len && (Name[Len - 1] < L'0' || Name[Len - 1] > L'9'))
+    for (size_t i = wcslen(Name); i--;)
     {
-        wmemcpy(Removed, Name, Len + 1);
-        return;
-    }
-    for (size_t i = Len; i--;)
-    {
-        if (Name[i] >= L'0' && Name[i] <= L'9')
-            continue;
-        if (Name[i] == L' ')
-        {
-            wmemcpy(Removed, Name, i);
-            Removed[i] = 0;
+        if ((Name[i] < L'0' || Name[i] > L'9') && !iswspace(Name[i]))
             return;
-        }
-        break;
+        Name[i] = 0;
     }
-    wmemcpy(Removed, Name, Len + 1);
 }
 
 static void
@@ -477,8 +464,8 @@ IsPoolMember(
         *IsMember = TRUE;
         goto cleanupFriendlyName;
     }
-    RemoveNumberedSuffix(FriendlyName, FriendlyName);
-    RemoveNumberedSuffix(DeviceDesc, DeviceDesc);
+    RemoveNumberedSuffix(FriendlyName);
+    RemoveNumberedSuffix(DeviceDesc);
     if (!_wcsicmp(FriendlyName, PoolDeviceTypeName) || !_wcsicmp(DeviceDesc, PoolDeviceTypeName))
     {
         *IsMember = TRUE;
@@ -623,7 +610,7 @@ WintunGetAdapter(
         Name2[_countof(Name2) - 1] = 0;
         if (_wcsicmp(Name, Name2))
         {
-            RemoveNumberedSuffix(Name2, Name2);
+            RemoveNumberedSuffix(Name2);
             if (_wcsicmp(Name, Name2))
                 continue;
         }
