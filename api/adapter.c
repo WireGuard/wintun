@@ -1492,6 +1492,58 @@ cleanupMutex:
     return Result;
 }
 
+static WINTUN_STATUS
+CreateAdapterNatively(
+    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
+    _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
+    _In_opt_ const GUID *RequestedGUID,
+    _Out_ WINTUN_ADAPTER **Adapter,
+    _Inout_ BOOL *RebootRequired)
+{
+    LOG(WINTUN_LOG_INFO, L"Spawning native process");
+    WCHAR RequestedGUIDStr[MAX_GUID_STRING_LEN];
+    WCHAR Arguments[15 + MAX_POOL + 3 + MAX_ADAPTER_NAME + 2 + MAX_GUID_STRING_LEN + 1];
+    if (_snwprintf_s(
+            Arguments,
+            _countof(Arguments),
+            _TRUNCATE,
+            RequestedGUID ? L"CreateAdapter \"%.*s\" \"%.*s\" %.*s" : L"CreateAdapter \"%.*s\" \"%.*s\"",
+            MAX_POOL,
+            Pool,
+            MAX_ADAPTER_NAME,
+            Name,
+            RequestedGUID ? StringFromGUID2(RequestedGUID, RequestedGUIDStr, _countof(RequestedGUIDStr)) : 0,
+            RequestedGUIDStr) == -1)
+        return LOG(WINTUN_LOG_ERR, L"Command line too long"), ERROR_INVALID_PARAMETER;
+    WCHAR Response[8 + 1 + MAX_GUID_STRING_LEN + 1 + 8 + 1];
+    DWORD Result = ExecuteRunDll32(Arguments, Response, _countof(Response));
+    if (Result != ERROR_SUCCESS)
+    {
+        LOG(WINTUN_LOG_ERR, L"Error executing worker process");
+        return Result;
+    }
+    int Argc;
+    WCHAR **Argv = CommandLineToArgvW(Response, &Argc);
+    GUID CfgInstanceID;
+    if (Argc < 3 || FAILED(CLSIDFromString(Argv[1], &CfgInstanceID)))
+    {
+        LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response");
+        Result = ERROR_INVALID_PARAMETER;
+        goto cleanupArgv;
+    }
+    Result = wcstoul(Argv[0], NULL, 16);
+    if (Result == ERROR_SUCCESS && GetAdapter(Pool, &CfgInstanceID, Adapter) != ERROR_SUCCESS)
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to get adapter");
+        Result = ERROR_FILE_NOT_FOUND;
+    }
+    if (wcstoul(Argv[2], NULL, 16))
+        *RebootRequired = TRUE;
+cleanupArgv:
+    LocalFree(Argv);
+    return Result;
+}
+
 #endif
 
 WINTUN_STATUS WINAPI
@@ -1504,50 +1556,7 @@ WintunCreateAdapter(
 {
 #if defined(_M_IX86) || defined(_M_ARM)
     if (NativeMachine != IMAGE_FILE_PROCESS)
-    {
-        LOG(WINTUN_LOG_INFO, L"Spawning native process for the job");
-        WCHAR RequestedGUIDStr[MAX_GUID_STRING_LEN];
-        WCHAR Arguments[15 + MAX_POOL + 3 + MAX_ADAPTER_NAME + 2 + MAX_GUID_STRING_LEN + 1];
-        if (_snwprintf_s(
-                Arguments,
-                _countof(Arguments),
-                _TRUNCATE,
-                RequestedGUID ? L"CreateAdapter \"%.*s\" \"%.*s\" %.*s" : L"CreateAdapter \"%.*s\" \"%.*s\"",
-                MAX_POOL,
-                Pool,
-                MAX_ADAPTER_NAME,
-                Name,
-                RequestedGUID ? StringFromGUID2(RequestedGUID, RequestedGUIDStr, _countof(RequestedGUIDStr)) : 0,
-                RequestedGUIDStr) == -1)
-            return LOG(WINTUN_LOG_ERR, L"Command line too long"), ERROR_INVALID_PARAMETER;
-        WCHAR Response[8 + 1 + MAX_GUID_STRING_LEN + 1 + 8 + 1];
-        DWORD Result = ExecuteRunDll32(Arguments, Response, _countof(Response));
-        if (Result != ERROR_SUCCESS)
-        {
-            LOG(WINTUN_LOG_ERR, L"Error executing worker process");
-            return Result;
-        }
-        int Argc;
-        WCHAR **Argv = CommandLineToArgvW(Response, &Argc);
-        GUID CfgInstanceID;
-        if (Argc < 3 || FAILED(CLSIDFromString(Argv[1], &CfgInstanceID)))
-        {
-            LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response");
-            Result = ERROR_INVALID_PARAMETER;
-            goto cleanupArgv;
-        }
-        Result = wcstoul(Argv[0], NULL, 16);
-        if (Result == ERROR_SUCCESS && GetAdapter(Pool, &CfgInstanceID, Adapter) != ERROR_SUCCESS)
-        {
-            LOG(WINTUN_LOG_ERR, L"Failed to get adapter");
-            Result = ERROR_FILE_NOT_FOUND;
-        }
-        if (wcstoul(Argv[2], NULL, 16))
-            *RebootRequired = TRUE;
-    cleanupArgv:
-        LocalFree(Argv);
-        return Result;
-    }
+        return CreateAdapterNatively(Pool, Name, RequestedGUID, Adapter, RebootRequired);
 #endif
 
 #if defined(HAVE_EV) || defined(HAVE_WHQL)
@@ -1601,42 +1610,50 @@ cleanupDirectory:
 #endif
 }
 
+#if defined(_M_IX86) || defined(_M_ARM)
+
+static WINTUN_STATUS
+DeleteAdapterNatively(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired)
+{
+    LOG(WINTUN_LOG_INFO, L"Spawning native process");
+    WCHAR GuidStr[MAX_GUID_STRING_LEN];
+    WCHAR Arguments[14 + MAX_GUID_STRING_LEN + 1];
+    if (_snwprintf_s(
+            Arguments,
+            _countof(Arguments),
+            _TRUNCATE,
+            L"DeleteAdapter %.*s",
+            StringFromGUID2(&Adapter->CfgInstanceID, GuidStr, _countof(GuidStr)),
+            GuidStr) == -1)
+        return LOG(WINTUN_LOG_ERR, L"Command line too long"), ERROR_INVALID_PARAMETER;
+    WCHAR Response[8 + 1 + 8 + 1];
+    DWORD Result = ExecuteRunDll32(Arguments, Response, _countof(Response));
+    if (Result != ERROR_SUCCESS)
+        LOG(WINTUN_LOG_ERR, L"Error executing worker process");
+    int Argc;
+    WCHAR **Argv = CommandLineToArgvW(Response, &Argc);
+    if (Argc < 2)
+    {
+        LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response");
+        Result = ERROR_INVALID_PARAMETER;
+        goto cleanupArgv;
+    }
+    Result = wcstoul(Argv[0], NULL, 16);
+    if (wcstoul(Argv[1], NULL, 16))
+        *RebootRequired = TRUE;
+cleanupArgv:
+    LocalFree(Argv);
+    return Result;
+}
+
+#endif
+
 WINTUN_STATUS WINAPI
 WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired)
 {
 #if defined(_M_IX86) || defined(_M_ARM)
     if (NativeMachine != IMAGE_FILE_PROCESS)
-    {
-        LOG(WINTUN_LOG_INFO, L"Spawning native process for the job");
-        WCHAR GuidStr[MAX_GUID_STRING_LEN];
-        WCHAR Arguments[14 + MAX_GUID_STRING_LEN + 1];
-        if (_snwprintf_s(
-                Arguments,
-                _countof(Arguments),
-                _TRUNCATE,
-                L"DeleteAdapter %.*s",
-                StringFromGUID2(&Adapter->CfgInstanceID, GuidStr, _countof(GuidStr)),
-                GuidStr) == -1)
-            return LOG(WINTUN_LOG_ERR, L"Command line too long"), ERROR_INVALID_PARAMETER;
-        WCHAR Response[8 + 1 + 8 + 1];
-        DWORD Result = ExecuteRunDll32(Arguments, Response, _countof(Response));
-        if (Result != ERROR_SUCCESS)
-            LOG(WINTUN_LOG_ERR, L"Error executing worker process");
-        int Argc;
-        WCHAR **Argv = CommandLineToArgvW(Response, &Argc);
-        if (Argc < 2)
-        {
-            LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response");
-            Result = ERROR_INVALID_PARAMETER;
-            goto cleanupArgv;
-        }
-        Result = wcstoul(Argv[0], NULL, 16);
-        if (wcstoul(Argv[1], NULL, 16))
-            *RebootRequired = TRUE;
-    cleanupArgv:
-        LocalFree(Argv);
-        return Result;
-    }
+        return DeleteAdapterNatively(Adapter, RebootRequired);
 #endif
 
     HDEVINFO DevInfo;
