@@ -146,6 +146,7 @@
       <PreprocessorDefinitions Condition="Exists('$(OutDir)whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalOptions>/volatile:iso %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ResourceCompile>
       <AdditionalIncludeDirectories>..\$(Configuration)\$(WintunPlatform);..\$(Configuration);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -194,7 +195,6 @@
   <ItemGroup>
     <ClInclude Include="api.h" />
     <ClInclude Include="adapter.h" />
-    <ClInclude Include="atomic.h" />
     <ClInclude Include="elevate.h" />
     <ClInclude Include="logger.h" />
     <ClInclude Include="namespace.h" />

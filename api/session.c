@@ -172,7 +172,7 @@ WintunReceivePacket(_In_ TUN_SESSION *Session, _Out_bytecapcount_(*PacketSize) B
         Result = ERROR_HANDLE_EOF;
         goto cleanup;
     }
-    const ULONG BuffTail = InterlockedGetU(&Session->Descriptor.Send.Ring->Tail);
+    const ULONG BuffTail = ReadULongAcquire(&Session->Descriptor.Send.Ring->Tail);
     if (BuffTail >= Session->Capacity)
     {
         Result = ERROR_HANDLE_EOF;
@@ -226,7 +226,7 @@ WintunReceiveRelease(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
         Session->Send.HeadRelease = TUN_RING_WRAP(Session->Send.HeadRelease + AlignedPacketSize, Session->Capacity);
         Session->Send.PacketsToRelease--;
     }
-    InterlockedSetU(&Session->Descriptor.Send.Ring->Head, Session->Send.HeadRelease);
+    WriteULongRelease(&Session->Descriptor.Send.Ring->Head, Session->Send.HeadRelease);
     LeaveCriticalSection(&Session->Send.Lock);
 }
 
@@ -241,7 +241,7 @@ WintunAllocateSendPacket(_In_ TUN_SESSION *Session, _In_ DWORD PacketSize, _Out_
         goto cleanup;
     }
     const ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize);
-    const ULONG BuffHead = InterlockedGetU(&Session->Descriptor.Receive.Ring->Head);
+    const ULONG BuffHead = ReadULongAcquire(&Session->Descriptor.Receive.Ring->Head);
     if (BuffHead >= Session->Capacity)
     {
         Result = ERROR_HANDLE_EOF;
@@ -281,8 +281,8 @@ WintunSendPacket(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
             TUN_RING_WRAP(Session->Receive.TailRelease + AlignedPacketSize, Session->Capacity);
         Session->Receive.PacketsToRelease--;
     }
-    InterlockedSetU(&Session->Descriptor.Receive.Ring->Tail, Session->Receive.TailRelease);
-    if (InterlockedGet(&Session->Descriptor.Receive.Ring->Alertable))
+    WriteULongRelease(&Session->Descriptor.Receive.Ring->Tail, Session->Receive.TailRelease);
+    if (ReadAcquire(&Session->Descriptor.Receive.Ring->Alertable))
         SetEvent(Session->Descriptor.Receive.TailMoved);
     LeaveCriticalSection(&Session->Receive.Lock);
 }

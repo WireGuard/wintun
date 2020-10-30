@@ -52,9 +52,6 @@
     <ClInclude Include="wintun.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="atomic.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="elevate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
