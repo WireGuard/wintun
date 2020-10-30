@@ -18,9 +18,9 @@ DWORD(WINAPI *NciGetConnectionName)
 void
 NciInit(void)
 {
-    NciModule = LoadLibraryW(L"nci.dll");
+    NciModule = LoadLibraryExW(L"nci.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!NciModule)
-        return;
+        abort();
     NciSetConnectionName =
         (DWORD(WINAPI *)(const GUID *, const WCHAR *))GetProcAddress(NciModule, "NciSetConnectionName");
     NciGetConnectionName =

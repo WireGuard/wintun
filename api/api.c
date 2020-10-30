@@ -43,6 +43,18 @@ cleanupKey:
     return Result;
 }
 
+static FARPROC WINAPI DelayedLoadLibraryHook(unsigned dliNotify, PDelayLoadInfo pdli)
+{
+    if (dliNotify != dliNotePreLoadLibrary)
+        return NULL;
+    HMODULE Library = LoadLibraryExA(pdli->szDll, NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!Library)
+        abort();
+    return (FARPROC)Library;
+}
+
+const PfnDliHook __pfnDliNotifyHook2 = DelayedLoadLibraryHook;
+
 BOOL APIENTRY
 DllMain(_In_ HINSTANCE hinstDLL, _In_ DWORD fdwReason, _In_ LPVOID lpvReserved)
 {

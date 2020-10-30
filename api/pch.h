@@ -15,6 +15,8 @@
 #include "resource.h"
 #include "wintun.h"
 
+#pragma warning(push)
+#pragma warning(disable: 4201) /* nonstandard extension used: nameless struct/union */
 #include <bcrypt.h>
 #include <cfgmgr32.h>
 #include <devguid.h>
@@ -30,4 +32,6 @@
 #include <Shlwapi.h>
 #include <string.h>
 #include <TlHelp32.h>
+#include <delayimp.h>
 #include <wchar.h>
+#pragma warning(pop)
