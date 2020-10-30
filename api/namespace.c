@@ -82,7 +82,7 @@ NamespaceRuntimeInit(void)
 
     for (;;)
     {
-        if (CreatePrivateNamespaceW(SecurityAttributes, Boundary, L"Wintun"))
+        if (CreatePrivateNamespaceW(&SecurityAttributes, Boundary, L"Wintun"))
             break;
         Result = GetLastError();
         if (Result == ERROR_ALREADY_EXISTS)
@@ -138,7 +138,7 @@ NamespaceTakeMutex(_In_z_ const WCHAR *Pool)
     memcpy(MutexName, MutexNamePrefix, sizeof(MutexNamePrefix) - sizeof(WCHAR));
     Bin2Hex(Hash, sizeof(Hash), MutexName + _countof(MutexNamePrefix) - 1);
     MutexName[_countof(MutexName) - 1] = 0;
-    Mutex = CreateMutexW(SecurityAttributes, FALSE, MutexName);
+    Mutex = CreateMutexW(&SecurityAttributes, FALSE, MutexName);
     if (!Mutex)
         goto cleanupPoolNorm;
     switch (WaitForSingleObject(Mutex, INFINITE))

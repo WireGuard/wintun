@@ -7,8 +7,7 @@
 
 HINSTANCE ResourceModule;
 HANDLE ModuleHeap;
-static SECURITY_ATTRIBUTES SecurityAttributesSystem = { .nLength = sizeof(SECURITY_ATTRIBUTES) };
-SECURITY_ATTRIBUTES *SecurityAttributes;
+SECURITY_ATTRIBUTES SecurityAttributes = { .nLength = sizeof(SECURITY_ATTRIBUTES) };
 
 WINTUN_STATUS WINAPI
 WintunGetVersion(
@@ -65,11 +64,8 @@ DllMain(_In_ HINSTANCE hinstDLL, _In_ DWORD fdwReason, _In_ LPVOID lpvReserved)
     case DLL_PROCESS_ATTACH:
         ResourceModule = hinstDLL;
         ModuleHeap = HeapCreate(0, 0, 0);
-#ifndef _DEBUG
         ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"O:SYD:P(A;;GA;;;SY)", SDDL_REVISION_1, &SecurityAttributesSystem.lpSecurityDescriptor, NULL);
-        SecurityAttributes = &SecurityAttributesSystem;
-#endif
+            L"O:SYD:P(A;;GA;;;SY)", SDDL_REVISION_1, &SecurityAttributes.lpSecurityDescriptor, NULL);
         AdapterInit();
         NamespaceInit();
         NciInit();
@@ -78,9 +74,7 @@ DllMain(_In_ HINSTANCE hinstDLL, _In_ DWORD fdwReason, _In_ LPVOID lpvReserved)
     case DLL_PROCESS_DETACH:
         NciCleanup();
         NamespaceCleanup();
-#ifndef _DEBUG
-        LocalFree(SecurityAttributesSystem.lpSecurityDescriptor);
-#endif
+        LocalFree(SecurityAttributes.lpSecurityDescriptor);
         HeapDestroy(ModuleHeap);
         break;
     }

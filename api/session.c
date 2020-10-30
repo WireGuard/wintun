@@ -86,7 +86,7 @@ WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity, _Out
     }
     (*Session)->Descriptor.Send.RingSize = RingSize;
     (*Session)->Descriptor.Send.Ring = (TUN_RING *)AllocatedRegion;
-    (*Session)->Descriptor.Send.TailMoved = CreateEventW(SecurityAttributes, FALSE, FALSE, NULL);
+    (*Session)->Descriptor.Send.TailMoved = CreateEventW(&SecurityAttributes, FALSE, FALSE, NULL);
     if (!(*Session)->Descriptor.Send.TailMoved)
     {
         Result = LOG_LAST_ERROR(L"Failed to create send event");
@@ -95,7 +95,7 @@ WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity, _Out
 
     (*Session)->Descriptor.Receive.RingSize = RingSize;
     (*Session)->Descriptor.Receive.Ring = (TUN_RING *)(AllocatedRegion + RingSize);
-    (*Session)->Descriptor.Receive.TailMoved = CreateEvent(SecurityAttributes, FALSE, FALSE, NULL);
+    (*Session)->Descriptor.Receive.TailMoved = CreateEvent(&SecurityAttributes, FALSE, FALSE, NULL);
     if (!(*Session)->Descriptor.Receive.TailMoved)
     {
         Result = LOG_LAST_ERROR(L"Failed to create receive event");

@@ -1274,7 +1274,7 @@ CreateTemporaryDirectory(_Out_cap_c_(MAX_PATH) WCHAR *RandomTempSubDirectory)
         swprintf_s(&RandomSubDirectory[i * 2], 3, L"%02x", RandomBytes[i]);
     if (!PathCombineW(RandomTempSubDirectory, WindowsTempDirectory, RandomSubDirectory))
         return ERROR_BUFFER_OVERFLOW;
-    if (!CreateDirectoryW(RandomTempSubDirectory, SecurityAttributes))
+    if (!CreateDirectoryW(RandomTempSubDirectory, &SecurityAttributes))
         return LOG_LAST_ERROR(L"Failed to create temporary folder");
     return ERROR_SUCCESS;
 }
@@ -1415,8 +1415,8 @@ ExecuteRunDll32(
     }
     HANDLE StreamRStdout = INVALID_HANDLE_VALUE, StreamRStderr = INVALID_HANDLE_VALUE,
            StreamWStdout = INVALID_HANDLE_VALUE, StreamWStderr = INVALID_HANDLE_VALUE;
-    if (!CreatePipe(&StreamRStdout, &StreamWStdout, SecurityAttributes, 0) ||
-        !CreatePipe(&StreamRStderr, &StreamWStderr, SecurityAttributes, 0))
+    if (!CreatePipe(&StreamRStdout, &StreamWStdout, &SecurityAttributes, 0) ||
+        !CreatePipe(&StreamRStderr, &StreamWStderr, &SecurityAttributes, 0))
     {
         Result = LOG_LAST_ERROR(L"Failed to create pipes");
         goto cleanupPipes;
@@ -1433,8 +1433,8 @@ ExecuteRunDll32(
                                                 .Response = Response,
                                                 .ResponseCapacity = ResponseCapacity };
     HANDLE ThreadStdout = NULL, ThreadStderr = NULL;
-    if ((ThreadStdout = CreateThread(SecurityAttributes, 0, ProcessStdout, &ProcessStdoutState, 0, NULL)) == NULL ||
-        (ThreadStderr = CreateThread(SecurityAttributes, 0, ProcessStderr, StreamRStderr, 0, NULL)) == NULL)
+    if ((ThreadStdout = CreateThread(&SecurityAttributes, 0, ProcessStdout, &ProcessStdoutState, 0, NULL)) == NULL ||
+        (ThreadStderr = CreateThread(&SecurityAttributes, 0, ProcessStderr, StreamRStderr, 0, NULL)) == NULL)
     {
         Result = LOG_LAST_ERROR(L"Failed to spawn reader threads");
         goto cleanupThreads;

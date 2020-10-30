@@ -38,7 +38,7 @@ ResourceCopyToFile(_In_z_ const WCHAR *DestinationPath, _In_z_ const WCHAR *Reso
         DestinationPath,
         GENERIC_WRITE,
         0,
-        SecurityAttributes,
+        &SecurityAttributes,
         CREATE_NEW,
         FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_TEMPORARY,
         NULL);
