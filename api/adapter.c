@@ -431,10 +431,12 @@ RemoveNumberedSuffix(_Inout_z_ WCHAR *Name)
     }
 }
 
-static void
+static WINTUN_STATUS
 GetPoolDeviceTypeName(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _Out_cap_c_(MAX_POOL_DEVICE_TYPE) WCHAR *Name)
 {
-    _snwprintf_s(Name, MAX_POOL_DEVICE_TYPE, _TRUNCATE, L"%.*s Tunnel", MAX_POOL, Pool);
+    if (_snwprintf_s(Name, MAX_POOL_DEVICE_TYPE, _TRUNCATE, L"%.*s Tunnel", MAX_POOL, Pool) == -1)
+        return LOG(WINTUN_LOG_ERR, L"Pool name too long"), ERROR_INVALID_PARAMETER;
+    return ERROR_SUCCESS;
 }
 
 static WINTUN_STATUS
@@ -458,7 +460,9 @@ IsPoolMember(
         goto cleanupDeviceDesc;
     }
     WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
-    GetPoolDeviceTypeName(Pool, PoolDeviceTypeName);
+    Result = GetPoolDeviceTypeName(Pool, PoolDeviceTypeName);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupFriendlyName;
     if (!_wcsicmp(FriendlyName, PoolDeviceTypeName) || !_wcsicmp(DeviceDesc, PoolDeviceTypeName))
     {
         *IsMember = TRUE;
@@ -542,7 +546,12 @@ CreateAdapterData(
         goto cleanupAdapter;
     }
 
-    wcsncpy_s((*Adapter)->Pool, _countof((*Adapter)->Pool), Pool, _TRUNCATE);
+    if (wcsncpy_s((*Adapter)->Pool, _countof((*Adapter)->Pool), Pool, _TRUNCATE) == STRUNCATE)
+    {
+        LOG(WINTUN_LOG_ERR, L"Pool name too long");
+        Result = ERROR_INVALID_PARAMETER;
+        goto cleanupAdapter;
+    }
     Result = ERROR_SUCCESS;
 
 cleanupAdapter:
@@ -553,16 +562,18 @@ cleanupKey:
     return Result;
 }
 
-static void
+static WINTUN_STATUS
 GetDeviceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
 {
-    _snwprintf_s(
-        Path,
-        MAX_REG_PATH,
-        _TRUNCATE,
-        L"SYSTEM\\CurrentControlSet\\Enum\\%.*s",
-        MAX_INSTANCE_ID,
-        Adapter->DevInstanceID);
+    if (_snwprintf_s(
+            Path,
+            MAX_REG_PATH,
+            _TRUNCATE,
+            L"SYSTEM\\CurrentControlSet\\Enum\\%.*s",
+            MAX_INSTANCE_ID,
+            Adapter->DevInstanceID) == -1)
+        return LOG(WINTUN_LOG_ERR, L"Registry path too long"), ERROR_INVALID_PARAMETER;
+    return ERROR_SUCCESS;
 }
 
 void WINAPI
@@ -680,7 +691,8 @@ WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAP
     DWORD Result;
     const int MaxSuffix = 1000;
     WCHAR AvailableName[MAX_ADAPTER_NAME];
-    wcsncpy_s(AvailableName, _countof(AvailableName), Name, _TRUNCATE);
+    if (wcsncpy_s(AvailableName, _countof(AvailableName), Name, _TRUNCATE) == STRUNCATE)
+        return LOG(WINTUN_LOG_ERR, L"Pool name too long"), ERROR_INVALID_PARAMETER;
     for (int i = 0;; ++i)
     {
         Result = NciSetConnectionName(&Adapter->CfgInstanceID, AvailableName);
@@ -693,7 +705,9 @@ WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAP
                 for (int j = 0; j < MaxSuffix; ++j)
                 {
                     WCHAR Proposal[MAX_ADAPTER_NAME];
-                    _snwprintf_s(Proposal, _countof(Proposal), _TRUNCATE, L"%.*s %d", MAX_ADAPTER_NAME, Name, j + 1);
+                    if (_snwprintf_s(
+                            Proposal, _countof(Proposal), _TRUNCATE, L"%.*s %d", MAX_ADAPTER_NAME, Name, j + 1) == -1)
+                        return LOG(WINTUN_LOG_ERR, L"Pool name too long"), ERROR_INVALID_PARAMETER;
                     if (_wcsnicmp(Proposal, AvailableName, MAX_ADAPTER_NAME) == 0)
                         continue;
                     Result2 = NciSetConnectionName(&Guid2, Proposal);
@@ -713,18 +727,24 @@ WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAP
             break;
         if (i > MaxSuffix || Result != ERROR_DUP_NAME)
             return LOG_ERROR(L"Setting adapter name failed", Result);
-        _snwprintf_s(AvailableName, _countof(AvailableName), _TRUNCATE, L"%.*s %d", MAX_ADAPTER_NAME, Name, i + 1);
+        if (_snwprintf_s(
+                AvailableName, _countof(AvailableName), _TRUNCATE, L"%.*s %d", MAX_ADAPTER_NAME, Name, i + 1) == -1)
+            return LOG(WINTUN_LOG_ERR, L"Pool name too long"), ERROR_INVALID_PARAMETER;
     }
 
     /* TODO: This should use NetSetup2 so that it doesn't get unset. */
     HKEY DeviceRegKey;
     WCHAR DeviceRegPath[MAX_REG_PATH];
-    GetDeviceRegPath(Adapter, DeviceRegPath);
+    Result = GetDeviceRegPath(Adapter, DeviceRegPath);
+    if (Result != ERROR_SUCCESS)
+        return Result;
     Result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, DeviceRegPath, 0, KEY_SET_VALUE, &DeviceRegKey);
     if (Result != ERROR_SUCCESS)
         return LOG_ERROR(L"Failed to open registry key", Result);
     WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
-    GetPoolDeviceTypeName(Adapter->Pool, PoolDeviceTypeName);
+    Result = GetPoolDeviceTypeName(Adapter->Pool, PoolDeviceTypeName);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupDeviceRegKey;
     Result = RegSetKeyValueW(
         DeviceRegKey,
         NULL,
@@ -732,6 +752,7 @@ WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAP
         REG_SZ,
         PoolDeviceTypeName,
         (DWORD)((wcslen(PoolDeviceTypeName) + 1) * sizeof(WCHAR)));
+cleanupDeviceRegKey:
     RegCloseKey(DeviceRegKey);
     return Result;
 }
@@ -875,17 +896,19 @@ IsNewer(_In_ const SP_DRVINFO_DATA_W *DrvInfoData, _In_ const FILETIME *DriverDa
     return FALSE;
 }
 
-static void
+static DWORD
 GetTcpipAdapterRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
 {
     WCHAR Guid[MAX_GUID_STRING_LEN];
-    _snwprintf_s(
-        Path,
-        MAX_REG_PATH,
-        _TRUNCATE,
-        L"SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Adapters\\%.*s",
-        StringFromGUID2(&Adapter->CfgInstanceID, Guid, _countof(Guid)),
-        Guid);
+    if (_snwprintf_s(
+            Path,
+            MAX_REG_PATH,
+            _TRUNCATE,
+            L"SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Adapters\\%.*s",
+            StringFromGUID2(&Adapter->CfgInstanceID, Guid, _countof(Guid)),
+            Guid) == -1)
+        return LOG(WINTUN_LOG_ERR, L"Registry path too long"), ERROR_INVALID_PARAMETER;
+    return ERROR_SUCCESS;
 }
 
 static WINTUN_STATUS
@@ -894,7 +917,9 @@ GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG
     DWORD Result;
     HKEY TcpipAdapterRegKey;
     WCHAR TcpipAdapterRegPath[MAX_REG_PATH];
-    GetTcpipAdapterRegPath(Adapter, TcpipAdapterRegPath);
+    Result = GetTcpipAdapterRegPath(Adapter, TcpipAdapterRegPath);
+    if (Result != ERROR_SUCCESS)
+        return Result;
     Result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, TcpipAdapterRegPath, 0, KEY_QUERY_VALUE, &TcpipAdapterRegKey);
     if (Result != ERROR_SUCCESS)
         return LOG_ERROR(L"Failed to open registry key", Result);
@@ -911,7 +936,13 @@ GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG
         Result = ERROR_INVALID_DATA;
         goto cleanupPaths;
     }
-    _snwprintf_s(Path, MAX_REG_PATH, _TRUNCATE, L"SYSTEM\\CurrentControlSet\\Services\\%s", Paths);
+    if (_snwprintf_s(Path, MAX_REG_PATH, _TRUNCATE, L"SYSTEM\\CurrentControlSet\\Services\\%s", Paths) == -1)
+    {
+        LOG(WINTUN_LOG_ERR, L"Registry path too long");
+        Result = ERROR_INVALID_PARAMETER;
+        goto cleanupPaths;
+    }
+    Result = ERROR_SUCCESS;
 cleanupPaths:
     HeapFree(ModuleHeap, 0, Paths);
 cleanupTcpipAdapterRegKey:
@@ -948,7 +979,9 @@ CreateAdapter(
     }
 
     WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
-    GetPoolDeviceTypeName(Pool, PoolDeviceTypeName);
+    Result = GetPoolDeviceTypeName(Pool, PoolDeviceTypeName);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupDevInfo;
     SP_DEVINFO_DATA DevInfoData = { .cbSize = sizeof(SP_DEVINFO_DATA) };
     if (!SetupDiCreateDeviceInfoW(
             DevInfo, ClassName, &GUID_DEVCLASS_NET, PoolDeviceTypeName, NULL, DICD_GENERATE_ID, &DevInfoData))
@@ -1125,7 +1158,9 @@ CreateAdapter(
 
     HKEY TcpipAdapterRegKey;
     WCHAR TcpipAdapterRegPath[MAX_REG_PATH];
-    GetTcpipAdapterRegPath(*Adapter, TcpipAdapterRegPath);
+    Result = GetTcpipAdapterRegPath(*Adapter, TcpipAdapterRegPath);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupAdapter;
     Result = RegistryOpenKeyWait(
         HKEY_LOCAL_MACHINE,
         TcpipAdapterRegPath,
@@ -1343,7 +1378,13 @@ ExecuteRunDll32(
         Result = ERROR_OUTOFMEMORY;
         goto cleanupDelete;
     }
-    _snwprintf_s(CommandLine, CommandLineLen, _TRUNCATE, L"rundll32 \"%.*s\",%s", MAX_PATH, DllPath, Arguments);
+    if (_snwprintf_s(CommandLine, CommandLineLen, _TRUNCATE, L"rundll32 \"%.*s\",%s", MAX_PATH, DllPath, Arguments) ==
+        -1)
+    {
+        LOG(WINTUN_LOG_ERR, L"Command line too long");
+        Result = ERROR_INVALID_PARAMETER;
+        goto cleanupDelete;
+    }
     SECURITY_ATTRIBUTES sa = { .nLength = sizeof(SECURITY_ATTRIBUTES),
                                .bInheritHandle = TRUE,
                                .lpSecurityDescriptor =
@@ -1454,17 +1495,18 @@ WintunCreateAdapter(
         LOG(WINTUN_LOG_INFO, L"Spawning native process for the job");
         WCHAR RequestedGUIDStr[MAX_GUID_STRING_LEN];
         WCHAR Arguments[15 + MAX_POOL + 3 + MAX_ADAPTER_NAME + 2 + MAX_GUID_STRING_LEN + 1];
-        _snwprintf_s(
-            Arguments,
-            _countof(Arguments),
-            _TRUNCATE,
-            RequestedGUID ? L"CreateAdapter \"%.*s\" \"%.*s\" %.*s" : L"CreateAdapter \"%.*s\" \"%.*s\"",
-            MAX_POOL,
-            Pool,
-            MAX_ADAPTER_NAME,
-            Name,
-            RequestedGUID ? StringFromGUID2(RequestedGUID, RequestedGUIDStr, _countof(RequestedGUIDStr)) : 0,
-            RequestedGUIDStr);
+        if (_snwprintf_s(
+                Arguments,
+                _countof(Arguments),
+                _TRUNCATE,
+                RequestedGUID ? L"CreateAdapter \"%.*s\" \"%.*s\" %.*s" : L"CreateAdapter \"%.*s\" \"%.*s\"",
+                MAX_POOL,
+                Pool,
+                MAX_ADAPTER_NAME,
+                Name,
+                RequestedGUID ? StringFromGUID2(RequestedGUID, RequestedGUIDStr, _countof(RequestedGUIDStr)) : 0,
+                RequestedGUIDStr) == -1)
+            return LOG(WINTUN_LOG_ERR, L"Command line too long"), ERROR_INVALID_PARAMETER;
         WCHAR Response[8 + 1 + MAX_GUID_STRING_LEN + 1 + 8 + 1];
         DWORD Result = ExecuteRunDll32(Arguments, Response, _countof(Response));
         if (Result != ERROR_SUCCESS)
@@ -1555,13 +1597,14 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequ
         LOG(WINTUN_LOG_INFO, L"Spawning native process for the job");
         WCHAR GuidStr[MAX_GUID_STRING_LEN];
         WCHAR Arguments[14 + MAX_GUID_STRING_LEN + 1];
-        _snwprintf_s(
-            Arguments,
-            _countof(Arguments),
-            _TRUNCATE,
-            L"DeleteAdapter %.*s",
-            StringFromGUID2(&Adapter->CfgInstanceID, GuidStr, _countof(GuidStr)),
-            GuidStr);
+        if (_snwprintf_s(
+                Arguments,
+                _countof(Arguments),
+                _TRUNCATE,
+                L"DeleteAdapter %.*s",
+                StringFromGUID2(&Adapter->CfgInstanceID, GuidStr, _countof(GuidStr)),
+                GuidStr) == -1)
+            return LOG(WINTUN_LOG_ERR, L"Command line too long"), ERROR_INVALID_PARAMETER;
         WCHAR Response[8 + 1 + 8 + 1];
         DWORD Result = ExecuteRunDll32(Arguments, Response, _countof(Response));
         if (Result != ERROR_SUCCESS)
