@@ -1363,9 +1363,21 @@ ExecuteRunDll32(
         Result = ERROR_BUFFER_OVERFLOW;
         goto cleanupDirectory;
     }
-    if ((Result = ResourceCopyToFile(
-             DllPath, NativeMachine == IMAGE_FILE_MACHINE_ARM64 ? L"wintun-arm64.dll" : L"wintun-amd64.dll")) !=
-        ERROR_SUCCESS)
+    const WCHAR *WintunDllResourceName;
+    switch (NativeMachine)
+    {
+    case IMAGE_FILE_MACHINE_AMD64:
+        WintunDllResourceName = L"wintun-amd64.dll";
+        break;
+    case IMAGE_FILE_MACHINE_ARM64:
+        WintunDllResourceName = L"wintun-arm64.dll";
+        break;
+    default:
+        LOG(WINTUN_LOG_ERR, L"Failed to copy resource");
+        Result = ERROR_NOT_SUPPORTED;
+        goto cleanupDirectory;
+    }
+    if ((Result = ResourceCopyToFile(DllPath, WintunDllResourceName)) != ERROR_SUCCESS)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to copy resource");
         goto cleanupDelete;
