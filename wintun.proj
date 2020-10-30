@@ -15,7 +15,7 @@
   <Import Project="wintun.props" />
   <Import Project="wintun.vcxproj.user" Condition="exists('wintun.vcxproj.user')" />
 
-  <Target Name="Build" DependsOnTargets="Driver-x86;Driver-amd64;Driver-arm64" />
+  <Target Name="Build" DependsOnTargets="Driver-x86;Driver-amd64;Driver-arm;Driver-arm64" />
   <Target Name="Clean">
     <RemoveDir Directories="$(Configuration)\amd64\" />
     <RemoveDir Directories="$(Configuration)\arm\" />
@@ -43,6 +43,11 @@
     Outputs="$(Configuration)\amd64\wintun\wintun.sys;$(Configuration)\amd64\wintun\wintun.inf;$(Configuration)\amd64\wintun\wintun.cat"
     Inputs="$(DriverInputs)">
     <MSBuild Projects="wintun.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=x64" />
+  </Target>
+  <Target Name="Driver-arm"
+    Outputs="$(Configuration)\arm\wintun\wintun.sys;$(Configuration)\arm\wintun\wintun.inf;$(Configuration)\arm\wintun\wintun.cat"
+    Inputs="$(DriverInputs)">
+    <MSBuild Projects="wintun.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=ARM" />
   </Target>
   <Target Name="Driver-arm64"
     Outputs="$(Configuration)\arm64\wintun\wintun.sys;$(Configuration)\arm64\wintun\wintun.inf;$(Configuration)\arm64\wintun\wintun.cat"

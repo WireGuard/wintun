@@ -143,14 +143,14 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32' Or '$(Platform)'=='x64' Or '$(Configuration)|$(Platform)'=='Debug|ARM64'">HAVE_EV;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32' Or '$(Platform)'=='x64' Or '$(Platform)'=='ARM' Or '$(Configuration)|$(Platform)'=='Debug|ARM64'">HAVE_EV;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="Exists('$(OutDir)whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
     </ClCompile>
     <ResourceCompile>
       <AdditionalIncludeDirectories>..\$(Configuration)\$(WintunPlatform);..\$(Configuration);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32' Or '$(Platform)'=='x64' Or '$(Configuration)|$(Platform)'=='Debug|ARM64'">HAVE_EV;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32' Or '$(Platform)'=='x64' Or '$(Platform)'=='ARM' Or '$(Configuration)|$(Platform)'=='Debug|ARM64'">HAVE_EV;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="Exists('$(OutDir)whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='Win32'">_M_IX86=600;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='x64'">_M_AMD64=100;%(PreprocessorDefinitions)</PreprocessorDefinitions>
