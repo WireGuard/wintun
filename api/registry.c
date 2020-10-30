@@ -181,13 +181,16 @@ RegistryQuery(
 {
     for (;;)
     {
-        *Buf = HeapAlloc(ModuleHeap, 0, *BufLen);
-        if (!*Buf)
+        BYTE *p = HeapAlloc(ModuleHeap, 0, *BufLen);
+        if (!p)
             return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
-        LSTATUS Result = RegQueryValueExW(Key, Name, NULL, ValueType, (BYTE *)*Buf, BufLen);
+        LSTATUS Result = RegQueryValueExW(Key, Name, NULL, ValueType, p, BufLen);
         if (Result == ERROR_SUCCESS)
+        {
+            *Buf = p;
             return ERROR_SUCCESS;
-        HeapFree(ModuleHeap, 0, *Buf);
+        }
+        HeapFree(ModuleHeap, 0, p);
         if (Result != ERROR_MORE_DATA)
             return Log ? LOG_ERROR(L"Querying value failed", Result) : Result;
     }

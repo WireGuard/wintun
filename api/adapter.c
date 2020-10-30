@@ -33,14 +33,17 @@ AdapterGetDrvInfoDetail(
     DWORD Size = sizeof(SP_DRVINFO_DETAIL_DATA_W) + 0x100;
     for (;;)
     {
-        *DrvInfoDetailData = HeapAlloc(ModuleHeap, 0, Size);
-        if (!*DrvInfoDetailData)
+        SP_DRVINFO_DETAIL_DATA_W *p = HeapAlloc(ModuleHeap, 0, Size);
+        if (!p)
             return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
-        (*DrvInfoDetailData)->cbSize = sizeof(SP_DRVINFO_DETAIL_DATA_W);
-        if (SetupDiGetDriverInfoDetailW(DevInfo, DevInfoData, DrvInfoData, *DrvInfoDetailData, Size, &Size))
+        p->cbSize = sizeof(SP_DRVINFO_DETAIL_DATA_W);
+        if (SetupDiGetDriverInfoDetailW(DevInfo, DevInfoData, DrvInfoData, p, Size, &Size))
+        {
+            *DrvInfoDetailData = p;
             return ERROR_SUCCESS;
+        }
         DWORD Result = GetLastError();
-        HeapFree(ModuleHeap, 0, *DrvInfoDetailData);
+        HeapFree(ModuleHeap, 0, p);
         if (Result != ERROR_INSUFFICIENT_BUFFER)
             return LOG_ERROR(L"Failed", Result);
     }
@@ -57,13 +60,16 @@ GetDeviceRegistryProperty(
 {
     for (;;)
     {
-        *Buf = HeapAlloc(ModuleHeap, 0, *BufLen);
-        if (!*Buf)
+        BYTE *p = HeapAlloc(ModuleHeap, 0, *BufLen);
+        if (!p)
             return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
-        if (SetupDiGetDeviceRegistryPropertyW(DevInfo, DevInfoData, Property, ValueType, *Buf, *BufLen, BufLen))
+        if (SetupDiGetDeviceRegistryPropertyW(DevInfo, DevInfoData, Property, ValueType, p, *BufLen, BufLen))
+        {
+            *Buf = p;
             return ERROR_SUCCESS;
+        }
         DWORD Result = GetLastError();
-        HeapFree(ModuleHeap, 0, *Buf);
+        HeapFree(ModuleHeap, 0, p);
         if (Result != ERROR_INSUFFICIENT_BUFFER)
             return LOG_ERROR(L"Querying property failed", Result);
     }
@@ -506,8 +512,8 @@ CreateAdapterData(
     if (Key == INVALID_HANDLE_VALUE)
         return LOG_LAST_ERROR(L"Opening device registry key failed");
 
-    *Adapter = HeapAlloc(ModuleHeap, 0, sizeof(WINTUN_ADAPTER));
-    if (!*Adapter)
+    WINTUN_ADAPTER *a = HeapAlloc(ModuleHeap, 0, sizeof(WINTUN_ADAPTER));
+    if (!a)
     {
         LOG(WINTUN_LOG_ERR, L"Out of memory");
         Result = ERROR_OUTOFMEMORY;
@@ -522,7 +528,7 @@ CreateAdapterData(
         LOG(WINTUN_LOG_ERR, L"Failed to query NetCfgInstanceId value");
         goto cleanupAdapter;
     }
-    if (FAILED(CLSIDFromString(ValueStr, &(*Adapter)->CfgInstanceID)))
+    if (FAILED(CLSIDFromString(ValueStr, &a->CfgInstanceID)))
     {
         LOG(WINTUN_LOG_ERR, L"NetCfgInstanceId is not a GUID");
         HeapFree(ModuleHeap, 0, ValueStr);
@@ -532,7 +538,7 @@ CreateAdapterData(
     HeapFree(ModuleHeap, 0, ValueStr);
 
     /* Read the NetLuidIndex value. */
-    Result = RegistryQueryDWORD(Key, L"NetLuidIndex", &(*Adapter)->LuidIndex, TRUE);
+    Result = RegistryQueryDWORD(Key, L"NetLuidIndex", &a->LuidIndex, TRUE);
     if (Result != ERROR_SUCCESS)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to query NetLuidIndex value");
@@ -540,7 +546,7 @@ CreateAdapterData(
     }
 
     /* Read the NetLuidIndex value. */
-    Result = RegistryQueryDWORD(Key, L"*IfType", &(*Adapter)->IfType, TRUE);
+    Result = RegistryQueryDWORD(Key, L"*IfType", &a->IfType, TRUE);
     if (Result != ERROR_SUCCESS)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to query *IfType value");
@@ -548,24 +554,24 @@ CreateAdapterData(
     }
 
     DWORD Size;
-    if (!SetupDiGetDeviceInstanceIdW(
-            DevInfo, DevInfoData, (*Adapter)->DevInstanceID, _countof((*Adapter)->DevInstanceID), &Size))
+    if (!SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, a->DevInstanceID, _countof(a->DevInstanceID), &Size))
     {
         Result = LOG_LAST_ERROR(L"Failed to get device instance ID");
         goto cleanupAdapter;
     }
 
-    if (wcsncpy_s((*Adapter)->Pool, _countof((*Adapter)->Pool), Pool, _TRUNCATE) == STRUNCATE)
+    if (wcsncpy_s(a->Pool, _countof(a->Pool), Pool, _TRUNCATE) == STRUNCATE)
     {
         LOG(WINTUN_LOG_ERR, L"Pool name too long");
         Result = ERROR_INVALID_PARAMETER;
         goto cleanupAdapter;
     }
+    *Adapter = a;
     Result = ERROR_SUCCESS;
 
 cleanupAdapter:
     if (Result != ERROR_SUCCESS)
-        HeapFree(ModuleHeap, 0, *Adapter);
+        HeapFree(ModuleHeap, 0, a);
 cleanupKey:
     RegCloseKey(Key);
     return Result;
@@ -884,7 +890,6 @@ cleanupQueriedStore:
     return Result;
 }
 
-
 static BOOL
 IsOurDrvInfoDetail(_In_ const SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData)
 {
@@ -1167,7 +1172,8 @@ CreateAdapter(
         goto cleanupNetDevRegKey;
     }
 
-    Result = CreateAdapterData(Pool, DevInfo, &DevInfoData, Adapter);
+    WINTUN_ADAPTER *a;
+    Result = CreateAdapterData(Pool, DevInfo, &DevInfoData, &a);
     if (Result != ERROR_SUCCESS)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
@@ -1176,7 +1182,7 @@ CreateAdapter(
 
     HKEY TcpipAdapterRegKey;
     WCHAR TcpipAdapterRegPath[MAX_REG_PATH];
-    Result = GetTcpipAdapterRegPath(*Adapter, TcpipAdapterRegPath);
+    Result = GetTcpipAdapterRegPath(a, TcpipAdapterRegPath);
     if (Result != ERROR_SUCCESS)
         goto cleanupAdapter;
     Result = RegistryOpenKeyWait(
@@ -1200,7 +1206,7 @@ CreateAdapter(
 
     HKEY TcpipInterfaceRegKey;
     WCHAR TcpipInterfaceRegPath[MAX_REG_PATH];
-    Result = GetTcpipInterfaceRegPath(*Adapter, TcpipInterfaceRegPath);
+    Result = GetTcpipInterfaceRegPath(a, TcpipInterfaceRegPath);
     if (Result != ERROR_SUCCESS)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to determine interface-specific TCP/IP network registry key path");
@@ -1224,15 +1230,17 @@ CreateAdapter(
     if (Result != ERROR_SUCCESS)
         LOG_ERROR(L"Failed to set EnableDeadGWDetect", Result);
 
-    Result = WintunSetAdapterName(*Adapter, Name);
-    if (Result != ERROR_SUCCESS)
+    Result = WintunSetAdapterName(a, Name);
+    if (Result == ERROR_SUCCESS)
+        *Adapter = a;
+    else
         LOG_ERROR(L"Failed to set adapter name", Result);
     RegCloseKey(TcpipInterfaceRegKey);
 cleanupTcpipAdapterRegKey:
     RegCloseKey(TcpipAdapterRegKey);
 cleanupAdapter:
     if (Result != ERROR_SUCCESS)
-        HeapFree(ModuleHeap, 0, *Adapter);
+        HeapFree(ModuleHeap, 0, a);
 cleanupNetDevRegKey:
     RegCloseKey(NetDevRegKey);
 cleanupDevice:

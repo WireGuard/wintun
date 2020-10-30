@@ -67,8 +67,8 @@ typedef struct _TUN_SESSION
 WINTUN_STATUS WINAPI
 WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity, _Out_ TUN_SESSION **Session)
 {
-    *Session = HeapAlloc(ModuleHeap, HEAP_ZERO_MEMORY, sizeof(TUN_SESSION));
-    if (!*Session)
+    TUN_SESSION *s = HeapAlloc(ModuleHeap, HEAP_ZERO_MEMORY, sizeof(TUN_SESSION));
+    if (!s)
         return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
     const ULONG RingSize = TUN_RING_SIZE(Capacity);
     DWORD Result;
@@ -84,25 +84,25 @@ WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity, _Out
         Result = ERROR_ACCESS_DENIED;
         goto cleanupAllocatedRegion;
     }
-    (*Session)->Descriptor.Send.RingSize = RingSize;
-    (*Session)->Descriptor.Send.Ring = (TUN_RING *)AllocatedRegion;
-    (*Session)->Descriptor.Send.TailMoved = CreateEventW(&SecurityAttributes, FALSE, FALSE, NULL);
-    if (!(*Session)->Descriptor.Send.TailMoved)
+    s->Descriptor.Send.RingSize = RingSize;
+    s->Descriptor.Send.Ring = (TUN_RING *)AllocatedRegion;
+    s->Descriptor.Send.TailMoved = CreateEventW(&SecurityAttributes, FALSE, FALSE, NULL);
+    if (!s->Descriptor.Send.TailMoved)
     {
         Result = LOG_LAST_ERROR(L"Failed to create send event");
         goto cleanupToken;
     }
 
-    (*Session)->Descriptor.Receive.RingSize = RingSize;
-    (*Session)->Descriptor.Receive.Ring = (TUN_RING *)(AllocatedRegion + RingSize);
-    (*Session)->Descriptor.Receive.TailMoved = CreateEvent(&SecurityAttributes, FALSE, FALSE, NULL);
-    if (!(*Session)->Descriptor.Receive.TailMoved)
+    s->Descriptor.Receive.RingSize = RingSize;
+    s->Descriptor.Receive.Ring = (TUN_RING *)(AllocatedRegion + RingSize);
+    s->Descriptor.Receive.TailMoved = CreateEventW(&SecurityAttributes, FALSE, FALSE, NULL);
+    if (!s->Descriptor.Receive.TailMoved)
     {
         Result = LOG_LAST_ERROR(L"Failed to create receive event");
         goto cleanupSendTailMoved;
     }
 
-    Result = WintunGetAdapterDeviceObject(Adapter, &(*Session)->Handle);
+    Result = WintunGetAdapterDeviceObject(Adapter, &s->Handle);
     if (Result != ERROR_SUCCESS)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to open adapter device object");
@@ -110,36 +110,36 @@ WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity, _Out
     }
     DWORD BytesReturned;
     if (!DeviceIoControl(
-                 (*Session)->Handle,
-                 TUN_IOCTL_REGISTER_RINGS,
-                 &(*Session)->Descriptor,
-                 sizeof(TUN_REGISTER_RINGS),
-                 NULL,
-                 0,
-                 &BytesReturned,
+            s->Handle,
+            TUN_IOCTL_REGISTER_RINGS,
+            &s->Descriptor,
+            sizeof(TUN_REGISTER_RINGS),
+            NULL,
+            0,
+            &BytesReturned,
             NULL))
     {
         Result = LOG_LAST_ERROR(L"Failed to perform ioctl");
         goto cleanupHandle;
     }
     RevertToSelf();
-    (*Session)->Capacity = Capacity;
-    (void)InitializeCriticalSectionAndSpinCount(&(*Session)->Receive.Lock, LOCK_SPIN_COUNT);
-    (void)InitializeCriticalSectionAndSpinCount(&(*Session)->Send.Lock, LOCK_SPIN_COUNT);
+    s->Capacity = Capacity;
+    (void)InitializeCriticalSectionAndSpinCount(&s->Receive.Lock, LOCK_SPIN_COUNT);
+    (void)InitializeCriticalSectionAndSpinCount(&s->Send.Lock, LOCK_SPIN_COUNT);
+    *Session = s;
     return ERROR_SUCCESS;
 cleanupHandle:
-    CloseHandle((*Session)->Handle);
+    CloseHandle(s->Handle);
 cleanupReceiveTailMoved:
-    CloseHandle((*Session)->Descriptor.Receive.TailMoved);
+    CloseHandle(s->Descriptor.Receive.TailMoved);
 cleanupSendTailMoved:
-    CloseHandle((*Session)->Descriptor.Send.TailMoved);
+    CloseHandle(s->Descriptor.Send.TailMoved);
 cleanupToken:
     RevertToSelf();
 cleanupAllocatedRegion:
     VirtualFree(AllocatedRegion, 0, MEM_RELEASE);
 cleanupRings:
-    HeapFree(ModuleHeap, 0, *Session);
-    *Session = NULL;
+    HeapFree(ModuleHeap, 0, s);
     return Result;
 }
 
