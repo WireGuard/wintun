@@ -725,7 +725,7 @@ WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAP
         }
         if (Result == ERROR_SUCCESS)
             break;
-        if (i > MaxSuffix || Result != ERROR_DUP_NAME)
+        if (i >= MaxSuffix || Result != ERROR_DUP_NAME)
             return LOG_ERROR(L"Setting adapter name failed", Result);
         if (_snwprintf_s(
                 AvailableName, _countof(AvailableName), _TRUNCATE, L"%.*s %d", MAX_ADAPTER_NAME, Name, i + 1) == -1)
