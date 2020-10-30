@@ -8,7 +8,6 @@
 #include "adapter.h"
 #include "atomic.h"
 #include "api.h"
-#include "driver.h"
 #include "logger.h"
 #include "namespace.h"
 #include "nci.h"

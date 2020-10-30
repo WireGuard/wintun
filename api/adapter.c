@@ -123,6 +123,15 @@ GetDeviceRegistryMultiString(
     }
 }
 
+static BOOL
+IsOurHardwareID(_In_z_ const WCHAR *Hwids)
+{
+    for (; Hwids[0]; Hwids += wcslen(Hwids) + 1)
+        if (!_wcsicmp(Hwids, WINTUN_HWID))
+            return TRUE;
+    return FALSE;
+}
+
 static WINTUN_STATUS
 IsOurAdapter(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ BOOL *IsOurs)
 {
@@ -130,7 +139,7 @@ IsOurAdapter(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ BOO
     DWORD Result = GetDeviceRegistryMultiString(DevInfo, DevInfoData, SPDRP_HARDWAREID, &Hwids);
     if (Result != ERROR_SUCCESS)
         return LOG(WINTUN_LOG_ERR, L"Failed to query hardware ID"), Result;
-    *IsOurs = DriverIsOurHardwareID(Hwids);
+    *IsOurs = IsOurHardwareID(Hwids);
     return ERROR_SUCCESS;
 }
 
@@ -869,6 +878,15 @@ cleanupQueriedStore:
     return Result;
 }
 
+
+static BOOL
+IsOurDrvInfoDetail(_In_ const SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData)
+{
+    return DrvInfoDetailData->CompatIDsOffset > 1 && !_wcsicmp(DrvInfoDetailData->HardwareID, WINTUN_HWID) ||
+           DrvInfoDetailData->CompatIDsLength &&
+               IsOurHardwareID(DrvInfoDetailData->HardwareID + DrvInfoDetailData->CompatIDsOffset);
+}
+
 static BOOL
 IsNewer(_In_ const SP_DRVINFO_DATA_W *DrvInfoData, _In_ const FILETIME *DriverDate, _In_ DWORDLONG DriverVersion)
 {
@@ -1038,7 +1056,7 @@ CreateAdapter(
             LOG(WINTUN_LOG_WARN, L"Failed getting driver info detail");
             continue;
         }
-        if (!DriverIsOurDrvInfoDetail(DrvInfoDetailData))
+        if (!IsOurDrvInfoDetail(DrvInfoDetailData))
         {
             HeapFree(ModuleHeap, 0, DrvInfoDetailData);
             continue;
@@ -1581,14 +1599,22 @@ WintunCreateAdapter(
     }
 
     LOG(WINTUN_LOG_INFO, L"Installing driver");
-    if (!SetupCopyOEMInfW(InfPath, NULL, SPOST_PATH, 0, NULL, 0, NULL, NULL))
+    WCHAR InfStorePath[MAX_PATH];
+    WCHAR *InfStoreFilename;
+    if (!SetupCopyOEMInfW(InfPath, NULL, SPOST_PATH, 0, InfStorePath, _countof(InfStorePath), NULL, &InfStoreFilename))
     {
         Result = LOG_LAST_ERROR(L"Could not install driver to store");
         goto cleanupDelete;
     }
 
     Result = CreateAdapter(InfPath, Pool, Name, RequestedGUID, Adapter, RebootRequired);
-    DriverRemoveAllOurs();
+
+    LOG(WINTUN_LOG_INFO, L"Removing driver");
+    if (!SetupUninstallOEMInfW(InfStoreFilename, SUOI_FORCEDELETE, NULL))
+    {
+        LOG_LAST_ERROR(L"Unable to remove existing driver");
+        Result = Result != ERROR_SUCCESS ? Result : GetLastError();
+    }
 cleanupDelete:
     DeleteFileW(CatPath);
     DeleteFileW(SysPath);
