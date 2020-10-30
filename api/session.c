@@ -78,13 +78,19 @@ WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity, _Out
         Result = LOG_LAST_ERROR(L"Failed to allocate ring memory");
         goto cleanupRings;
     }
+    if (!ElevateToSystem())
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user");
+        Result = ERROR_ACCESS_DENIED;
+        goto cleanupAllocatedRegion;
+    }
     (*Session)->Descriptor.Send.RingSize = RingSize;
     (*Session)->Descriptor.Send.Ring = (TUN_RING *)AllocatedRegion;
     (*Session)->Descriptor.Send.TailMoved = CreateEventW(SecurityAttributes, FALSE, FALSE, NULL);
     if (!(*Session)->Descriptor.Send.TailMoved)
     {
         Result = LOG_LAST_ERROR(L"Failed to create send event");
-        goto cleanupAllocatedRegion;
+        goto cleanupToken;
     }
 
     (*Session)->Descriptor.Receive.RingSize = RingSize;
@@ -104,18 +110,19 @@ WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity, _Out
     }
     DWORD BytesReturned;
     if (!DeviceIoControl(
-            (*Session)->Handle,
-            TUN_IOCTL_REGISTER_RINGS,
-            &(*Session)->Descriptor,
-            sizeof(TUN_REGISTER_RINGS),
-            NULL,
-            0,
-            &BytesReturned,
+                 (*Session)->Handle,
+                 TUN_IOCTL_REGISTER_RINGS,
+                 &(*Session)->Descriptor,
+                 sizeof(TUN_REGISTER_RINGS),
+                 NULL,
+                 0,
+                 &BytesReturned,
             NULL))
     {
         Result = LOG_LAST_ERROR(L"Failed to perform ioctl");
         goto cleanupHandle;
     }
+    RevertToSelf();
     (*Session)->Capacity = Capacity;
     (void)InitializeCriticalSectionAndSpinCount(&(*Session)->Receive.Lock, LOCK_SPIN_COUNT);
     (void)InitializeCriticalSectionAndSpinCount(&(*Session)->Send.Lock, LOCK_SPIN_COUNT);
@@ -126,6 +133,8 @@ cleanupReceiveTailMoved:
     CloseHandle((*Session)->Descriptor.Receive.TailMoved);
 cleanupSendTailMoved:
     CloseHandle((*Session)->Descriptor.Send.TailMoved);
+cleanupToken:
+    RevertToSelf();
 cleanupAllocatedRegion:
     VirtualFree(AllocatedRegion, 0, MEM_RELEASE);
 cleanupRings:
@@ -137,7 +146,7 @@ cleanupRings:
 void WINAPI
 WintunEndSession(_In_ TUN_SESSION *Session)
 {
-    SetEvent(Session->Descriptor.Send.TailMoved); // wake the reader if it's sleeping
+    SetEvent(Session->Descriptor.Send.TailMoved); // Wake the reader if it's sleeping.
     DeleteCriticalSection(&Session->Send.Lock);
     DeleteCriticalSection(&Session->Receive.Lock);
     CloseHandle(Session->Handle);

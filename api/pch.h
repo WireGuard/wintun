@@ -8,6 +8,7 @@
 #include "adapter.h"
 #include "atomic.h"
 #include "api.h"
+#include "elevate.h"
 #include "logger.h"
 #include "namespace.h"
 #include "nci.h"

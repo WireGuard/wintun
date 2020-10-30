@@ -195,6 +195,7 @@
     <ClInclude Include="api.h" />
     <ClInclude Include="adapter.h" />
     <ClInclude Include="atomic.h" />
+    <ClInclude Include="elevate.h" />
     <ClInclude Include="logger.h" />
     <ClInclude Include="namespace.h" />
     <ClInclude Include="nci.h" />
@@ -206,6 +207,7 @@
   <ItemGroup>
     <ClCompile Include="api.c" />
     <ClCompile Include="adapter.c" />
+    <ClCompile Include="elevate.c" />
     <ClCompile Include="logger.c" />
     <ClCompile Include="namespace.c" />
     <ClCompile Include="nci.c" />

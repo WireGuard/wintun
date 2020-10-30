@@ -597,10 +597,16 @@ WintunGetAdapter(
     _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
     _Out_ WINTUN_ADAPTER **Adapter)
 {
+    if (!ElevateToSystem())
+        return LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user"), ERROR_ACCESS_DENIED;
+
     DWORD Result;
     HANDLE Mutex = NamespaceTakeMutex(Pool);
     if (!Mutex)
-        return ERROR_INVALID_HANDLE;
+    {
+        Result = ERROR_INVALID_HANDLE;
+        goto cleanupToken;
+    }
 
     HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
@@ -675,6 +681,8 @@ cleanupDevInfo:
     SetupDiDestroyDeviceInfoList(DevInfo);
 cleanupMutex:
     NamespaceReleaseMutex(Mutex);
+cleanupToken:
+    RevertToSelf();
     return Result;
 }
 
@@ -1562,15 +1570,25 @@ WintunCreateAdapter(
     _Out_ WINTUN_ADAPTER **Adapter,
     _Inout_ BOOL *RebootRequired)
 {
-#ifdef MAYBE_WOW64
-    if (NativeMachine != IMAGE_FILE_PROCESS)
-        return CreateAdapterNatively(Pool, Name, RequestedGUID, Adapter, RebootRequired);
-#endif
+    if (!ElevateToSystem())
+        return LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user"), ERROR_ACCESS_DENIED;
 
     DWORD Result = ERROR_SUCCESS;
+#ifdef MAYBE_WOW64
+    if (NativeMachine != IMAGE_FILE_PROCESS)
+    {
+        Result = CreateAdapterNatively(Pool, Name, RequestedGUID, Adapter, RebootRequired);
+        RevertToSelf();
+        return Result;
+    }
+#endif
+
     WCHAR RandomTempSubDirectory[MAX_PATH];
     if ((Result = CreateTemporaryDirectory(RandomTempSubDirectory)) != ERROR_SUCCESS)
-        return LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder"), Result;
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder");
+        goto cleanupToken;
+    }
 
     WCHAR CatPath[MAX_PATH] = { 0 };
     WCHAR SysPath[MAX_PATH] = { 0 };
@@ -1619,6 +1637,8 @@ cleanupDelete:
     DeleteFileW(InfPath);
 cleanupDirectory:
     RemoveDirectoryW(RandomTempSubDirectory);
+cleanupToken:
+    RevertToSelf();
     return Result;
 }
 
@@ -1663,20 +1683,31 @@ cleanupArgv:
 WINTUN_STATUS WINAPI
 WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequired)
 {
+    if (!ElevateToSystem())
+        return LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user"), ERROR_ACCESS_DENIED;
+
+    DWORD Result;
 #ifdef MAYBE_WOW64
     if (NativeMachine != IMAGE_FILE_PROCESS)
-        return DeleteAdapterNatively(Adapter, RebootRequired);
+    {
+        Result = DeleteAdapterNatively(Adapter, RebootRequired);
+        RevertToSelf();
+        return Result;
+    }
 #endif
 
     HDEVINFO DevInfo;
     SP_DEVINFO_DATA DevInfoData;
-    DWORD Result = GetDevInfoData(&Adapter->CfgInstanceID, &DevInfo, &DevInfoData);
+    Result = GetDevInfoData(&Adapter->CfgInstanceID, &DevInfo, &DevInfoData);
     if (Result == ERROR_FILE_NOT_FOUND)
-        return ERROR_SUCCESS;
-    if (Result != ERROR_SUCCESS)
+    {
+        Result = ERROR_SUCCESS;
+        goto cleanupToken;
+    }
+    else if (Result != ERROR_SUCCESS)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to get device info data");
-        return Result;
+        goto cleanupToken;
     }
     SetQuietInstall(DevInfo, &DevInfoData);
     SP_REMOVEDEVICE_PARAMS RemoveDeviceParams = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
@@ -1689,6 +1720,8 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequ
     else
         Result = LOG_LAST_ERROR(L"Unable to remove existing adapter");
     SetupDiDestroyDeviceInfoList(DevInfo);
+cleanupToken:
+    RevertToSelf();
     return Result;
 }
 
