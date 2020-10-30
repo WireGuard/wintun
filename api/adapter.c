@@ -214,9 +214,15 @@ ForceCloseWintunAdapterHandle(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevIn
         LOG(WINTUN_LOG_ERR, L"Failed to get adapter device object");
         goto out;
     }
-    Result = DeviceIoControl(NdisHandle, TUN_IOCTL_FORCE_CLOSE_HANDLES, NULL, 0, NULL, 0, &RequiredBytes, NULL)
-                 ? ERROR_SUCCESS
-                 : LOG_LAST_ERROR(L"Failed to perform ioctl");
+    if (DeviceIoControl(NdisHandle, TUN_IOCTL_FORCE_CLOSE_HANDLES, NULL, 0, NULL, 0, &RequiredBytes, NULL))
+    {
+        Result = ERROR_SUCCESS;
+        Sleep(200);
+    }
+    else if (GetLastError() == ERROR_NOTHING_TO_TERMINATE)
+        Result = ERROR_SUCCESS;
+    else
+        Result = LOG_LAST_ERROR(L"Failed to perform ioctl");
     CloseHandle(NdisHandle);
 out:
     HeapFree(ModuleHeap, 0, InstanceId);
@@ -258,7 +264,6 @@ AdapterDisableAllOurs(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
         LOG(WINTUN_LOG_INFO, L"Force closing all open handles for existing adapter");
         if (ForceCloseWintunAdapterHandle(DevInfo, &DeviceNode->Data) != ERROR_SUCCESS)
             LOG(WINTUN_LOG_WARN, L"Failed to force close adapter handles");
-        Sleep(200);
 
         LOG(WINTUN_LOG_INFO, L"Disabling existing adapter");
         if (!SetupDiSetClassInstallParamsW(DevInfo, &DeviceNode->Data, &Params.ClassInstallHeader, sizeof(Params)) ||
@@ -327,7 +332,6 @@ AdapterDeleteAllOurs(void)
         LOG(WINTUN_LOG_INFO, L"Force closing all open handles for existing adapter");
         if (ForceCloseWintunAdapterHandle(DevInfo, &DevInfoData) != ERROR_SUCCESS)
             LOG(WINTUN_LOG_WARN, L"Failed to force close adapter handles");
-        Sleep(200);
 
         LOG(WINTUN_LOG_INFO, L"Removing existing adapter");
         if (!SetupDiSetClassInstallParamsW(DevInfo, &DevInfoData, &Params.ClassInstallHeader, sizeof(Params)) ||
@@ -1717,6 +1721,10 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _Inout_ BOOL *RebootRequ
         LOG(WINTUN_LOG_ERR, L"Failed to get device info data");
         goto cleanupToken;
     }
+
+    if (ForceCloseWintunAdapterHandle(DevInfo, &DevInfoData) != ERROR_SUCCESS)
+        LOG(WINTUN_LOG_WARN, L"Failed to force close adapter handles");
+
     SetQuietInstall(DevInfo, &DevInfoData);
     SP_REMOVEDEVICE_PARAMS RemoveDeviceParams = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
                                                                           .InstallFunction = DIF_REMOVE },

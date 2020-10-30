@@ -759,7 +759,7 @@ TunUnregisterBuffers(_Inout_ TUN_CTX *Ctx, _In_ FILE_OBJECT *Owner)
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
-static VOID
+static BOOLEAN
 TunForceHandlesClosed(_Inout_ DEVICE_OBJECT *DeviceObject)
 {
     NTSTATUS Status;
@@ -769,6 +769,7 @@ TunForceHandlesClosed(_Inout_ DEVICE_OBJECT *DeviceObject)
     ULONG VerifierFlags = 0;
     OBJECT_HANDLE_INFORMATION HandleInfo;
     SYSTEM_HANDLE_INFORMATION_EX *HandleTable = NULL;
+    BOOLEAN DidClose = FALSE;
 
     MmIsVerifierEnabled(&VerifierFlags);
 
@@ -781,7 +782,7 @@ TunForceHandlesClosed(_Inout_ DEVICE_OBJECT *DeviceObject)
             ExFreePoolWithTag(HandleTable, TUN_MEMORY_TAG);
         HandleTable = ExAllocatePoolWithTag(PagedPool, RequestedSize, TUN_MEMORY_TAG);
         if (!HandleTable)
-            return;
+            return FALSE;
     }
     if (!NT_SUCCESS(Status) || !HandleTable)
         goto cleanup;
@@ -808,6 +809,7 @@ TunForceHandlesClosed(_Inout_ DEVICE_OBJECT *DeviceObject)
                 ObCloseHandle(HandleTable->Handles[Index].HandleValue, UserMode);
             if (!VerifierFlags)
                 ObfDereferenceObject(Object);
+            DidClose = TRUE;
         }
         KeUnstackDetachProcess(&ApcState);
         ObfDereferenceObject(Process);
@@ -815,6 +817,7 @@ TunForceHandlesClosed(_Inout_ DEVICE_OBJECT *DeviceObject)
 cleanup:
     if (HandleTable)
         ExFreePoolWithTag(HandleTable, TUN_MEMORY_TAG);
+    return DidClose;
 }
 
 static NTSTATUS TunInitializeDispatchSecurityDescriptor(VOID)
@@ -927,8 +930,7 @@ TunDispatchDeviceControl(DEVICE_OBJECT *DeviceObject, IRP *Irp)
         break;
     }
     case TUN_IOCTL_FORCE_CLOSE_HANDLES:
-        TunForceHandlesClosed(Stack->FileObject->DeviceObject);
-        Status = STATUS_SUCCESS;
+        Status = TunForceHandlesClosed(Stack->FileObject->DeviceObject) ? STATUS_SUCCESS : STATUS_NOTHING_TO_TERMINATE;
         break;
     }
 cleanup:
