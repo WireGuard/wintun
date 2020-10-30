@@ -25,6 +25,7 @@ WintunGetVersion(
     if (RegistryQueryDWORD(Key, L"DriverMajorVersion", DriverVersionMaj, FALSE) != ERROR_SUCCESS ||
         RegistryQueryDWORD(Key, L"DriverMinorVersion", DriverVersionMin, FALSE) != ERROR_SUCCESS)
     {
+        /* TODO: Drop the fallback to WINTUN_VERSION_MAJ & WINTUN_VERSION_MIN when Windows 7 support is discontinued. */
         *DriverVersionMaj = WINTUN_VERSION_MAJ;
         *DriverVersionMin = WINTUN_VERSION_MIN;
     }
