@@ -105,7 +105,7 @@ VOID __stdcall CreateAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int 
         goto cleanup;
 
     WINTUN_ADAPTER *Adapter;
-    BOOL RebootRequired = FALSE;
+    BOOL RebootRequired;
     DWORD Result = WintunCreateAdapter(Argv[2], Argv[3], Argc > 4 ? &RequestedGUID : NULL, &Adapter, &RebootRequired);
     WCHAR GuidStr[MAX_GUID_STRING_LEN];
     WriteFormatted(
@@ -137,7 +137,7 @@ VOID __stdcall DeleteAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int 
     BOOL ForceCloseSessions = wcstoul(Argv[2], NULL, 10);
     if (FAILED(CLSIDFromString(Argv[3], &Adapter.CfgInstanceID)))
         goto cleanup;
-    BOOL RebootRequired = FALSE;
+    BOOL RebootRequired;
     WriteFormatted(
         STD_OUTPUT_HANDLE,
         L"%1!X! %2!X!",
@@ -167,7 +167,7 @@ VOID __stdcall DoThingsForDebugging(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLin
         { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef }
     };
     WINTUN_ADAPTER *Adapter;
-    BOOL RebootRequired = FALSE;
+    BOOL RebootRequired;
     assert(WintunCreateAdapter(L"Wintun", L"Test", &TestGuid, &Adapter, &RebootRequired) == ERROR_SUCCESS);
     assert(!RebootRequired);
     TUN_SESSION *Session;

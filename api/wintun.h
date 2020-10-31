@@ -40,8 +40,7 @@ typedef void *WINTUN_ADAPTER_HANDLE;
  * @param Adapter       Pointer to a handle to receive the adapter handle. Must be released with
  *                      WintunFreeAdapter.
  *
- * @param RebootRequired  Pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot. Must be
- *                      initialised to FALSE manually before this function is called.
+ * @param RebootRequired  Pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
@@ -50,7 +49,7 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_CREATE_ADAPTER_FUNC)(
     _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER_HANDLE *Adapter,
-    _Inout_ BOOL *RebootRequired);
+    _Out_ BOOL *RebootRequired);
 
 /**
  * Deletes a Wintun adapter.
@@ -61,15 +60,14 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_CREATE_ADAPTER_FUNC)(
  *                           with extreme care, as this is resource intensive and may put processes into an undefined
  *                           or unpredictable state. Most users should set this to FALSE.
  *
- * @param RebootRequired     Pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot. Must be
- *                           initialised to FALSE manually before this function is called.
+ * @param RebootRequired     Pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
  *
  * @return ERROR_SUCCESS on success or the adapter was not found; Win32 error code otherwise.
  */
 typedef WINTUN_STATUS(WINAPI *WINTUN_DELETE_ADAPTER_FUNC)(
     _In_ WINTUN_ADAPTER_HANDLE Adapter,
     _In_ BOOL ForceCloseSessions,
-    _Inout_ BOOL *RebootRequired);
+    _Out_ BOOL *RebootRequired);
 
 /**
  * Called by WintunEnumAdapters for each adapter in the pool.
