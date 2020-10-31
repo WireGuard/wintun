@@ -250,12 +250,18 @@ typedef void *WINTUN_SESSION_HANDLE;
  *
  * @param Session       Pointer to a variable to receive Wintun session handle
  *
+ * @param ReadWait      Pointer to receive event handle to wait for available data when reading. Should
+ *                      WintunReceivePackets return ERROR_NO_MORE_ITEMS (after spinning on it for a while under heavy
+ *                      load), wait for this event to become signaled before retrying WintunReceivePackets. Do not call
+ *                      CloseHandle on this event - it is managed by the session.
+ *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 typedef WINTUN_STATUS(WINAPI *WINTUN_START_SESSION_FUNC)(
     _In_ WINTUN_ADAPTER_HANDLE Adapter,
     _In_ DWORD Capacity,
-    _Out_ WINTUN_SESSION_HANDLE *Session);
+    _Out_ WINTUN_SESSION_HANDLE *Session,
+    _Out_ HANDLE *ReadWait);
 
 /**
  * Ends Wintun session.
@@ -268,20 +274,6 @@ typedef void(WINAPI *WINTUN_END_SESSION_FUNC)(_In_ WINTUN_SESSION_HANDLE Session
  * Maximum IP packet size
  */
 #define WINTUN_MAX_IP_PACKET_SIZE 0xFFFF
-
-/**
- * Waits for a packet to become available for reading.
- *
- * @param Session       Wintun session handle obtained with WintunStartSession
- *
- * @param Milliseconds  The time-out interval, in milliseconds. If a nonzero value is specified, the function waits
- *                      until a packet is available or the interval elapses. If Milliseconds is zero, the function
- *                      does not enter a wait state if a packet is not available; it always returns immediately.
- *                      If Milliseconds is INFINITE, the function will return only when a packet is available.
- *
- * @return See WaitForSingleObject() for return values.
- */
-typedef WINTUN_STATUS(WINAPI *WINTUN_WAIT_FOR_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _In_ DWORD Milliseconds);
 
 /**
  * Retrieves one or packet. After the packet content is consumed, call WintunReceiveRelease with Packet returned
@@ -301,8 +293,10 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_WAIT_FOR_PACKET_FUNC)(_In_ WINTUN_SESSION_H
  * ERROR_SUCCESS        on success.
  * Regardless, if the error was returned, some packets might have been read nevertheless.
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_RECEIVE_PACKETS_FUNC)
-(_In_ WINTUN_SESSION_HANDLE *Session, _Out_bytecapcount_(*PacketSize) BYTE **Packet, _Out_ DWORD *PacketSize);
+typedef WINTUN_STATUS(WINAPI *WINTUN_RECEIVE_PACKETS_FUNC)(
+    _In_ WINTUN_SESSION_HANDLE *Session,
+    _Out_bytecapcount_(*PacketSize) BYTE **Packet,
+    _Out_ DWORD *PacketSize);
 
 /**
  * Releases internal buffer after the received packet has been processed by the client. This function is thread-safe.
@@ -329,8 +323,10 @@ typedef void(WINAPI *WINTUN_RECEIVE_RELEASE_FUNC)(_In_ WINTUN_SESSION_HANDLE *Se
  * ERROR_BUFFER_OVERFLOW  Wintun buffer is full;
  * ERROR_SUCCESS        on success.
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_ALLOCATE_SEND_PACKET_FUNC)
-(_In_ WINTUN_SESSION_HANDLE *Session, _In_ DWORD PacketSize, _Out_bytecapcount_(PacketSize) BYTE **Packet);
+typedef WINTUN_STATUS(WINAPI *WINTUN_ALLOCATE_SEND_PACKET_FUNC)(
+    _In_ WINTUN_SESSION_HANDLE *Session,
+    _In_ DWORD PacketSize,
+    _Out_bytecapcount_(PacketSize) BYTE **Packet);
 
 /**
  * Sends the packet and releases internal buffer. WintunSendPacket is thread-safe, but the WintunAllocateSendPacket

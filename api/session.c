@@ -65,7 +65,11 @@ typedef struct _TUN_SESSION
 } TUN_SESSION;
 
 WINTUN_STATUS WINAPI
-WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity, _Out_ TUN_SESSION **Session)
+WintunStartSession(
+    _In_ const WINTUN_ADAPTER *Adapter,
+    _In_ DWORD Capacity,
+    _Out_ TUN_SESSION **Session,
+    _Out_ HANDLE *ReadWait)
 {
     TUN_SESSION *s = HeapAlloc(ModuleHeap, HEAP_ZERO_MEMORY, sizeof(TUN_SESSION));
     if (!s)
@@ -127,6 +131,7 @@ WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity, _Out
     (void)InitializeCriticalSectionAndSpinCount(&s->Receive.Lock, LOCK_SPIN_COUNT);
     (void)InitializeCriticalSectionAndSpinCount(&s->Send.Lock, LOCK_SPIN_COUNT);
     *Session = s;
+    *ReadWait = s->Descriptor.Send.TailMoved;
     return ERROR_SUCCESS;
 cleanupHandle:
     CloseHandle(s->Handle);
@@ -154,12 +159,6 @@ WintunEndSession(_In_ TUN_SESSION *Session)
     CloseHandle(Session->Descriptor.Receive.TailMoved);
     VirtualFree(Session->Descriptor.Send.Ring, 0, MEM_RELEASE);
     HeapFree(ModuleHeap, 0, Session);
-}
-
-WINTUN_STATUS WINAPI
-WintunWaitForPacket(_In_ TUN_SESSION *Session, _In_ DWORD Milliseconds)
-{
-    return WaitForSingleObject(Session->Descriptor.Send.TailMoved, Milliseconds);
 }
 
 WINTUN_STATUS WINAPI

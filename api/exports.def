@@ -17,4 +17,3 @@ EXPORTS
 	WintunSetAdapterName
 	WintunSetLogger
 	WintunStartSession
-	WintunWaitForPacket
