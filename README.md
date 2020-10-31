@@ -140,4 +140,4 @@ General requirements:
 
 ## License
 
-The entire contents of this repository, including all documentation code, is "Copyright © 2018-2019 WireGuard LLC. All Rights Reserved." and is licensed under the [GPLv2](COPYING).
+The entire contents of this repository, including all documentation code, is "Copyright © 2018-2020 WireGuard LLC. All Rights Reserved." and is licensed under the [GPLv2](COPYING).
