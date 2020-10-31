@@ -110,7 +110,7 @@ Example:
 
 ```C
 static BOOL CALLBACK
-ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_ const WCHAR *LogLine)
+ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
 {
     const WCHAR *Template;
     switch (Level)
