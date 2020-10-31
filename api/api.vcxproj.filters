@@ -23,6 +23,9 @@
     <None Include="exports.def">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="nci.def">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="nci.h">
@@ -58,9 +61,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="namespace.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="nci.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="rundll32.c">

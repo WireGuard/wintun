@@ -5,19 +5,12 @@
 
 #pragma once
 
-#include "wintun.h"
 #include <Windows.h>
 
-extern DWORD(WINAPI *NciSetConnectionName)(_In_ const GUID *Guid, _In_z_ const WCHAR *NewName);
+extern DWORD WINAPI NciSetConnectionName(_In_ const GUID *Guid, _In_z_ const WCHAR *NewName);
 
-extern DWORD(WINAPI *NciGetConnectionName)(
+extern DWORD WINAPI NciGetConnectionName(
     _In_ const GUID *Guid,
     _Out_z_bytecap_(InDestNameBytes) WCHAR *Name,
     _In_ DWORD InDestNameBytes,
     _Out_opt_ DWORD *OutDestNameBytes);
-
-WINTUN_STATUS
-NciInit(void);
-
-void
-NciCleanup(void);

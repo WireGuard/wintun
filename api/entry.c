@@ -8,7 +8,6 @@
 #include "logger.h"
 #include "registry.h"
 #include "namespace.h"
-#include "nci.h"
 #include "wintun.h"
 
 #include <Windows.h>
@@ -84,12 +83,9 @@ DllMain(_In_ HINSTANCE hinstDLL, _In_ DWORD fdwReason, _In_ LPVOID lpvReserved)
             L"O:SYD:P(A;;GA;;;SY)", SDDL_REVISION_1, &SecurityAttributes.lpSecurityDescriptor, NULL);
         AdapterInit();
         NamespaceInit();
-        if (NciInit() != ERROR_SUCCESS)
-            return FALSE;
         break;
 
     case DLL_PROCESS_DETACH:
-        NciCleanup();
         NamespaceCleanup();
         LocalFree(SecurityAttributes.lpSecurityDescriptor);
         HeapDestroy(ModuleHeap);
