@@ -15,16 +15,21 @@ DWORD(WINAPI *NciGetConnectionName)
  _In_ DWORD InDestNameBytes,
  _Out_opt_ DWORD *OutDestNameBytes);
 
-void
+WINTUN_STATUS
 NciInit(void)
 {
     NciModule = LoadLibraryExW(L"nci.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!NciModule)
-        abort();
+        return GetLastError();
     NciSetConnectionName =
         (DWORD(WINAPI *)(const GUID *, const WCHAR *))GetProcAddress(NciModule, "NciSetConnectionName");
+    if (!NciSetConnectionName)
+        return GetLastError();
     NciGetConnectionName =
         (DWORD(WINAPI *)(const GUID *, WCHAR *, DWORD, DWORD *))GetProcAddress(NciModule, "NciGetConnectionName");
+    if (!NciGetConnectionName)
+        return GetLastError();
+    return ERROR_SUCCESS;
 }
 
 void

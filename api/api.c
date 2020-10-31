@@ -64,11 +64,14 @@ DllMain(_In_ HINSTANCE hinstDLL, _In_ DWORD fdwReason, _In_ LPVOID lpvReserved)
     case DLL_PROCESS_ATTACH:
         ResourceModule = hinstDLL;
         ModuleHeap = HeapCreate(0, 0, 0);
+        if (!ModuleHeap)
+            return FALSE;
         ConvertStringSecurityDescriptorToSecurityDescriptorW(
             L"O:SYD:P(A;;GA;;;SY)", SDDL_REVISION_1, &SecurityAttributes.lpSecurityDescriptor, NULL);
         AdapterInit();
         NamespaceInit();
-        NciInit();
+        if (NciInit() != ERROR_SUCCESS)
+            return FALSE;
         break;
 
     case DLL_PROCESS_DETACH:
