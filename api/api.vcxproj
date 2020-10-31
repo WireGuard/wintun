@@ -100,6 +100,11 @@
     <CodeAnalysisRuleSet>NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
     <RunCodeAnalysis>true</RunCodeAnalysis>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <LocalDebuggerCommand>rundll32.exe</LocalDebuggerCommand>
+    <LocalDebuggerCommandArguments>$(OutDir)$(TargetName)$(TargetExt),DoThingsForDebugging</LocalDebuggerCommandArguments>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+  </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -164,6 +169,7 @@
     <ClInclude Include="ntldr.h" />
     <ClInclude Include="registry.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="session.h" />
     <ClInclude Include="wintun.h" />
   </ItemGroup>
   <ItemGroup>

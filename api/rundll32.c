@@ -5,15 +5,23 @@
 
 #include "adapter.h"
 #include "logger.h"
+#include "session.h"
 #include "wintun.h"
 
 #include <Windows.h>
 #include <cfgmgr32.h>
 #include <objbase.h>
+#include <assert.h>
 
 #define EXPORT comment(linker, "/EXPORT:" __FUNCTION__ "=" __FUNCDNAME__)
 
-#ifdef ACCEPT_WOW64
+#if defined(ACCEPT_WOW64) || defined(_DEBUG)
+
+static
+#ifndef _DEBUG
+const
+#endif
+BOOL WriteToConsole = FALSE;
 
 static DWORD
 WriteFormatted(_In_ DWORD StdHandle, _In_z_ const WCHAR *Template, ...)
@@ -22,19 +30,18 @@ WriteFormatted(_In_ DWORD StdHandle, _In_z_ const WCHAR *Template, ...)
     DWORD SizeWritten;
     va_list Arguments;
     va_start(Arguments, Template);
-    WriteFile(
-        GetStdHandle(StdHandle),
-        FormattedMessage,
-        sizeof(WCHAR) * FormatMessageW(
-                            FORMAT_MESSAGE_FROM_STRING | FORMAT_MESSAGE_ALLOCATE_BUFFER,
-                            Template,
-                            0,
-                            0,
-                            (void *)&FormattedMessage,
-                            0,
-                            &Arguments),
-        &SizeWritten,
-        NULL);
+    DWORD Len = sizeof(WCHAR) * FormatMessageW(
+                                    FORMAT_MESSAGE_FROM_STRING | FORMAT_MESSAGE_ALLOCATE_BUFFER,
+                                    Template,
+                                    0,
+                                    0,
+                                    (void *)&FormattedMessage,
+                                    0,
+                                    &Arguments);
+    if (WriteToConsole)
+        WriteConsoleW(GetStdHandle(StdHandle), FormattedMessage, Len, &SizeWritten, NULL);
+    else
+        WriteFile(GetStdHandle(StdHandle), FormattedMessage, Len, &SizeWritten, NULL);
     LocalFree(FormattedMessage);
     va_end(Arguments);
     return SizeWritten / sizeof(WCHAR);
@@ -140,5 +147,36 @@ VOID __stdcall DeleteAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int 
 cleanup:
     Done();
 }
+
+#ifdef _DEBUG
+VOID __stdcall DoThingsForDebugging(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
+{
+#    pragma EXPORT
+    UNREFERENCED_PARAMETER(hwnd);
+    UNREFERENCED_PARAMETER(hinst);
+    UNREFERENCED_PARAMETER(lpszCmdLine);
+    UNREFERENCED_PARAMETER(nCmdShow);
+
+    AllocConsole();
+    WriteToConsole = TRUE;
+    Init();
+    GUID TestGuid = {
+        0xdeadbabe,
+        0xcafe,
+        0xbeef,
+        { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef }
+    };
+    WINTUN_ADAPTER *Adapter;
+    BOOL RebootRequired = FALSE;
+    assert(WintunCreateAdapter(L"Wintun", L"Test", &TestGuid, &Adapter, &RebootRequired) == ERROR_SUCCESS);
+    assert(!RebootRequired);
+    TUN_SESSION *Session;
+    HANDLE ReadWait;
+    assert(WintunStartSession(Adapter, WINTUN_MIN_RING_CAPACITY, &Session, &ReadWait) == ERROR_SUCCESS);
+    WintunEndSession(Session);
+    assert(WintunDeleteAdapter(Adapter, TRUE, &RebootRequired) == ERROR_SUCCESS);
+    assert(!RebootRequired);
+}
+#endif
 
 #endif
