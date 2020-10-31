@@ -27,9 +27,10 @@ typedef void *WINTUN_ADAPTER_HANDLE;
 /**
  * Creates a Wintun adapter.
  *
- * @param Pool          Name of the adapter pool.
+ * @param Pool          Name of the adapter pool. Zero-terminated string of up to WINTUN_MAX_POOL-1 characters.
  *
- * @param Name          The requested name of the adapter.
+ * @param Name          The requested name of the adapter. Zero-terminated string of up to MAX_ADAPTER_NAME-1
+ *                      characters.
  *
  * @param RequestedGUID  The GUID of the created network adapter, which then influences NLA generation
  *                      deterministically. If it is set to NULL, the GUID is chosen by the system at random, and hence
@@ -45,8 +46,8 @@ typedef void *WINTUN_ADAPTER_HANDLE;
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 typedef WINTUN_STATUS(WINAPI *WINTUN_CREATE_ADAPTER_FUNC)(
-    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
-    _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
+    _In_z_ const WCHAR *Pool,
+    _In_z_ const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER_HANDLE *Adapter,
     _Out_opt_ BOOL *RebootRequired);
@@ -83,7 +84,7 @@ typedef BOOL(CALLBACK *WINTUN_ENUM_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In
 /**
  * Enumerates all Wintun adapters.
  *
- * @param Pool          Name of the adapter pool.
+ * @param Pool          Name of the adapter pool. Zero-terminated string of up to WINTUN_MAX_POOL-1 characters.
  *
  * @param Func          Callback function. To continue enumeration, the callback function must return TRUE; to stop
  *                      enumeration, it must return FALSE.
@@ -92,10 +93,8 @@ typedef BOOL(CALLBACK *WINTUN_ENUM_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_ENUM_ADAPTERS_FUNC)(
-    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
-    _In_ WINTUN_ENUM_FUNC Func,
-    _In_ LPARAM Param);
+typedef WINTUN_STATUS(
+    WINAPI *WINTUN_ENUM_ADAPTERS_FUNC)(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_FUNC Func, _In_ LPARAM Param);
 
 /**
  * Releases Wintun adapter resources.
@@ -107,9 +106,9 @@ typedef void(WINAPI *WINTUN_FREE_ADAPTER_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapte
 /**
  * Finds a Wintun adapter by its name.
  *
- * @param Pool          Name of the adapter pool.
+ * @param Pool          Name of the adapter pool. Zero-terminated string of up to WINTUN_MAX_POOL-1 characters.
  *
- * @param Name          Adapter name.
+ * @param Name          Adapter name. Zero-terminated string of up to MAX_ADAPTER_NAME-1 characters.
  *
  * @param Adapter       Pointer to a handle to receive the adapter handle. Must be released with WintunFreeAdapter.
  *
@@ -117,8 +116,8 @@ typedef void(WINAPI *WINTUN_FREE_ADAPTER_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapte
  * if adapter is found but not a Wintun-class or not a member of the pool; Win32 error code otherwise
  */
 typedef WINTUN_STATUS(WINAPI *WINTUN_GET_ADAPTER_FUNC)(
-    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
-    _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
+    _In_z_ const WCHAR *Pool,
+    _In_z_ const WCHAR *Name,
     _Out_ WINTUN_ADAPTER_HANDLE *Adapter);
 
 /**
@@ -188,13 +187,12 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_GET_VERSION_FUNC)(
  *
  * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
  *
- * @param Name          Adapter name
+ * @param Name          Adapter name. Zero-terminated string of up to MAX_ADAPTER_NAME-1 characters.
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_SET_ADAPTER_NAME_FUNC)(
-    _In_ WINTUN_ADAPTER_HANDLE Adapter,
-    _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name);
+typedef WINTUN_STATUS(
+    WINAPI *WINTUN_SET_ADAPTER_NAME_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In_z_ const WCHAR *Name);
 
 typedef enum _WINTUN_LOGGER_LEVEL
 {

@@ -107,8 +107,8 @@ WintunGetAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *H
  */
 WINTUN_STATUS WINAPI
 WintunCreateAdapter(
-    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
-    _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
+    _In_z_ const WCHAR *Pool,
+    _In_z_ const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER **Adapter,
     _Out_opt_ BOOL *RebootRequired);

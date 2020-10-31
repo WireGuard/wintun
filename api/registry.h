@@ -17,7 +17,7 @@
  *
  * @param Key           Handle of the parent registry key. Must be opened with notify access.
  *
- * @param Path          Subpath of the registry key to open.
+ * @param Path          Subpath of the registry key to open. Zero-terminated string of up to MAX_REG_PATH-1 characters.
  *
  * @param Access        A mask that specifies the desired access rights to the key to be opened.
  *
@@ -28,12 +28,7 @@
  * @return ERROR_SUCCESS on success; WAIT_TIMEOUT on timeout; Win32 error code otherwise.
  */
 WINTUN_STATUS
-RegistryOpenKeyWait(
-    _In_ HKEY Key,
-    _In_z_count_c_(MAX_REG_PATH) const WCHAR *Path,
-    _In_ DWORD Access,
-    _In_ DWORD Timeout,
-    _Out_ HKEY *KeyOut);
+RegistryOpenKeyWait(_In_ HKEY Key, _In_z_ const WCHAR *Path, _In_ DWORD Access, _In_ DWORD Timeout, _Out_ HKEY *KeyOut);
 
 /**
  * Validates and/or sanitizes string value read from registry.

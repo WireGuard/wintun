@@ -62,15 +62,11 @@ OpenKeyWait(_In_ HKEY Key, _Inout_z_ WCHAR *Path, _In_ DWORD Access, _In_ ULONGL
 }
 
 WINTUN_STATUS
-RegistryOpenKeyWait(
-    _In_ HKEY Key,
-    _In_z_count_c_(MAX_REG_PATH) const WCHAR *Path,
-    _In_ DWORD Access,
-    _In_ DWORD Timeout,
-    _Out_ HKEY *KeyOut)
+RegistryOpenKeyWait(_In_ HKEY Key, _In_z_ const WCHAR *Path, _In_ DWORD Access, _In_ DWORD Timeout, _Out_ HKEY *KeyOut)
 {
     WCHAR Buf[MAX_REG_PATH];
-    wcscpy_s(Buf, _countof(Buf), Path);
+    if (wcsncpy_s(Buf, _countof(Buf), Path, _TRUNCATE) == STRUNCATE)
+        return LOG(WINTUN_LOG_ERR, L"Registry path too long"), ERROR_INVALID_PARAMETER;
     return OpenKeyWait(Key, Buf, Access, GetTickCount64() + Timeout, KeyOut);
 }
 

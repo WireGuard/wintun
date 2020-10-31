@@ -15,7 +15,7 @@
 
 #include <Windows.h>
 #include <winternl.h>
-#define _NTDEF_ //TODO: figure out how to include ntsecapi and winternal together without requiring this
+#define _NTDEF_ /* TODO: figure out how to include ntsecapi and winternal together without requiring this */
 #include <cfgmgr32.h>
 #include <devguid.h>
 #include <iphlpapi.h>
@@ -472,19 +472,15 @@ RemoveNumberedSuffix(_Inout_z_ WCHAR *Name)
 }
 
 static WINTUN_STATUS
-GetPoolDeviceTypeName(_In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool, _Out_cap_c_(MAX_POOL_DEVICE_TYPE) WCHAR *Name)
+GetPoolDeviceTypeName(_In_z_ const WCHAR *Pool, _Out_cap_c_(MAX_POOL_DEVICE_TYPE) WCHAR *Name)
 {
-    if (_snwprintf_s(Name, MAX_POOL_DEVICE_TYPE, _TRUNCATE, L"%.*s Tunnel", WINTUN_MAX_POOL, Pool) == -1)
+    if (_snwprintf_s(Name, MAX_POOL_DEVICE_TYPE, _TRUNCATE, L"%s Tunnel", Pool) == -1)
         return LOG(WINTUN_LOG_ERR, L"Pool name too long"), ERROR_INVALID_PARAMETER;
     return ERROR_SUCCESS;
 }
 
 static WINTUN_STATUS
-IsPoolMember(
-    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
-    _In_ HDEVINFO DevInfo,
-    _In_ SP_DEVINFO_DATA *DevInfoData,
-    _Out_ BOOL *IsMember)
+IsPoolMember(_In_z_ const WCHAR *Pool, _In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ BOOL *IsMember)
 {
     WCHAR *DeviceDesc, *FriendlyName;
     DWORD Result = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_DEVICEDESC, &DeviceDesc);
@@ -525,7 +521,7 @@ cleanupDeviceDesc:
 
 static WINTUN_STATUS
 CreateAdapterData(
-    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
+    _In_z_ const WCHAR *Pool,
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
     _Out_ WINTUN_ADAPTER **Adapter)
@@ -623,10 +619,7 @@ WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
 }
 
 WINTUN_STATUS WINAPI
-WintunGetAdapter(
-    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
-    _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
-    _Out_ WINTUN_ADAPTER **Adapter)
+WintunGetAdapter(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name, _Out_ WINTUN_ADAPTER **Adapter)
 {
     if (!ElevateToSystem())
         return LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user"), ERROR_ACCESS_DENIED;
@@ -734,13 +727,13 @@ ConvertInterfaceAliasToGuid(_In_z_ const WCHAR *Name, _Out_ GUID *Guid)
 }
 
 WINTUN_STATUS WINAPI
-WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name)
+WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_ const WCHAR *Name)
 {
     DWORD Result;
     const int MaxSuffix = 1000;
     WCHAR AvailableName[MAX_ADAPTER_NAME];
     if (wcsncpy_s(AvailableName, _countof(AvailableName), Name, _TRUNCATE) == STRUNCATE)
-        return LOG(WINTUN_LOG_ERR, L"Pool name too long"), ERROR_INVALID_PARAMETER;
+        return LOG(WINTUN_LOG_ERR, L"Adapter name too long"), ERROR_INVALID_PARAMETER;
     for (int i = 0;; ++i)
     {
         Result = NciSetConnectionName(&Adapter->CfgInstanceID, AvailableName);
@@ -753,9 +746,8 @@ WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAP
                 for (int j = 0; j < MaxSuffix; ++j)
                 {
                     WCHAR Proposal[MAX_ADAPTER_NAME];
-                    if (_snwprintf_s(
-                            Proposal, _countof(Proposal), _TRUNCATE, L"%.*s %d", MAX_ADAPTER_NAME, Name, j + 1) == -1)
-                        return LOG(WINTUN_LOG_ERR, L"Pool name too long"), ERROR_INVALID_PARAMETER;
+                    if (_snwprintf_s(Proposal, _countof(Proposal), _TRUNCATE, L"%s %d", Name, j + 1) == -1)
+                        return LOG(WINTUN_LOG_ERR, L"Adapter name too long"), ERROR_INVALID_PARAMETER;
                     if (_wcsnicmp(Proposal, AvailableName, MAX_ADAPTER_NAME) == 0)
                         continue;
                     Result2 = NciSetConnectionName(&Guid2, Proposal);
@@ -775,9 +767,8 @@ WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_count_c_(MAX_ADAP
             break;
         if (i >= MaxSuffix || Result != ERROR_DUP_NAME)
             return LOG_ERROR(L"Setting adapter name failed", Result);
-        if (_snwprintf_s(
-                AvailableName, _countof(AvailableName), _TRUNCATE, L"%.*s %d", MAX_ADAPTER_NAME, Name, i + 1) == -1)
-            return LOG(WINTUN_LOG_ERR, L"Pool name too long"), ERROR_INVALID_PARAMETER;
+        if (_snwprintf_s(AvailableName, _countof(AvailableName), _TRUNCATE, L"%s %d", Name, i + 1) == -1)
+            return LOG(WINTUN_LOG_ERR, L"Adapter name too long"), ERROR_INVALID_PARAMETER;
     }
 
     /* TODO: This should use NetSetup2 so that it doesn't get unset. */
@@ -1055,7 +1046,8 @@ RunningWintunVersion(void)
     }
     for (ULONG i = 0; i < Modules->NumberOfModules; ++i)
     {
-        if (!_stricmp((const char *)&Modules->Modules[i].FullPathName[Modules->Modules[i].OffsetToFileName], "wintun.sys"))
+        if (!_stricmp(
+                (const char *)&Modules->Modules[i].FullPathName[Modules->Modules[i].OffsetToFileName], "wintun.sys"))
         {
             size_t Size = strlen((const char *)Modules->Modules[i].FullPathName) + 1;
             WCHAR *FilePathName = HeapAlloc(ModuleHeap, 0, Size * 2);
@@ -1085,9 +1077,9 @@ static BOOL EnsureWintunUnloaded(VOID)
 
 static WINTUN_STATUS
 CreateAdapter(
-    _In_z_count_c_(MAX_PATH) const WCHAR *InfPath,
-    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
-    _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
+    _In_z_ const WCHAR *InfPath,
+    _In_z_ const WCHAR *Pool,
+    _In_z_ const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER **Adapter,
     _Inout_ BOOL *RebootRequired)
@@ -1129,7 +1121,12 @@ CreateAdapter(
         goto cleanupDevInfo;
     }
     DevInstallParams.Flags |= DI_QUIETINSTALL | DI_ENUMSINGLEINF;
-    wcscpy_s(DevInstallParams.DriverPath, _countof(DevInstallParams.DriverPath), InfPath);
+    if (wcsncpy_s(DevInstallParams.DriverPath, _countof(DevInstallParams.DriverPath), InfPath, _TRUNCATE) == STRUNCATE)
+    {
+        LOG(WINTUN_LOG_ERR, L"Inf path too long");
+        Result = ERROR_INVALID_PARAMETER;
+        goto cleanupDevInfo;
+    }
     if (!SetupDiSetDeviceInstallParamsW(DevInfo, &DevInfoData, &DevInstallParams))
     {
         Result = LOG_LAST_ERROR(L"Setting device installation parameters failed");
@@ -1604,10 +1601,7 @@ cleanupDirectory:
 }
 
 static WINTUN_STATUS
-GetAdapter(
-    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
-    _In_ const GUID *CfgInstanceID,
-    _Out_ WINTUN_ADAPTER **Adapter)
+GetAdapter(_In_z_ const WCHAR *Pool, _In_ const GUID *CfgInstanceID, _Out_ WINTUN_ADAPTER **Adapter)
 {
     HANDLE Mutex = NamespaceTakeMutex(Pool);
     if (!Mutex)
@@ -1631,8 +1625,8 @@ cleanupMutex:
 
 static WINTUN_STATUS
 CreateAdapterNatively(
-    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
-    _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
+    _In_z_ const WCHAR *Pool,
+    _In_z_ const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER **Adapter,
     _Inout_ BOOL *RebootRequired)
@@ -1644,10 +1638,8 @@ CreateAdapterNatively(
             Arguments,
             _countof(Arguments),
             _TRUNCATE,
-            RequestedGUID ? L"CreateAdapter \"%.*s\" \"%.*s\" %.*s" : L"CreateAdapter \"%.*s\" \"%.*s\"",
-            WINTUN_MAX_POOL,
+            RequestedGUID ? L"CreateAdapter \"%s\" \"%s\" %.*s" : L"CreateAdapter \"%s\" \"%s\"",
             Pool,
-            MAX_ADAPTER_NAME,
             Name,
             RequestedGUID ? StringFromGUID2(RequestedGUID, RequestedGUIDStr, _countof(RequestedGUIDStr)) : 0,
             RequestedGUIDStr) == -1)
@@ -1685,8 +1677,8 @@ cleanupArgv:
 
 WINTUN_STATUS WINAPI
 WintunCreateAdapter(
-    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
-    _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
+    _In_z_ const WCHAR *Pool,
+    _In_z_ const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER **Adapter,
     _Out_opt_ BOOL *RebootRequired)
@@ -1904,7 +1896,7 @@ cleanupToken:
 }
 
 WINTUN_STATUS WINAPI
-WintunEnumAdapters(_In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUM_FUNC Func, _In_ LPARAM Param)
+WintunEnumAdapters(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_FUNC Func, _In_ LPARAM Param)
 {
     HANDLE Mutex = NamespaceTakeMutex(Pool);
     if (!Mutex)
