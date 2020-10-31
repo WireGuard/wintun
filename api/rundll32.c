@@ -30,18 +30,18 @@ WriteFormatted(_In_ DWORD StdHandle, _In_z_ const WCHAR *Template, ...)
     DWORD SizeWritten;
     va_list Arguments;
     va_start(Arguments, Template);
-    DWORD Len = sizeof(WCHAR) * FormatMessageW(
-                                    FORMAT_MESSAGE_FROM_STRING | FORMAT_MESSAGE_ALLOCATE_BUFFER,
-                                    Template,
-                                    0,
-                                    0,
-                                    (void *)&FormattedMessage,
-                                    0,
-                                    &Arguments);
+    DWORD Len = FormatMessageW(
+        FORMAT_MESSAGE_FROM_STRING | FORMAT_MESSAGE_ALLOCATE_BUFFER,
+        Template,
+        0,
+        0,
+        (void *)&FormattedMessage,
+        0,
+        &Arguments);
     if (WriteToConsole)
         WriteConsoleW(GetStdHandle(StdHandle), FormattedMessage, Len, &SizeWritten, NULL);
     else
-        WriteFile(GetStdHandle(StdHandle), FormattedMessage, Len, &SizeWritten, NULL);
+        WriteFile(GetStdHandle(StdHandle), FormattedMessage, Len * sizeof(WCHAR), &SizeWritten, NULL);
     LocalFree(FormattedMessage);
     va_end(Arguments);
     return SizeWritten / sizeof(WCHAR);
@@ -157,12 +157,7 @@ VOID __stdcall DoThingsForDebugging(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLin
     AllocConsole();
     WriteToConsole = TRUE;
     Init();
-    GUID TestGuid = {
-        0xdeadbabe,
-        0xcafe,
-        0xbeef,
-        { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef }
-    };
+    GUID TestGuid = { 0xdeadbabe, 0xcafe, 0xbeef, { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef } };
     WINTUN_ADAPTER *Adapter;
     BOOL RebootRequired;
     assert(WintunCreateAdapter(L"Wintun", L"Test", &TestGuid, &Adapter, &RebootRequired) == ERROR_SUCCESS);
