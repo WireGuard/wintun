@@ -1026,7 +1026,7 @@ RunningWintunVersion(void)
 {
     DWORDLONG Version = 0;
     PRTL_PROCESS_MODULES Modules;
-    ULONG BufferSize = 2048;
+    ULONG BufferSize = 128 * 1024;
     for (;;)
     {
         Modules = HeapAlloc(ModuleHeap, 0, BufferSize);
@@ -1044,21 +1044,15 @@ RunningWintunVersion(void)
         LOG(WINTUN_LOG_ERR, L"Failed to enumerate drivers");
         return Version;
     }
-    for (ULONG i = 0; i < Modules->NumberOfModules; ++i)
+    for (ULONG i = Modules->NumberOfModules; i-- > 0;)
     {
-        if (!_stricmp(
-                (const char *)&Modules->Modules[i].FullPathName[Modules->Modules[i].OffsetToFileName], "wintun.sys"))
+        const char *NtPath = (const char *)Modules->Modules[i].FullPathName;
+        if (!_stricmp(&NtPath[Modules->Modules[i].OffsetToFileName], "wintun.sys"))
         {
-            size_t Size = strlen((const char *)Modules->Modules[i].FullPathName) + 1;
-            WCHAR *FilePathName = HeapAlloc(ModuleHeap, 0, Size * 2);
-            if (!FilePathName)
-            {
-                LOG(WINTUN_LOG_ERR, L"Out of memory");
-                goto out;
-            }
-            mbstowcs_s(&Size, FilePathName, Size, (const char *)Modules->Modules[i].FullPathName, _TRUNCATE);
-            Version = VersionOfFile(FilePathName);
-            HeapFree(ModuleHeap, 0, FilePathName);
+            WCHAR FilePath[MAX_PATH * 3 + 15];
+            if (_snwprintf_s(FilePath, _countof(FilePath), _TRUNCATE, L"\\\\?\\GLOBALROOT%S", NtPath) == -1)
+                continue;
+            Version = VersionOfFile(FilePath);
             goto out;
         }
     }
