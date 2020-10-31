@@ -83,7 +83,7 @@ VOID __stdcall CreateAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int 
     Init();
     if (Argc < 4)
         goto cleanup;
-    if (wcslen(Argv[2]) >= MAX_POOL)
+    if (wcslen(Argv[2]) >= WINTUN_MAX_POOL)
         goto cleanup;
     if (wcslen(Argv[3]) >= MAX_ADAPTER_NAME)
         goto cleanup;
@@ -125,7 +125,11 @@ VOID __stdcall DeleteAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int 
     if (FAILED(CLSIDFromString(Argv[3], &Adapter.CfgInstanceID)))
         goto cleanup;
     BOOL RebootRequired = FALSE;
-    WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X! %2!X!", WintunDeleteAdapter(&Adapter, ForceCloseSessions, &RebootRequired), RebootRequired);
+    WriteFormatted(
+        STD_OUTPUT_HANDLE,
+        L"%1!X! %2!X!",
+        WintunDeleteAdapter(&Adapter, ForceCloseSessions, &RebootRequired),
+        RebootRequired);
 
 cleanup:
     Done();

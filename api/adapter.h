@@ -85,7 +85,7 @@ typedef struct _WINTUN_ADAPTER
     WCHAR DevInstanceID[MAX_INSTANCE_ID];
     DWORD LuidIndex;
     DWORD IfType;
-    WCHAR Pool[MAX_POOL];
+    WCHAR Pool[WINTUN_MAX_POOL];
 } WINTUN_ADAPTER;
 
 /**
@@ -105,7 +105,7 @@ WintunGetAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *H
  */
 WINTUN_STATUS WINAPI
 WintunCreateAdapter(
-    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
+    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
     _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER **Adapter,

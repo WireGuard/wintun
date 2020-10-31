@@ -19,7 +19,10 @@ typedef _Return_type_success_(return == ERROR_SUCCESS) DWORD WINTUN_STATUS;
  */
 typedef void *WINTUN_ADAPTER_HANDLE;
 
-#define MAX_POOL 256
+/**
+ * Maximum pool name length including zero terminator
+ */
+#define WINTUN_MAX_POOL 256
 
 /**
  * Creates a Wintun adapter.
@@ -43,7 +46,7 @@ typedef void *WINTUN_ADAPTER_HANDLE;
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 typedef WINTUN_STATUS(WINAPI *WINTUN_CREATE_ADAPTER_FUNC)(
-    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
+    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
     _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER_HANDLE *Adapter,
@@ -63,8 +66,10 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_CREATE_ADAPTER_FUNC)(
  *
  * @return ERROR_SUCCESS on success or the adapter was not found; Win32 error code otherwise.
  */
-typedef WINTUN_STATUS(
-    WINAPI *WINTUN_DELETE_ADAPTER_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In_ BOOL ForceCloseSessions, _Inout_ BOOL *RebootRequired);
+typedef WINTUN_STATUS(WINAPI *WINTUN_DELETE_ADAPTER_FUNC)(
+    _In_ WINTUN_ADAPTER_HANDLE Adapter,
+    _In_ BOOL ForceCloseSessions,
+    _Inout_ BOOL *RebootRequired);
 
 /**
  * Called by WintunEnumAdapters for each adapter in the pool.
@@ -90,7 +95,7 @@ typedef BOOL(CALLBACK *WINTUN_ENUM_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 typedef WINTUN_STATUS(WINAPI *WINTUN_ENUM_ADAPTERS_FUNC)(
-    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
+    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
     _In_ WINTUN_ENUM_FUNC Func,
     _In_ LPARAM Param);
 
@@ -114,7 +119,7 @@ typedef void(WINAPI *WINTUN_FREE_ADAPTER_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapte
  * if adapter is found but not a Wintun-class or not a member of the pool; Win32 error code otherwise
  */
 typedef WINTUN_STATUS(WINAPI *WINTUN_GET_ADAPTER_FUNC)(
-    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
+    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
     _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
     _Out_ WINTUN_ADAPTER_HANDLE *Adapter);
 

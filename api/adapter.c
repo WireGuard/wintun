@@ -7,8 +7,8 @@
 
 #pragma warning(disable : 4221) /* nonstandard: address of automatic in initializer */
 
-#define WAIT_FOR_REGISTRY_TIMEOUT 10000     /* ms */
-#define MAX_POOL_DEVICE_TYPE (MAX_POOL + 8) /* Should accommodate a pool name with " Tunnel" appended */
+#define WAIT_FOR_REGISTRY_TIMEOUT 10000            /* ms */
+#define MAX_POOL_DEVICE_TYPE (WINTUN_MAX_POOL + 8) /* Should accommodate a pool name with " Tunnel" appended */
 #if defined(_M_IX86)
 #    define IMAGE_FILE_PROCESS IMAGE_FILE_MACHINE_I386
 #elif defined(_M_AMD64)
@@ -451,16 +451,16 @@ RemoveNumberedSuffix(_Inout_z_ WCHAR *Name)
 }
 
 static WINTUN_STATUS
-GetPoolDeviceTypeName(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _Out_cap_c_(MAX_POOL_DEVICE_TYPE) WCHAR *Name)
+GetPoolDeviceTypeName(_In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool, _Out_cap_c_(MAX_POOL_DEVICE_TYPE) WCHAR *Name)
 {
-    if (_snwprintf_s(Name, MAX_POOL_DEVICE_TYPE, _TRUNCATE, L"%.*s Tunnel", MAX_POOL, Pool) == -1)
+    if (_snwprintf_s(Name, MAX_POOL_DEVICE_TYPE, _TRUNCATE, L"%.*s Tunnel", WINTUN_MAX_POOL, Pool) == -1)
         return LOG(WINTUN_LOG_ERR, L"Pool name too long"), ERROR_INVALID_PARAMETER;
     return ERROR_SUCCESS;
 }
 
 static WINTUN_STATUS
 IsPoolMember(
-    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
+    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
     _Out_ BOOL *IsMember)
@@ -504,7 +504,7 @@ cleanupDeviceDesc:
 
 static WINTUN_STATUS
 CreateAdapterData(
-    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
+    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
     _Out_ WINTUN_ADAPTER **Adapter)
@@ -603,7 +603,7 @@ WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
 
 WINTUN_STATUS WINAPI
 WintunGetAdapter(
-    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
+    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
     _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
     _Out_ WINTUN_ADAPTER **Adapter)
 {
@@ -1067,7 +1067,7 @@ static BOOL EnsureWintunUnloaded(VOID)
 static WINTUN_STATUS
 CreateAdapter(
     _In_z_count_c_(MAX_PATH) const WCHAR *InfPath,
-    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
+    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
     _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER **Adapter,
@@ -1585,7 +1585,10 @@ cleanupDirectory:
 }
 
 static WINTUN_STATUS
-GetAdapter(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ const GUID *CfgInstanceID, _Out_ WINTUN_ADAPTER **Adapter)
+GetAdapter(
+    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
+    _In_ const GUID *CfgInstanceID,
+    _Out_ WINTUN_ADAPTER **Adapter)
 {
     HANDLE Mutex = NamespaceTakeMutex(Pool);
     if (!Mutex)
@@ -1609,7 +1612,7 @@ cleanupMutex:
 
 static WINTUN_STATUS
 CreateAdapterNatively(
-    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
+    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
     _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER **Adapter,
@@ -1617,13 +1620,13 @@ CreateAdapterNatively(
 {
     LOG(WINTUN_LOG_INFO, L"Spawning native process");
     WCHAR RequestedGUIDStr[MAX_GUID_STRING_LEN];
-    WCHAR Arguments[15 + MAX_POOL + 3 + MAX_ADAPTER_NAME + 2 + MAX_GUID_STRING_LEN + 1];
+    WCHAR Arguments[15 + WINTUN_MAX_POOL + 3 + MAX_ADAPTER_NAME + 2 + MAX_GUID_STRING_LEN + 1];
     if (_snwprintf_s(
             Arguments,
             _countof(Arguments),
             _TRUNCATE,
             RequestedGUID ? L"CreateAdapter \"%.*s\" \"%.*s\" %.*s" : L"CreateAdapter \"%.*s\" \"%.*s\"",
-            MAX_POOL,
+            WINTUN_MAX_POOL,
             Pool,
             MAX_ADAPTER_NAME,
             Name,
@@ -1663,7 +1666,7 @@ cleanupArgv:
 
 WINTUN_STATUS WINAPI
 WintunCreateAdapter(
-    _In_z_count_c_(MAX_POOL) const WCHAR *Pool,
+    _In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool,
     _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER **Adapter,
@@ -1875,7 +1878,7 @@ cleanupToken:
 }
 
 WINTUN_STATUS WINAPI
-WintunEnumAdapters(_In_z_count_c_(MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUM_FUNC Func, _In_ LPARAM Param)
+WintunEnumAdapters(_In_z_count_c_(WINTUN_MAX_POOL) const WCHAR *Pool, _In_ WINTUN_ENUM_FUNC Func, _In_ LPARAM Param)
 {
     HANDLE Mutex = NamespaceTakeMutex(Pool);
     if (!Mutex)
