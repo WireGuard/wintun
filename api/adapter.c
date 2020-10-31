@@ -1689,10 +1689,13 @@ WintunCreateAdapter(
     _In_z_count_c_(MAX_ADAPTER_NAME) const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
     _Out_ WINTUN_ADAPTER **Adapter,
-    _Out_ BOOL *RebootRequired)
+    _Out_opt_ BOOL *RebootRequired)
 {
     if (!ElevateToSystem())
         return LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user"), ERROR_ACCESS_DENIED;
+    BOOL DummyRebootRequired;
+    if (!RebootRequired)
+        RebootRequired = &DummyRebootRequired;
     *RebootRequired = FALSE;
     DWORD Result = ERROR_SUCCESS;
 #ifdef MAYBE_WOW64
@@ -1848,11 +1851,14 @@ cleanupArgv:
 #endif
 
 WINTUN_STATUS WINAPI
-WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSessions, _Out_ BOOL *RebootRequired)
+WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSessions, _Out_opt_ BOOL *RebootRequired)
 {
     if (!ElevateToSystem())
         return LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user"), ERROR_ACCESS_DENIED;
 
+    BOOL DummyRebootRequired;
+    if (!RebootRequired)
+        RebootRequired = &DummyRebootRequired;
     *RebootRequired = FALSE;
     DWORD Result;
 #ifdef MAYBE_WOW64
