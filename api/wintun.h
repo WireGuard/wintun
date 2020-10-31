@@ -79,7 +79,7 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_DELETE_ADAPTER_FUNC)(
  *
  * @return Non-zero to continue iterating adapters; zero to stop.
  */
-typedef BOOL(CALLBACK *WINTUN_ENUM_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In_ LPARAM Param);
+typedef BOOL(CALLBACK *WINTUN_ENUM_CALLBACK_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In_ LPARAM Param);
 
 /**
  * Enumerates all Wintun adapters.
@@ -94,7 +94,7 @@ typedef BOOL(CALLBACK *WINTUN_ENUM_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 typedef WINTUN_STATUS(
-    WINAPI *WINTUN_ENUM_ADAPTERS_FUNC)(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_FUNC Func, _In_ LPARAM Param);
+    WINAPI *WINTUN_ENUM_ADAPTERS_FUNC)(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK_FUNC Callback, _In_ LPARAM Param);
 
 /**
  * Releases Wintun adapter resources.
@@ -210,7 +210,7 @@ typedef enum _WINTUN_LOGGER_LEVEL
  *
  * @return Anything - return value is ignored.
  */
-typedef BOOL(CALLBACK *WINTUN_LOGGER_FUNC)(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Message);
+typedef BOOL(CALLBACK *WINTUN_LOGGER_CALLBACK_FUNC)(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Message);
 
 /**
  * Sets logger callback function.
@@ -219,7 +219,7 @@ typedef BOOL(CALLBACK *WINTUN_LOGGER_FUNC)(_In_ WINTUN_LOGGER_LEVEL Level, _In_z
  *                      threads concurrently. Should the logging require serialization, you must handle serialization in
  *                      NewLogger.
  */
-typedef void(WINAPI *WINTUN_SET_LOGGER_FUNC)(_In_ WINTUN_LOGGER_FUNC NewLogger);
+typedef void(WINAPI *WINTUN_SET_LOGGER_FUNC)(_In_ WINTUN_LOGGER_CALLBACK_FUNC NewLogger);
 
 /**
  * Minimum ring capacity.
@@ -289,7 +289,7 @@ typedef void(WINAPI *WINTUN_END_SESSION_FUNC)(_In_ WINTUN_SESSION_HANDLE Session
  * ERROR_SUCCESS        on success.
  * Regardless, if the error was returned, some packets might have been read nevertheless.
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_RECEIVE_PACKETS_FUNC)(
+typedef WINTUN_STATUS(WINAPI *WINTUN_RECEIVE_PACKET_FUNC)(
     _In_ WINTUN_SESSION_HANDLE *Session,
     _Out_bytecapcount_(*PacketSize) BYTE **Packet,
     _Out_ DWORD *PacketSize);

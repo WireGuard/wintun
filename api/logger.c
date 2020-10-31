@@ -14,10 +14,10 @@ NopLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
     return TRUE;
 }
 
-WINTUN_LOGGER_FUNC Logger = NopLogger;
+WINTUN_LOGGER_CALLBACK_FUNC Logger = NopLogger;
 
 void CALLBACK
-WintunSetLogger(_In_ WINTUN_LOGGER_FUNC NewLogger)
+WintunSetLogger(_In_ WINTUN_LOGGER_CALLBACK_FUNC NewLogger)
 {
     Logger = NewLogger;
 }

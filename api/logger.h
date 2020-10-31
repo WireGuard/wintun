@@ -8,13 +8,13 @@
 #include "wintun.h"
 #include <Windows.h>
 
-extern WINTUN_LOGGER_FUNC Logger;
+extern WINTUN_LOGGER_CALLBACK_FUNC Logger;
 
 /**
  * @copydoc WINTUN_SET_LOGGER_FUNC
  */
 void WINAPI
-WintunSetLogger(_In_ WINTUN_LOGGER_FUNC NewLogger);
+WintunSetLogger(_In_ WINTUN_LOGGER_CALLBACK_FUNC NewLogger);
 
 _Post_equals_last_error_ DWORD
 LoggerError(_In_z_ const WCHAR *Prefix, _In_ DWORD Error);

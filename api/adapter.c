@@ -1890,7 +1890,7 @@ cleanupToken:
 }
 
 WINTUN_STATUS WINAPI
-WintunEnumAdapters(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_FUNC Func, _In_ LPARAM Param)
+WintunEnumAdapters(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK_FUNC Func, _In_ LPARAM Param)
 {
     HANDLE Mutex = NamespaceTakeMutex(Pool);
     if (!Mutex)
