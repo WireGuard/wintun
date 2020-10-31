@@ -6,6 +6,7 @@
 #pragma once
 
 #include "wintun.h"
+#include <Windows.h>
 
 extern WINTUN_LOGGER_FUNC Logger;
 

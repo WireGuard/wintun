@@ -3,7 +3,12 @@
  * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
  */
 
-#include "pch.h"
+#include "entry.h"
+#include "logger.h"
+#include "namespace.h"
+
+#include <Windows.h>
+#include <bcrypt.h>
 
 static BOOL HasInitialized = FALSE;
 static CRITICAL_SECTION Initializing;

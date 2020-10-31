@@ -31,3 +31,6 @@ typedef struct _RTL_PROCESS_MODULES
     ULONG NumberOfModules;
     RTL_PROCESS_MODULE_INFORMATION Modules[1];
 } RTL_PROCESS_MODULES, *PRTL_PROCESS_MODULES;
+
+
+#define STATUS_INFO_LENGTH_MISMATCH ((NTSTATUS)0xC0000004L) //TODO: #include <ntstatus.h> instead of this

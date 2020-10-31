@@ -3,7 +3,10 @@
  * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
  */
 
-#include "pch.h"
+#include "entry.h"
+#include "logger.h"
+#include "resource.h"
+#include <Windows.h>
 
 WINTUN_STATUS
 ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const void **Address, _Out_ DWORD *Size)

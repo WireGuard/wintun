@@ -3,7 +3,11 @@
  * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
  */
 
-#include "pch.h"
+#include "adapter.h"
+#include "logger.h"
+#include "wintun.h"
+
+#include <Windows.h>
 
 #define EXPORT comment(linker, "/EXPORT:" __FUNCTION__ "=" __FUNCDNAME__)
 

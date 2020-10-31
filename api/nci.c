@@ -3,7 +3,8 @@
  * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
  */
 
-#include "pch.h"
+#include "nci.h"
+#include <Windows.h>
 
 static HMODULE NciModule;
 

@@ -3,7 +3,11 @@
  * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
  */
 
-#include "pch.h"
+#include "entry.h"
+#include "logger.h"
+#include "registry.h"
+#include <Windows.h>
+#include <wchar.h>
 
 static WINTUN_STATUS
 OpenKeyWait(_In_ HKEY Key, _Inout_z_ WCHAR *Path, _In_ DWORD Access, _In_ ULONGLONG Deadline, _Out_ HKEY *KeyOut)

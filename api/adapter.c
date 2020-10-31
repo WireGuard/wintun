@@ -3,7 +3,28 @@
  * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
  */
 
-#include "pch.h"
+#include "adapter.h"
+#include "elevate.h"
+#include "entry.h"
+#include "logger.h"
+#include "namespace.h"
+#include "nci.h"
+#include "ntldr.h"
+#include "registry.h"
+#include "resource.h"
+
+#include <Windows.h>
+#include <winternl.h>
+#define _NTDEF_ //TODO: figure out how to include ntsecapi and winternal together without requiring this
+#include <cfgmgr32.h>
+#include <devguid.h>
+#include <iphlpapi.h>
+#include <ndisguid.h>
+#include <newdev.h>
+#include <NTSecAPI.h>
+#include <SetupAPI.h>
+#include <Shlwapi.h>
+#include <wchar.h>
 
 #pragma warning(disable : 4221) /* nonstandard: address of automatic in initializer */
 

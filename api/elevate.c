@@ -3,7 +3,10 @@
  * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
  */
 
-#include "pch.h"
+#include "elevate.h"
+
+#include <Windows.h>
+#include <TlHelp32.h>
 
 BOOL
 ElevateToSystem(void)

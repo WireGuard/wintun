@@ -3,7 +3,12 @@
  * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
  */
 
-#include "pch.h"
+#include "adapter.h"
+#include "elevate.h"
+#include "entry.h"
+#include "logger.h"
+#include "wintun.h"
+#include <Windows.h>
 
 #pragma warning(disable : 4200) /* nonstandard: zero-sized array in struct/union */
 

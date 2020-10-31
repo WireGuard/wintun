@@ -104,8 +104,6 @@
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="Exists('$(OutDir)whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PrecompiledHeader>Use</PrecompiledHeader>
-      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <AdditionalOptions>/volatile:iso %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ResourceCompile>
@@ -153,28 +151,24 @@
     <None Include="exports.def" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="api.h" />
+    <ClInclude Include="entry.h" />
     <ClInclude Include="adapter.h" />
     <ClInclude Include="elevate.h" />
     <ClInclude Include="logger.h" />
     <ClInclude Include="namespace.h" />
     <ClInclude Include="nci.h" />
     <ClInclude Include="ntldr.h" />
-    <ClInclude Include="pch.h" />
     <ClInclude Include="registry.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="wintun.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="api.c" />
+    <ClCompile Include="entry.c" />
     <ClCompile Include="adapter.c" />
     <ClCompile Include="elevate.c" />
     <ClCompile Include="logger.c" />
     <ClCompile Include="namespace.c" />
     <ClCompile Include="nci.c" />
-    <ClCompile Include="pch.c">
-      <PrecompiledHeader>Create</PrecompiledHeader>
-    </ClCompile>
     <ClCompile Include="registry.c" />
     <ClCompile Include="resource.c" />
     <ClCompile Include="session.c" />

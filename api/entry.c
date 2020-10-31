@@ -3,7 +3,21 @@
  * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
  */
 
-#include "pch.h"
+#include "adapter.h"
+#include "entry.h"
+#include "logger.h"
+#include "registry.h"
+#include "namespace.h"
+#include "nci.h"
+#include "wintun.h"
+
+#include <Windows.h>
+#pragma warning(push)
+#pragma warning(disable : 4201)
+/* nonstandard extension used: nameless struct/union */
+#include <delayimp.h>
+#pragma warning(pop)
+#include <sddl.h>
 
 HINSTANCE ResourceModule;
 HANDLE ModuleHeap;

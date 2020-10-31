@@ -3,7 +3,8 @@
  * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
  */
 
-#include "pch.h"
+#include "logger.h"
+#include <Windows.h>
 
 static BOOL CALLBACK
 NopLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)

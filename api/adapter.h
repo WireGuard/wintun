@@ -6,7 +6,9 @@
 #pragma once
 
 #include "wintun.h"
+#include <IPExport.h>
 #include <SetupAPI.h>
+#include <Windows.h>
 
 #define MAX_INSTANCE_ID MAX_PATH /* TODO: Is MAX_PATH always enough? */
 #define WINTUN_HWID L"Wintun"
