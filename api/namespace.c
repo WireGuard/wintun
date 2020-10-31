@@ -9,6 +9,7 @@
 
 #include <Windows.h>
 #include <bcrypt.h>
+#include <wchar.h>
 
 static BOOL HasInitialized = FALSE;
 static CRITICAL_SECTION Initializing;
@@ -31,17 +32,6 @@ NormalizeStringAlloc(_In_ NORM_FORM NormForm, _In_z_ const WCHAR *Source)
         if (Result != ERROR_INSUFFICIENT_BUFFER)
             return LOG_ERROR(L"Failed", Result), NULL;
         Len = -Len;
-    }
-}
-
-static void
-Bin2Hex(_In_bytecount_(Size) const void *Source, size_t Size, _Out_capcount_(Size * 2) WCHAR *Destination)
-{
-    for (size_t i = 0; i < Size; ++i)
-    {
-        static const WCHAR nibble[] = L"0123456789ABCDEF";
-        *(Destination++) = nibble[(((unsigned char *)Source)[i] & 0xf0) >> 4];
-        *(Destination++) = nibble[(((unsigned char *)Source)[i] & 0x0f)];
     }
 }
 
@@ -134,10 +124,10 @@ NamespaceTakeMutex(_In_z_ const WCHAR *Pool)
     if (!BCRYPT_SUCCESS(BCryptFinishHash(Sha256, Hash, sizeof(Hash), 0)))
         goto cleanupPoolNorm;
     static const WCHAR MutexNamePrefix[] = L"Wintun\\Wintun-Name-Mutex-";
-    WCHAR MutexName[_countof(MutexNamePrefix) /*<= incl. terminator*/ + sizeof(Hash) * 2];
-    memcpy(MutexName, MutexNamePrefix, sizeof(MutexNamePrefix) - sizeof(WCHAR));
-    Bin2Hex(Hash, sizeof(Hash), MutexName + _countof(MutexNamePrefix) - 1);
-    MutexName[_countof(MutexName) - 1] = 0;
+    WCHAR MutexName[_countof(MutexNamePrefix) + sizeof(Hash) * 2];
+    memcpy(MutexName, MutexNamePrefix, sizeof(MutexNamePrefix));
+    for (size_t i = 0; i < sizeof(Hash); ++i)
+        swprintf_s(&MutexName[_countof(MutexNamePrefix) - 1 + i * 2], 3, L"%02x", Hash[i]);
     Mutex = CreateMutexW(&SecurityAttributes, FALSE, MutexName);
     if (!Mutex)
         goto cleanupPoolNorm;
