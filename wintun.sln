@@ -17,6 +17,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		wintun.props = wintun.props
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test", "test\test.vcxproj", "{2ABAC503-245D-4F53-85C5-0F844DEF738B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|amd64 = Debug|amd64
@@ -61,6 +63,14 @@ Global
 		{F7679B65-2FEC-469A-8BAC-B07BF4439422}.Release|arm64.Build.0 = Release|ARM64
 		{F7679B65-2FEC-469A-8BAC-B07BF4439422}.Release|x86.ActiveCfg = Release|Win32
 		{F7679B65-2FEC-469A-8BAC-B07BF4439422}.Release|x86.Build.0 = Release|Win32
+		{2ABAC503-245D-4F53-85C5-0F844DEF738B}.Debug|amd64.ActiveCfg = Debug|x64
+		{2ABAC503-245D-4F53-85C5-0F844DEF738B}.Debug|arm.ActiveCfg = Debug|ARM
+		{2ABAC503-245D-4F53-85C5-0F844DEF738B}.Debug|arm64.ActiveCfg = Debug|ARM64
+		{2ABAC503-245D-4F53-85C5-0F844DEF738B}.Debug|x86.ActiveCfg = Debug|Win32
+		{2ABAC503-245D-4F53-85C5-0F844DEF738B}.Release|amd64.ActiveCfg = Release|x64
+		{2ABAC503-245D-4F53-85C5-0F844DEF738B}.Release|arm.ActiveCfg = Release|ARM
+		{2ABAC503-245D-4F53-85C5-0F844DEF738B}.Release|arm64.ActiveCfg = Release|ARM64
+		{2ABAC503-245D-4F53-85C5-0F844DEF738B}.Release|x86.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
