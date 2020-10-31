@@ -138,11 +138,8 @@ VOID __stdcall DeleteAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int 
     if (FAILED(CLSIDFromString(Argv[3], &Adapter.CfgInstanceID)))
         goto cleanup;
     BOOL RebootRequired;
-    WriteFormatted(
-        STD_OUTPUT_HANDLE,
-        L"%1!X! %2!X!",
-        WintunDeleteAdapter(&Adapter, ForceCloseSessions, &RebootRequired),
-        RebootRequired);
+    WINTUN_STATUS Ret = WintunDeleteAdapter(&Adapter, ForceCloseSessions, &RebootRequired);
+    WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X! %2!X!", Ret, RebootRequired);
 
 cleanup:
     Done();
