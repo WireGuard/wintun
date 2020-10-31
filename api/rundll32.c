@@ -8,6 +8,8 @@
 #include "wintun.h"
 
 #include <Windows.h>
+#include <cfgmgr32.h>
+#include <objbase.h>
 
 #define EXPORT comment(linker, "/EXPORT:" __FUNCTION__ "=" __FUNCDNAME__)
 
