@@ -22,39 +22,6 @@ HINSTANCE ResourceModule;
 HANDLE ModuleHeap;
 SECURITY_ATTRIBUTES SecurityAttributes = { .nLength = sizeof(SECURITY_ATTRIBUTES) };
 
-WINTUN_STATUS WINAPI
-WintunGetVersion(
-    _Out_ DWORD *DriverVersionMaj,
-    _Out_ DWORD *DriverVersionMin,
-    _Out_ DWORD *NdisVersionMaj,
-    _Out_ DWORD *NdisVersionMin)
-{
-    HKEY Key;
-    DWORD Result =
-        RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Services\\Wintun", 0, KEY_QUERY_VALUE, &Key);
-    if (Result != ERROR_SUCCESS)
-        return LOG_ERROR(L"Failed to open registry key", Result);
-    if (RegistryQueryDWORD(Key, L"DriverMajorVersion", DriverVersionMaj, FALSE) != ERROR_SUCCESS ||
-        RegistryQueryDWORD(Key, L"DriverMinorVersion", DriverVersionMin, FALSE) != ERROR_SUCCESS)
-    {
-        /* TODO: Drop the fallback to WINTUN_VERSION_MAJ & WINTUN_VERSION_MIN when Windows 7 support is discontinued. */
-        *DriverVersionMaj = WINTUN_VERSION_MAJ;
-        *DriverVersionMin = WINTUN_VERSION_MIN;
-    }
-    Result = RegistryQueryDWORD(Key, L"NdisMajorVersion", NdisVersionMaj, TRUE);
-    if (Result != ERROR_SUCCESS)
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to query NdisMajorVersion value");
-        goto cleanupKey;
-    }
-    Result = RegistryQueryDWORD(Key, L"NdisMinorVersion", NdisVersionMin, TRUE);
-    if (Result != ERROR_SUCCESS)
-        LOG(WINTUN_LOG_ERR, L"Failed to query NdisMinorVersion value");
-cleanupKey:
-    RegCloseKey(Key);
-    return Result;
-}
-
 static FARPROC WINAPI DelayedLoadLibraryHook(unsigned dliNotify, PDelayLoadInfo pdli)
 {
     if (dliNotify != dliNotePreLoadLibrary)

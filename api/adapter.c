@@ -1381,8 +1381,8 @@ CreateTemporaryDirectory(_Out_cap_c_(MAX_PATH) WCHAR *RandomTempSubDirectory)
     return ERROR_SUCCESS;
 }
 
-static DWORDLONG
-RunningWintunVersion(void)
+DWORDLONG
+WintunGetVersion(void)
 {
     DWORDLONG Version = 0;
     PRTL_PROCESS_MODULES Modules;
@@ -1424,7 +1424,7 @@ out:
 static BOOL EnsureWintunUnloaded(VOID)
 {
     BOOL Loaded;
-    for (int i = 0; (Loaded = RunningWintunVersion() != 0) != FALSE && i < 300; ++i)
+    for (int i = 0; (Loaded = WintunGetVersion() != 0) != FALSE && i < 300; ++i)
         Sleep(50);
     return !Loaded;
 }
@@ -1461,7 +1461,7 @@ InstallDriver(_Out_writes_z_(MAX_PATH) WCHAR InfStorePath[MAX_PATH], _Inout_ BOO
         goto cleanupDelete;
     }
 
-    DWORDLONG LoadedDriverVersion = RunningWintunVersion();
+    DWORDLONG LoadedDriverVersion = WintunGetVersion();
     HDEVINFO DevInfo = INVALID_HANDLE_VALUE;
     SP_DEVINFO_DATA_LIST *ExistingAdapters = NULL;
     if (LoadedDriverVersion)

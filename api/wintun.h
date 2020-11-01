@@ -164,23 +164,11 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_GET_ADAPTER_NAME_FUNC)(
     _Out_cap_c_(MAX_ADAPTER_NAME) WCHAR *Name);
 
 /**
- * Returns the version of the Wintun driver and NDIS system currently loaded.
+ * Determines the version of the Wintun driver currently loaded.
  *
- * @param DriverVersionMaj  Pointer to a DWORD to receive the Wintun driver major version number.
- *
- * @param DriverVersionMin  Pointer to a DWORD to receive the Wintun driver minor version number.
- *
- * @param NdisVersionMaj  Pointer to a DWORD to receive the NDIS major version number.
- *
- * @param NdisVersionMin  Pointer to a DWORD to receive the NDIS minor version number.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ * @return The version number on success, or 0 if failure.
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_GET_VERSION_FUNC)(
-    _Out_ DWORD *DriverVersionMaj,
-    _Out_ DWORD *DriverVersionMin,
-    _Out_ DWORD *NdisVersionMaj,
-    _Out_ DWORD *NdisVersionMin);
+typedef DWORDLONG(WINAPI *WINTUN_GET_VERSION_FUNC)(void);
 
 /**
  * Sets name of the Wintun adapter.
