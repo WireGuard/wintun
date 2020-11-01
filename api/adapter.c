@@ -1295,46 +1295,35 @@ CreateAdapter(
         goto cleanupTcpipInterfaceRegKey;
     }
 
-    ULONG Status, ProblemCode;
-    Result = CM_MapCrToWin32Err(
-        CM_Get_DevNode_Status(&Status, &ProblemCode, DevInfoData.DevInst, 0), ERROR_DEVICE_NOT_AVAILABLE);
-    if (Result != ERROR_SUCCESS)
+    /* TODO: This GUIDs is in devpkey.h, but we can't link to it? Which dll? */
+    static const DEVPROPKEY DEVPKEY_Device_ProblemStatus = {
+        { 0x4340a6c5, 0x93fa, 0x4706, { 0x97, 0x2c, 0x7b, 0x64, 0x80, 0x08, 0xa5, 0xa7 } }, 12
+    };
+    DEVPROPTYPE PropertyType;
+    for (int Tries = 0; Tries < 1000; ++Tries)
     {
-        LOG_ERROR(L"Failed to get status of adapter", Result);
-        goto cleanupTcpipInterfaceRegKey;
-    }
-    if (Status & DN_HAS_PROBLEM)
-    {
-        /* TODO: This GUIDs is in devpkey.h, but we can't link to it? Which dll? */
-        static const DEVPROPKEY DEVPKEY_Device_ProblemStatus = {
-            { 0x4340a6c5, 0x93fa, 0x4706, { 0x97, 0x2c, 0x7b, 0x64, 0x80, 0x08, 0xa5, 0xa7 } }, 12
-        };
-        DEVPROPTYPE PropertyType;
-        for (int Tries = 0; Tries < 1000; Sleep(10), ++Tries)
+        NTSTATUS ProblemStatus;
+        if (SetupDiGetDevicePropertyW(
+                DevInfo,
+                &DevInfoData,
+                &DEVPKEY_Device_ProblemStatus,
+                &PropertyType,
+                (PBYTE)&ProblemStatus,
+                sizeof(ProblemStatus),
+                NULL,
+                0) &&
+            PropertyType == DEVPROP_TYPE_NTSTATUS)
         {
-            NTSTATUS ProblemStatus;
-            if (SetupDiGetDevicePropertyW(
-                    DevInfo,
-                    &DevInfoData,
-                    &DEVPKEY_Device_ProblemStatus,
-                    &PropertyType,
-                    (PBYTE)&ProblemStatus,
-                    sizeof(ProblemStatus),
-                    NULL,
-                    0) &&
-                PropertyType == DEVPROP_TYPE_NTSTATUS)
+            Result = RtlNtStatusToDosError(ProblemStatus);
+            if (ProblemStatus != STATUS_PNP_DEVICE_CONFIGURATION_PENDING || Tries == 999)
             {
-                Result = RtlNtStatusToDosError(ProblemStatus);
-                if (ProblemStatus != STATUS_PNP_DEVICE_CONFIGURATION_PENDING || Tries == 999)
-                {
-                    LOG_ERROR(L"Failed to setup adapter", Result);
-                    goto cleanupTcpipInterfaceRegKey;
-                }
+                LOG_ERROR(L"Failed to setup adapter", Result);
+                goto cleanupTcpipInterfaceRegKey;
             }
-            else
-                break;
+            Sleep(10);
         }
-        LOG(WINTUN_LOG_WARN, L"Adapter setup error code vanished after initially there");
+        else
+            break;
     }
 
     *Adapter = a;
