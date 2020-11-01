@@ -19,7 +19,7 @@ WintunSetLogger(_In_ WINTUN_LOGGER_CALLBACK_FUNC NewLogger);
 _Post_equals_last_error_ DWORD
 LoggerError(_In_z_ const WCHAR *Prefix, _In_ DWORD Error);
 
-inline _Post_equals_last_error_ DWORD
+static inline _Post_equals_last_error_ DWORD
 LoggerLastError(_In_z_ const WCHAR *Prefix)
 {
     DWORD Error = GetLastError();

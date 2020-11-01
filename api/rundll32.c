@@ -168,6 +168,7 @@ VOID __stdcall DoThingsForDebugging(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLin
     WintunEndSession(Session);
     assert(WintunDeleteAdapter(Adapter, TRUE, &RebootRequired) == ERROR_SUCCESS);
     assert(!RebootRequired);
+    system("pause");
 }
 #endif
 
