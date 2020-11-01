@@ -1021,54 +1021,6 @@ out:
     return Version;
 }
 
-static DWORDLONG
-RunningWintunVersion(void)
-{
-    DWORDLONG Version = 0;
-    PRTL_PROCESS_MODULES Modules;
-    ULONG BufferSize = 128 * 1024;
-    for (;;)
-    {
-        Modules = HeapAlloc(ModuleHeap, 0, BufferSize);
-        if (!Modules)
-        {
-            LOG(WINTUN_LOG_ERR, L"Out of memory");
-            return Version;
-        }
-        NTSTATUS Status = NtQuerySystemInformation(SystemModuleInformation, Modules, BufferSize, &BufferSize);
-        if (NT_SUCCESS(Status))
-            break;
-        HeapFree(ModuleHeap, 0, Modules);
-        if (Status == STATUS_INFO_LENGTH_MISMATCH)
-            continue;
-        LOG(WINTUN_LOG_ERR, L"Failed to enumerate drivers");
-        return Version;
-    }
-    for (ULONG i = Modules->NumberOfModules; i-- > 0;)
-    {
-        const char *NtPath = (const char *)Modules->Modules[i].FullPathName;
-        if (!_stricmp(&NtPath[Modules->Modules[i].OffsetToFileName], "wintun.sys"))
-        {
-            WCHAR FilePath[MAX_PATH * 3 + 15];
-            if (_snwprintf_s(FilePath, _countof(FilePath), _TRUNCATE, L"\\\\?\\GLOBALROOT%S", NtPath) == -1)
-                continue;
-            Version = VersionOfFile(FilePath);
-            goto out;
-        }
-    }
-out:
-    HeapFree(ModuleHeap, 0, Modules);
-    return Version;
-}
-
-static BOOL EnsureWintunUnloaded(VOID)
-{
-    BOOL Loaded;
-    for (int i = 0; (Loaded = RunningWintunVersion() != 0) != FALSE && i < 300; ++i)
-        Sleep(50);
-    return !Loaded;
-}
-
 static WINTUN_STATUS
 CreateAdapter(
     _In_z_ const WCHAR *InfPath,
@@ -1388,6 +1340,150 @@ CreateTemporaryDirectory(_Out_cap_c_(MAX_PATH) WCHAR *RandomTempSubDirectory)
     return ERROR_SUCCESS;
 }
 
+static DWORDLONG
+RunningWintunVersion(void)
+{
+    DWORDLONG Version = 0;
+    PRTL_PROCESS_MODULES Modules;
+    ULONG BufferSize = 128 * 1024;
+    for (;;)
+    {
+        Modules = HeapAlloc(ModuleHeap, 0, BufferSize);
+        if (!Modules)
+        {
+            LOG(WINTUN_LOG_ERR, L"Out of memory");
+            return Version;
+        }
+        NTSTATUS Status = NtQuerySystemInformation(SystemModuleInformation, Modules, BufferSize, &BufferSize);
+        if (NT_SUCCESS(Status))
+            break;
+        HeapFree(ModuleHeap, 0, Modules);
+        if (Status == STATUS_INFO_LENGTH_MISMATCH)
+            continue;
+        LOG(WINTUN_LOG_ERR, L"Failed to enumerate drivers");
+        return Version;
+    }
+    for (ULONG i = Modules->NumberOfModules; i-- > 0;)
+    {
+        const char *NtPath = (const char *)Modules->Modules[i].FullPathName;
+        if (!_stricmp(&NtPath[Modules->Modules[i].OffsetToFileName], "wintun.sys"))
+        {
+            WCHAR FilePath[MAX_PATH * 3 + 15];
+            if (_snwprintf_s(FilePath, _countof(FilePath), _TRUNCATE, L"\\\\?\\GLOBALROOT%S", NtPath) == -1)
+                continue;
+            Version = VersionOfFile(FilePath);
+            goto out;
+        }
+    }
+out:
+    HeapFree(ModuleHeap, 0, Modules);
+    return Version;
+}
+
+static BOOL EnsureWintunUnloaded(VOID)
+{
+    BOOL Loaded;
+    for (int i = 0; (Loaded = RunningWintunVersion() != 0) != FALSE && i < 300; ++i)
+        Sleep(50);
+    return !Loaded;
+}
+
+static WINTUN_STATUS
+InstallDriver(_Out_writes_z_(MAX_PATH) WCHAR InfStorePath[MAX_PATH], _Inout_ BOOL *RebootRequired)
+{
+    DWORD Result;
+    WCHAR RandomTempSubDirectory[MAX_PATH];
+    if ((Result = CreateTemporaryDirectory(RandomTempSubDirectory)) != ERROR_SUCCESS)
+        return LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder"), Result;
+
+    WCHAR CatPath[MAX_PATH] = { 0 };
+    WCHAR SysPath[MAX_PATH] = { 0 };
+    WCHAR InfPath[MAX_PATH] = { 0 };
+    if (!PathCombineW(CatPath, RandomTempSubDirectory, L"wintun.cat") ||
+        !PathCombineW(SysPath, RandomTempSubDirectory, L"wintun.sys") ||
+        !PathCombineW(InfPath, RandomTempSubDirectory, L"wintun.inf"))
+    {
+        Result = ERROR_BUFFER_OVERFLOW;
+        goto cleanupDirectory;
+    }
+
+    BOOL UseWHQL = HaveWHQL();
+    if (!UseWHQL && (Result = InstallCertificate(L"wintun.cat")) != ERROR_SUCCESS)
+        LOG(WINTUN_LOG_WARN, L"Unable to install code signing certificate");
+
+    LOG(WINTUN_LOG_INFO, L"Extracting driver resources");
+    if ((Result = ResourceCopyToFile(CatPath, UseWHQL ? L"wintun-whql.cat" : L"wintun.cat")) != ERROR_SUCCESS ||
+        (Result = ResourceCopyToFile(SysPath, UseWHQL ? L"wintun-whql.sys" : L"wintun.sys")) != ERROR_SUCCESS ||
+        (Result = ResourceCopyToFile(InfPath, UseWHQL ? L"wintun-whql.inf" : L"wintun.inf")) != ERROR_SUCCESS)
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to extract resources");
+        goto cleanupDelete;
+    }
+
+    DWORDLONG LoadedDriverVersion = RunningWintunVersion();
+    HDEVINFO DevInfo = INVALID_HANDLE_VALUE;
+    SP_DEVINFO_DATA_LIST *ExistingAdapters = NULL;
+    if (LoadedDriverVersion)
+    {
+        DWORDLONG ProposedDriverVersion = VersionOfFile(SysPath);
+        if (!ProposedDriverVersion)
+        {
+            LOG(WINTUN_LOG_ERR, L"Unable to query version of driver file");
+            Result = ERROR_INVALID_DATA;
+            goto cleanupDelete;
+        }
+        if (ProposedDriverVersion > LoadedDriverVersion)
+        {
+            DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
+            if (DevInfo == INVALID_HANDLE_VALUE)
+            {
+                Result = LOG_LAST_ERROR(L"Failed to get present class devices");
+                goto cleanupDelete;
+            }
+            AdapterDisableAllOurs(DevInfo, &ExistingAdapters);
+            LOG(WINTUN_LOG_INFO, L"Waiting for existing driver to unload from kernel");
+            if (!EnsureWintunUnloaded())
+                LOG(WINTUN_LOG_WARN, L"Unable to unload existing driver, which means a reboot will likely be required");
+        }
+    }
+
+    LOG(WINTUN_LOG_INFO, L"Installing driver");
+    if (!SetupCopyOEMInfW(InfPath, NULL, SPOST_PATH, 0, InfStorePath, MAX_PATH, NULL, NULL))
+    {
+        Result = LOG_LAST_ERROR(L"Could not install driver to store");
+        goto cleanupCloseDevInfo;
+    }
+    _Analysis_assume_nullterminated_(InfStorePath);
+    BOOL UpdateRebootRequired = FALSE;
+    if (ExistingAdapters &&
+        !UpdateDriverForPlugAndPlayDevicesW(
+            NULL, WINTUN_HWID, InfStorePath, INSTALLFLAG_FORCE | INSTALLFLAG_NONINTERACTIVE, &UpdateRebootRequired))
+        LOG(WINTUN_LOG_WARN, L"Could not update existing adapters");
+    *RebootRequired = *RebootRequired || UpdateRebootRequired;
+
+cleanupCloseDevInfo:
+    if (ExistingAdapters)
+    {
+        AdapterEnableAll(DevInfo, ExistingAdapters);
+        while (ExistingAdapters)
+        {
+            SP_DEVINFO_DATA_LIST *Next = ExistingAdapters->Next;
+            HeapFree(ModuleHeap, 0, ExistingAdapters);
+            ExistingAdapters = Next;
+        }
+    }
+    if (DevInfo != INVALID_HANDLE_VALUE)
+        SetupDiDestroyDeviceInfoList(DevInfo);
+
+cleanupDelete:
+    DeleteFileW(CatPath);
+    DeleteFileW(SysPath);
+    DeleteFileW(InfPath);
+cleanupDirectory:
+    RemoveDirectoryW(RandomTempSubDirectory);
+    return Result;
+}
+
 #ifdef MAYBE_WOW64
 
 typedef struct _PROCESS_STDOUT_STATE
@@ -1693,105 +1789,20 @@ WintunCreateAdapter(
     }
 #endif
 
-    WCHAR RandomTempSubDirectory[MAX_PATH];
-    if ((Result = CreateTemporaryDirectory(RandomTempSubDirectory)) != ERROR_SUCCESS)
+    WCHAR InfStorePath[MAX_PATH];
+    if ((Result = InstallDriver(InfStorePath, RebootRequired)) != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder");
+        LOG(WINTUN_LOG_ERR, L"Failed to install driver");
         goto cleanupToken;
     }
 
-    WCHAR CatPath[MAX_PATH] = { 0 };
-    WCHAR SysPath[MAX_PATH] = { 0 };
-    WCHAR InfPath[MAX_PATH] = { 0 };
-    if (!PathCombineW(CatPath, RandomTempSubDirectory, L"wintun.cat") ||
-        !PathCombineW(SysPath, RandomTempSubDirectory, L"wintun.sys") ||
-        !PathCombineW(InfPath, RandomTempSubDirectory, L"wintun.inf"))
-    {
-        Result = ERROR_BUFFER_OVERFLOW;
-        goto cleanupDirectory;
-    }
+    Result = CreateAdapter(InfStorePath, Pool, Name, RequestedGUID, Adapter, RebootRequired);
 
-    BOOL UseWHQL = HaveWHQL();
-    if (!UseWHQL && (Result = InstallCertificate(L"wintun.cat")) != ERROR_SUCCESS)
-        LOG(WINTUN_LOG_WARN, L"Unable to install code signing certificate");
-
-    LOG(WINTUN_LOG_INFO, L"Copying resources to temporary path");
-    if ((Result = ResourceCopyToFile(CatPath, UseWHQL ? L"wintun-whql.cat" : L"wintun.cat")) != ERROR_SUCCESS ||
-        (Result = ResourceCopyToFile(SysPath, UseWHQL ? L"wintun-whql.sys" : L"wintun.sys")) != ERROR_SUCCESS ||
-        (Result = ResourceCopyToFile(InfPath, UseWHQL ? L"wintun-whql.inf" : L"wintun.inf")) != ERROR_SUCCESS)
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to copy resources");
-        goto cleanupDelete;
-    }
-
-    DWORDLONG LoadedDriverVersion = RunningWintunVersion();
-    SP_DEVINFO_DATA_LIST *ExistingAdapters = NULL;
-    HDEVINFO DevInfo = INVALID_HANDLE_VALUE;
-    if (LoadedDriverVersion)
-    {
-        DWORDLONG ProposedDriverVersion = VersionOfFile(SysPath);
-        if (!ProposedDriverVersion)
-        {
-            LOG(WINTUN_LOG_ERR, L"Unable to query version of sys file");
-            goto cleanupDelete;
-        }
-        if (ProposedDriverVersion > LoadedDriverVersion)
-        {
-            DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
-            if (DevInfo == INVALID_HANDLE_VALUE)
-            {
-                Result = LOG_LAST_ERROR(L"Failed to get present class devices");
-                goto cleanupDelete;
-            }
-            AdapterDisableAllOurs(DevInfo, &ExistingAdapters);
-            LOG(WINTUN_LOG_INFO, L"Waiting for existing driver to unload from kernel");
-            if (!EnsureWintunUnloaded())
-                LOG(WINTUN_LOG_WARN, L"Unable to unload existing driver, which means a reboot will likely be required");
-        }
-    }
-
-    LOG(WINTUN_LOG_INFO, L"Installing driver");
-    WCHAR InfStorePath[MAX_PATH];
-    WCHAR *InfStoreFilename;
-    if (!SetupCopyOEMInfW(InfPath, NULL, SPOST_PATH, 0, InfStorePath, _countof(InfStorePath), NULL, &InfStoreFilename))
-    {
-        Result = LOG_LAST_ERROR(L"Could not install driver to store");
-        goto cleanupCloseDevInfo;
-    }
-    BOOL UpdateRebootRequired = FALSE;
-    if (ExistingAdapters &&
-        !UpdateDriverForPlugAndPlayDevicesW(
-            NULL, WINTUN_HWID, InfPath, INSTALLFLAG_FORCE | INSTALLFLAG_NONINTERACTIVE, &UpdateRebootRequired))
-        LOG(WINTUN_LOG_WARN, L"Could not update existing adapters");
-    *RebootRequired = *RebootRequired || UpdateRebootRequired;
-
-    Result = CreateAdapter(InfPath, Pool, Name, RequestedGUID, Adapter, RebootRequired);
-
-    LOG(WINTUN_LOG_INFO, L"Removing driver");
-    if (!SetupUninstallOEMInfW(InfStoreFilename, SUOI_FORCEDELETE, NULL))
+    if (!SetupUninstallOEMInfW(PathFindFileNameW(InfStorePath), SUOI_FORCEDELETE, NULL))
     {
         LOG_LAST_ERROR(L"Unable to remove existing driver");
         Result = Result != ERROR_SUCCESS ? Result : GetLastError();
     }
-cleanupCloseDevInfo:
-    if (ExistingAdapters)
-    {
-        AdapterEnableAll(DevInfo, ExistingAdapters);
-        while (ExistingAdapters)
-        {
-            SP_DEVINFO_DATA_LIST *Next = ExistingAdapters->Next;
-            HeapFree(ModuleHeap, 0, ExistingAdapters);
-            ExistingAdapters = Next;
-        }
-    }
-    if (DevInfo != INVALID_HANDLE_VALUE)
-        SetupDiDestroyDeviceInfoList(DevInfo);
-cleanupDelete:
-    DeleteFileW(CatPath);
-    DeleteFileW(SysPath);
-    DeleteFileW(InfPath);
-cleanupDirectory:
-    RemoveDirectoryW(RandomTempSubDirectory);
 cleanupToken:
     RevertToSelf();
     return Result;
