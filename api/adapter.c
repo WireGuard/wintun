@@ -1489,7 +1489,7 @@ InstallDriver(_Out_writes_z_(MAX_PATH) WCHAR InfStorePath[MAX_PATH], _Inout_ BOO
     }
 
     LOG(WINTUN_LOG_INFO, L"Installing driver");
-    if (!SetupCopyOEMInfW(InfPath, NULL, SPOST_PATH, 0, InfStorePath, MAX_PATH, NULL, NULL))
+    if (!SetupCopyOEMInfW(InfPath, NULL, SPOST_NONE, 0, InfStorePath, MAX_PATH, NULL, NULL))
     {
         Result = LOG_LAST_ERROR(L"Could not install driver to store");
         goto cleanupCloseDevInfo;
