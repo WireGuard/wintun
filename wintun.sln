@@ -17,7 +17,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		wintun.props = wintun.props
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test", "test\test.vcxproj", "{2ABAC503-245D-4F53-85C5-0F844DEF738B}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "example", "example\example.vcxproj", "{2ABAC503-245D-4F53-85C5-0F844DEF738B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
