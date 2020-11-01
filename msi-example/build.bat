@@ -20,7 +20,7 @@ if exist .deps\prepared goto :build
 	call :download wix-binaries.zip http://wixtoolset.org/downloads/v3.14.0.2812/wix314-binaries.zip 923892298f37514622c58cbbd9c2cadf2822d9bb53df8ee83aaeb05280777611 || goto :error
 	echo [+] Extracting wix-binaries.zip
 	mkdir wix\bin || goto :error
-	tar -xf wix-binaries.zip -C wix\bin || goto :error
+	unzip wix-binaries.zip -d wix\bin || goto :error
 	echo [+] Cleaning up wix-binaries.zip
 	del wix-binaries.zip || goto :error
 	copy /y NUL prepared > NUL || goto :error

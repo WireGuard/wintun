@@ -26,12 +26,12 @@ do not change that UUID.
 for example). Replace `{{{VERSION}}}` in build.bat with that version.
 
 4. Download the amd64 MSM from [Wintun.net](https://www.wintun.net/) and compute its SHA2-256
-sum in all lowercase hex digits using `CertUtil -hashfile "path/to/file" SHA256`, and replace
-`{{{64BIT HASH}}}` in build.bat with that value.
+sum in all lowercase hex digits (without any spaces) using `CertUtil -hashfile "path/to/file"
+SHA256`, and replace `{{{64BIT HASH}}}` in build.bat with that value.
 
 5. Download the x86 MSM from [Wintun.net](https://www.wintun.net/) and compute its SHA2-256
-sum in all lowercase hex digits using `CertUtil -hashfile "path/to/file" SHA256`, and replace
-`{{{32BIT HASH}}}` in build.bat with that value.
+sum in all lowercase hex digits (without any spaces) using `CertUtil -hashfile "path/to/file"
+SHA256`, and replace `{{{32BIT HASH}}}` in build.bat with that value.
 
 6. Run build.bat.
 
