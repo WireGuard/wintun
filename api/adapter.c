@@ -174,26 +174,22 @@ static WINTUN_STATUS
 GetDeviceObject(_In_opt_z_ const WCHAR *InstanceId, _Out_ HANDLE *Handle)
 {
     ULONG InterfacesLen;
-    DWORD Result = CM_Get_Device_Interface_List_SizeW(
-        &InterfacesLen, (GUID *)&GUID_DEVINTERFACE_NET, (DEVINSTID_W)InstanceId, CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
-    if (Result != CR_SUCCESS)
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to query associated instances size");
-        return ERROR_GEN_FAILURE;
-    }
+    DWORD Result = CM_MapCrToWin32Err(CM_Get_Device_Interface_List_SizeW(
+        &InterfacesLen, (GUID *)&GUID_DEVINTERFACE_NET, (DEVINSTID_W)InstanceId, CM_GET_DEVICE_INTERFACE_LIST_PRESENT), ERROR_GEN_FAILURE);
+    if (Result != ERROR_SUCCESS)
+        return LOG_ERROR(L"Failed to query associated instances size", Result);
     WCHAR *Interfaces = HeapAlloc(ModuleHeap, 0, InterfacesLen * sizeof(WCHAR));
     if (!Interfaces)
         return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
-    Result = CM_Get_Device_Interface_ListW(
+    Result = CM_MapCrToWin32Err(CM_Get_Device_Interface_ListW(
         (GUID *)&GUID_DEVINTERFACE_NET,
         (DEVINSTID_W)InstanceId,
         Interfaces,
         InterfacesLen,
-        CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
-    if (Result != CR_SUCCESS)
+        CM_GET_DEVICE_INTERFACE_LIST_PRESENT), ERROR_GEN_FAILURE);
+    if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get associated instances");
-        Result = ERROR_GEN_FAILURE;
+        LOG_ERROR(L"Failed to get associated instances", Result);
         goto cleanupBuf;
     }
     *Handle = CreateFileW(
