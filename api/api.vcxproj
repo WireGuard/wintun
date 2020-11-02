@@ -160,6 +160,7 @@ lib.exe /def:nci.def /out:"$(IntDir)nci.lib" /machine:$(PlatformTarget) /nologo 
     <ClInclude Include="entry.h" />
     <ClInclude Include="adapter.h" />
     <ClInclude Include="elevate.h" />
+    <ClInclude Include="rundll32.h" />
     <ClInclude Include="logger.h" />
     <ClInclude Include="namespace.h" />
     <ClInclude Include="nci.h" />
