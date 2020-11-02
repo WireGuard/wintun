@@ -282,16 +282,16 @@ DisableAllOurAdapters(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
                 HeapFree(ModuleHeap, 0, DeviceNode);
                 break;
             }
-            goto cleanupDeviceInfoData;
+            goto cleanupDeviceNode;
         }
         BOOL IsOurs;
         if (IsOurAdapter(DevInfo, &DeviceNode->Data, &IsOurs) != ERROR_SUCCESS || !IsOurs)
-            goto cleanupDeviceInfoData;
+            goto cleanupDeviceNode;
 
         ULONG Status, ProblemCode;
         if (CM_Get_DevNode_Status(&Status, &ProblemCode, DeviceNode->Data.DevInst, 0) != CR_SUCCESS ||
             ((Status & DN_HAS_PROBLEM) && ProblemCode == CM_PROB_DISABLED))
-            goto cleanupDeviceInfoData;
+            goto cleanupDeviceNode;
 
         LOG(WINTUN_LOG_INFO, L"Force closing all open handles for existing adapter");
         if (ForceCloseWintunAdapterHandle(DevInfo, &DeviceNode->Data) != ERROR_SUCCESS)
@@ -303,15 +303,15 @@ DisableAllOurAdapters(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
         {
             LOG_LAST_ERROR(L"Failed to disable existing adapter");
             Result = Result != ERROR_SUCCESS ? Result : GetLastError();
-            goto cleanupDeviceInfoData;
+            goto cleanupDeviceNode;
         }
 
         DeviceNode->Next = *DisabledAdapters;
         *DisabledAdapters = DeviceNode;
         continue;
 
-    cleanupDeviceInfoData:
-        HeapFree(ModuleHeap, 0, &DeviceNode->Data);
+    cleanupDeviceNode:
+        HeapFree(ModuleHeap, 0, DeviceNode);
     }
     return Result;
 }
