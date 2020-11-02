@@ -7,6 +7,7 @@
 
 #include <Windows.h>
 #include <IPExport.h>
+#include <ifdef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -157,7 +158,7 @@ typedef void(WINAPI *WINTUN_GET_ADAPTER_GUID_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Ad
  *
  * @param Luid          Pointer to LUID to receive adapter LUID.
  */
-typedef void(WINAPI *WINTUN_GET_ADAPTER_LUID_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _Out_ LUID *Luid);
+typedef void(WINAPI *WINTUN_GET_ADAPTER_LUID_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _Out_ NET_LUID *Luid);
 
 /**
  * Returns the name of the Wintun adapter.

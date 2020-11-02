@@ -774,10 +774,11 @@ WintunGetAdapterGUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ GUID *Guid)
 }
 
 void WINAPI
-WintunGetAdapterLUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ LUID *Luid)
+WintunGetAdapterLUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ NET_LUID *Luid)
 {
-    *(LONGLONG *)Luid = (((LONGLONG)Adapter->LuidIndex & ((1 << 24) - 1)) << 24) |
-                        (((LONGLONG)Adapter->IfType & ((1 << 16) - 1)) << 48);
+    Luid->Info.Reserved = 0;
+    Luid->Info.NetLuidIndex = Adapter->LuidIndex;
+    Luid->Info.IfType = Adapter->IfType;
 }
 
 WINTUN_STATUS WINAPI
