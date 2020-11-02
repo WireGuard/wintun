@@ -234,18 +234,12 @@ typedef void *WINTUN_SESSION_HANDLE;
  *
  * @param Session       Pointer to a variable to receive Wintun session handle
  *
- * @param ReadWait      Pointer to receive event handle to wait for available data when reading. Should
- *                      WintunReceivePackets return ERROR_NO_MORE_ITEMS (after spinning on it for a while under heavy
- *                      load), wait for this event to become signaled before retrying WintunReceivePackets. Do not call
- *                      CloseHandle on this event - it is managed by the session.
- *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 typedef WINTUN_STATUS(WINAPI *WINTUN_START_SESSION_FUNC)(
     _In_ WINTUN_ADAPTER_HANDLE Adapter,
     _In_ DWORD Capacity,
-    _Out_ WINTUN_SESSION_HANDLE *Session,
-    _Out_ HANDLE *ReadWait);
+    _Out_ WINTUN_SESSION_HANDLE *Session);
 
 /**
  * Ends Wintun session.
@@ -253,6 +247,18 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_START_SESSION_FUNC)(
  * @param Session       Wintun session handle obtained with WintunStartSession
  */
 typedef void(WINAPI *WINTUN_END_SESSION_FUNC)(_In_ WINTUN_SESSION_HANDLE Session);
+
+/**
+ * Gets Wintun session's read-wait event handle.
+ *
+ * @param Session       Wintun session handle obtained with WintunStartSession
+ *
+ * @return Pointer to receive event handle to wait for available data when reading. Should
+ *         WintunReceivePackets return ERROR_NO_MORE_ITEMS (after spinning on it for a while under heavy
+ *         load), wait for this event to become signaled before retrying WintunReceivePackets. Do not call
+ *         CloseHandle on this event - it is managed by the session.
+ */
+typedef HANDLE(WINAPI *WINTUN_GET_READ_WAIT_EVENT_FUNC)(_In_ WINTUN_SESSION_HANDLE *Session);
 
 /**
  * Maximum IP packet size

@@ -163,8 +163,7 @@ VOID __stdcall DoThingsForDebugging(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLin
     assert(WintunCreateAdapter(L"Wintun", L"Test", &TestGuid, &Adapter, &RebootRequired) == ERROR_SUCCESS);
     assert(!RebootRequired);
     TUN_SESSION *Session;
-    HANDLE ReadWait;
-    assert(WintunStartSession(Adapter, WINTUN_MIN_RING_CAPACITY, &Session, &ReadWait) == ERROR_SUCCESS);
+    assert(WintunStartSession(Adapter, WINTUN_MIN_RING_CAPACITY, &Session) == ERROR_SUCCESS);
     WintunEndSession(Session);
     assert(WintunDeleteAdapter(Adapter, TRUE, &RebootRequired) == ERROR_SUCCESS);
     assert(!RebootRequired);

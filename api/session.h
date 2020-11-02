@@ -17,14 +17,19 @@ WINTUN_STATUS WINAPI
 WintunStartSession(
     _In_ const WINTUN_ADAPTER *Adapter,
     _In_ DWORD Capacity,
-    _Out_ TUN_SESSION **Session,
-    _Out_ HANDLE *ReadWait);
+    _Out_ TUN_SESSION **Session);
 
 /**
  * @copydoc WINTUN_END_SESSION_FUNC
  */
 void WINAPI
 WintunEndSession(_In_ TUN_SESSION *Session);
+
+/**
+ * @copydoc WINTUN_GET_READ_WAIT_EVENT_FUNC
+ */
+HANDLE WINAPI
+WintunGetReadWaitEvent(_In_ TUN_SESSION *Session);
 
 /**
  * @copydoc WINTUN_RECEIVE_PACKET_FUNC

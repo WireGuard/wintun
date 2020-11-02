@@ -74,8 +74,7 @@ WINTUN_STATUS WINAPI
 WintunStartSession(
     _In_ const WINTUN_ADAPTER *Adapter,
     _In_ DWORD Capacity,
-    _Out_ TUN_SESSION **Session,
-    _Out_ HANDLE *ReadWait)
+    _Out_ TUN_SESSION **Session)
 {
     TUN_SESSION *s = HeapAlloc(ModuleHeap, HEAP_ZERO_MEMORY, sizeof(TUN_SESSION));
     if (!s)
@@ -137,7 +136,6 @@ WintunStartSession(
     (void)InitializeCriticalSectionAndSpinCount(&s->Receive.Lock, LOCK_SPIN_COUNT);
     (void)InitializeCriticalSectionAndSpinCount(&s->Send.Lock, LOCK_SPIN_COUNT);
     *Session = s;
-    *ReadWait = s->Descriptor.Send.TailMoved;
     return ERROR_SUCCESS;
 cleanupHandle:
     CloseHandle(s->Handle);
@@ -165,6 +163,12 @@ WintunEndSession(_In_ TUN_SESSION *Session)
     CloseHandle(Session->Descriptor.Receive.TailMoved);
     VirtualFree(Session->Descriptor.Send.Ring, 0, MEM_RELEASE);
     HeapFree(ModuleHeap, 0, Session);
+}
+
+HANDLE WINAPI
+WintunGetReadWaitEvent(_In_ TUN_SESSION *Session)
+{
+    return Session->Descriptor.Send.TailMoved;
 }
 
 WINTUN_STATUS WINAPI
