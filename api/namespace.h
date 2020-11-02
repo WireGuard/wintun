@@ -9,7 +9,11 @@
 
 _Check_return_
 HANDLE
-NamespaceTakeMutex(_In_z_ const WCHAR *Pool);
+NamespaceTakePoolMutex(_In_z_ const WCHAR *Pool);
+
+_Check_return_
+HANDLE
+NamespaceTakeDriverInstallationMutex(void);
 
 void
 NamespaceReleaseMutex(_In_ HANDLE Mutex);

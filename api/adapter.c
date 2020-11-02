@@ -621,7 +621,7 @@ WintunGetAdapter(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name, _Out_ WINTU
         return LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user"), ERROR_ACCESS_DENIED;
 
     DWORD Result;
-    HANDLE Mutex = NamespaceTakeMutex(Pool);
+    HANDLE Mutex = NamespaceTakePoolMutex(Pool);
     if (!Mutex)
     {
         Result = ERROR_INVALID_HANDLE;
@@ -1029,7 +1029,7 @@ CreateAdapter(
     LOG(WINTUN_LOG_INFO, L"Creating adapter");
 
     DWORD Result;
-    HANDLE Mutex = NamespaceTakeMutex(Pool);
+    HANDLE Mutex = NamespaceTakePoolMutex(Pool);
     if (!Mutex)
         return ERROR_INVALID_HANDLE;
 
@@ -1428,10 +1428,16 @@ static BOOL EnsureWintunUnloaded(VOID)
 static WINTUN_STATUS
 InstallDriver(_Out_writes_z_(MAX_PATH) WCHAR InfStorePath[MAX_PATH], _Inout_ BOOL *RebootRequired)
 {
+    HANDLE DriverInstallationLock = NamespaceTakeDriverInstallationMutex();
+    if (!DriverInstallationLock)
+        return LOG_LAST_ERROR(L"Failed to take driver installation mutex");
     DWORD Result;
     WCHAR RandomTempSubDirectory[MAX_PATH];
     if ((Result = CreateTemporaryDirectory(RandomTempSubDirectory)) != ERROR_SUCCESS)
-        return LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder"), Result;
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder");
+        goto cleanupDriverInstallationLock;
+    }
 
     WCHAR CatPath[MAX_PATH] = { 0 };
     WCHAR SysPath[MAX_PATH] = { 0 };
@@ -1518,6 +1524,8 @@ cleanupDelete:
     DeleteFileW(InfPath);
 cleanupDirectory:
     RemoveDirectoryW(RandomTempSubDirectory);
+cleanupDriverInstallationLock:
+    NamespaceReleaseMutex(DriverInstallationLock);
     return Result;
 }
 
@@ -1730,7 +1738,7 @@ cleanupDirectory:
 static WINTUN_STATUS
 GetAdapter(_In_z_ const WCHAR *Pool, _In_ const GUID *CfgInstanceID, _Out_ WINTUN_ADAPTER **Adapter)
 {
-    HANDLE Mutex = NamespaceTakeMutex(Pool);
+    HANDLE Mutex = NamespaceTakePoolMutex(Pool);
     if (!Mutex)
         return ERROR_INVALID_HANDLE;
     HDEVINFO DevInfo;
@@ -1940,7 +1948,7 @@ cleanupToken:
 WINTUN_STATUS WINAPI
 WintunEnumAdapters(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK_FUNC Func, _In_ LPARAM Param)
 {
-    HANDLE Mutex = NamespaceTakeMutex(Pool);
+    HANDLE Mutex = NamespaceTakePoolMutex(Pool);
     if (!Mutex)
         return ERROR_INVALID_HANDLE;
     DWORD Result = ERROR_SUCCESS;

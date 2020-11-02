@@ -102,7 +102,7 @@ cleanupLeaveCriticalSection:
 
 _Check_return_
 HANDLE
-NamespaceTakeMutex(_In_z_ const WCHAR *Pool)
+NamespaceTakePoolMutex(_In_z_ const WCHAR *Pool)
 {
     HANDLE Mutex = NULL;
 
@@ -144,6 +144,30 @@ cleanupPoolNorm:
     HeapFree(ModuleHeap, 0, PoolNorm);
 cleanupSha256:
     BCryptDestroyHash(Sha256);
+    return Mutex;
+}
+
+_Check_return_
+HANDLE
+NamespaceTakeDriverInstallationMutex(void)
+{
+    HANDLE Mutex = NULL;
+
+    if (NamespaceRuntimeInit() != ERROR_SUCCESS)
+        return NULL;
+    Mutex = CreateMutexW(&SecurityAttributes, FALSE, L"Wintun\\Wintun-Driver-Installation-Mutex");
+    if (!Mutex)
+        return NULL;
+    switch (WaitForSingleObject(Mutex, INFINITE))
+    {
+    case WAIT_OBJECT_0:
+    case WAIT_ABANDONED:
+        goto out;
+    }
+
+    CloseHandle(Mutex);
+    Mutex = NULL;
+out:
     return Mutex;
 }
 
