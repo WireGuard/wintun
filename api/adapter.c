@@ -44,10 +44,16 @@
 #    error Unsupported architecture
 #endif
 
+typedef struct _SP_DEVINFO_DATA_LIST
+{
+    SP_DEVINFO_DATA Data;
+    struct _SP_DEVINFO_DATA_LIST *Next;
+} SP_DEVINFO_DATA_LIST;
+
 static USHORT NativeMachine = IMAGE_FILE_PROCESS;
 
-WINTUN_STATUS
-AdapterGetDrvInfoDetail(
+static WINTUN_STATUS
+GetAdapterDrvInfoDetail(
     _In_ HDEVINFO DevInfo,
     _In_opt_ SP_DEVINFO_DATA *DevInfoData,
     _In_ SP_DRVINFO_DATA_W *DrvInfoData,
@@ -176,19 +182,26 @@ static WINTUN_STATUS
 GetDeviceObject(_In_opt_z_ const WCHAR *InstanceId, _Out_ HANDLE *Handle)
 {
     ULONG InterfacesLen;
-    DWORD Result = CM_MapCrToWin32Err(CM_Get_Device_Interface_List_SizeW(
-        &InterfacesLen, (GUID *)&GUID_DEVINTERFACE_NET, (DEVINSTID_W)InstanceId, CM_GET_DEVICE_INTERFACE_LIST_PRESENT), ERROR_GEN_FAILURE);
+    DWORD Result = CM_MapCrToWin32Err(
+        CM_Get_Device_Interface_List_SizeW(
+            &InterfacesLen,
+            (GUID *)&GUID_DEVINTERFACE_NET,
+            (DEVINSTID_W)InstanceId,
+            CM_GET_DEVICE_INTERFACE_LIST_PRESENT),
+        ERROR_GEN_FAILURE);
     if (Result != ERROR_SUCCESS)
         return LOG_ERROR(L"Failed to query associated instances size", Result);
     WCHAR *Interfaces = HeapAlloc(ModuleHeap, 0, InterfacesLen * sizeof(WCHAR));
     if (!Interfaces)
         return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
-    Result = CM_MapCrToWin32Err(CM_Get_Device_Interface_ListW(
-        (GUID *)&GUID_DEVINTERFACE_NET,
-        (DEVINSTID_W)InstanceId,
-        Interfaces,
-        InterfacesLen,
-        CM_GET_DEVICE_INTERFACE_LIST_PRESENT), ERROR_GEN_FAILURE);
+    Result = CM_MapCrToWin32Err(
+        CM_Get_Device_Interface_ListW(
+            (GUID *)&GUID_DEVINTERFACE_NET,
+            (DEVINSTID_W)InstanceId,
+            Interfaces,
+            InterfacesLen,
+            CM_GET_DEVICE_INTERFACE_LIST_PRESENT),
+        ERROR_GEN_FAILURE);
     if (Result != ERROR_SUCCESS)
     {
         LOG_ERROR(L"Failed to get associated instances", Result);
@@ -248,8 +261,8 @@ out:
     return Result;
 }
 
-WINTUN_STATUS
-AdapterDisableAllOurs(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **DisabledAdapters)
+static WINTUN_STATUS
+DisableAllOurAdapters(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **DisabledAdapters)
 {
     SP_PROPCHANGE_PARAMS Params = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
                                                             .InstallFunction = DIF_PROPERTYCHANGE },
@@ -303,8 +316,8 @@ AdapterDisableAllOurs(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
     return Result;
 }
 
-WINTUN_STATUS
-AdapterEnableAll(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA_LIST *AdaptersToEnable)
+static WINTUN_STATUS
+EnableAllOurAdapters(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA_LIST *AdaptersToEnable)
 {
     SP_PROPCHANGE_PARAMS Params = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
                                                             .InstallFunction = DIF_PROPERTYCHANGE },
@@ -321,46 +334,6 @@ AdapterEnableAll(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA_LIST *AdaptersToEna
             Result = Result != ERROR_SUCCESS ? Result : GetLastError();
         }
     }
-    return Result;
-}
-
-WINTUN_STATUS
-AdapterDeleteAllOurs(void)
-{
-    DWORD Result = ERROR_SUCCESS;
-    HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
-    if (DevInfo == INVALID_HANDLE_VALUE)
-        return LOG_LAST_ERROR(L"Failed to get present adapters");
-    SP_REMOVEDEVICE_PARAMS Params = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
-                                                              .InstallFunction = DIF_REMOVE },
-                                      .Scope = DI_REMOVEDEVICE_GLOBAL };
-    for (DWORD EnumIndex = 0;; ++EnumIndex)
-    {
-        SP_DEVINFO_DATA DevInfoData = { .cbSize = sizeof(SP_DEVINFO_DATA) };
-        if (!SetupDiEnumDeviceInfo(DevInfo, EnumIndex, &DevInfoData))
-        {
-            if (GetLastError() == ERROR_NO_MORE_ITEMS)
-                break;
-            continue;
-        }
-
-        BOOL IsOurs;
-        if (IsOurAdapter(DevInfo, &DevInfoData, &IsOurs) != ERROR_SUCCESS || !IsOurs)
-            continue;
-
-        LOG(WINTUN_LOG_INFO, L"Force closing all open handles for existing adapter");
-        if (ForceCloseWintunAdapterHandle(DevInfo, &DevInfoData) != ERROR_SUCCESS)
-            LOG(WINTUN_LOG_WARN, L"Failed to force close adapter handles");
-
-        LOG(WINTUN_LOG_INFO, L"Removing existing adapter");
-        if (!SetupDiSetClassInstallParamsW(DevInfo, &DevInfoData, &Params.ClassInstallHeader, sizeof(Params)) ||
-            !SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
-        {
-            LOG_LAST_ERROR(L"Failed to remove existing adapter");
-            Result = Result != ERROR_SUCCESS ? Result : GetLastError();
-        }
-    }
-    SetupDiDestroyDeviceInfoList(DevInfo);
     return Result;
 }
 
@@ -913,21 +886,25 @@ IsOurDrvInfoDetail(_In_ const SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData)
 }
 
 static BOOL
-IsNewer(_In_ const SP_DRVINFO_DATA_W *DrvInfoData, _In_ const FILETIME *DriverDate, _In_ DWORDLONG DriverVersion)
+IsNewer(
+    _In_ const FILETIME *DriverDate1,
+    _In_ DWORDLONG DriverVersion1,
+    _In_ const FILETIME *DriverDate2,
+    _In_ DWORDLONG DriverVersion2)
 {
-    if (DrvInfoData->DriverDate.dwHighDateTime > DriverDate->dwHighDateTime)
+    if (DriverDate1->dwHighDateTime > DriverDate2->dwHighDateTime)
         return TRUE;
-    if (DrvInfoData->DriverDate.dwHighDateTime < DriverDate->dwHighDateTime)
+    if (DriverDate1->dwHighDateTime < DriverDate2->dwHighDateTime)
         return FALSE;
 
-    if (DrvInfoData->DriverDate.dwLowDateTime > DriverDate->dwLowDateTime)
+    if (DriverDate1->dwLowDateTime > DriverDate2->dwLowDateTime)
         return TRUE;
-    if (DrvInfoData->DriverDate.dwLowDateTime < DriverDate->dwLowDateTime)
+    if (DriverDate1->dwLowDateTime < DriverDate2->dwLowDateTime)
         return FALSE;
 
-    if (DrvInfoData->DriverVersion > DriverVersion)
+    if (DriverVersion1 > DriverVersion2)
         return TRUE;
-    if (DrvInfoData->DriverVersion < DriverVersion)
+    if (DriverVersion1 < DriverVersion2)
         return FALSE;
 
     return FALSE;
@@ -987,8 +964,109 @@ cleanupTcpipAdapterRegKey:
     return Result;
 }
 
+static const CHAR *
+SkipWSpace(_In_ const CHAR *Beg, _In_ const CHAR *End)
+{
+    for (; Beg < End && iswspace(*Beg); ++Beg)
+        ;
+    return Beg;
+}
+
+static const CHAR *
+SkipNonLF(_In_ const CHAR *Beg, _In_ const CHAR *End)
+{
+    for (; Beg < End && *Beg != '\n'; ++Beg)
+        ;
+    return Beg;
+}
+
+static WINTUN_STATUS
+VersionOfInf(_Out_ FILETIME *DriverDate, _Out_ DWORDLONG *DriverVersion)
+{
+    const VOID *LockedResource;
+    DWORD SizeResource;
+    DWORD Result = ResourceGetAddress(HaveWHQL() ? L"wintun-whql.inf" : L"wintun.inf", &LockedResource, &SizeResource);
+    if (Result != ERROR_SUCCESS)
+        return LOG(WINTUN_LOG_ERR, L"Failed to locate resource"), Result;
+    enum
+    {
+        SectNone,
+        SectUnknown,
+        SectVersion
+    } Section = SectNone;
+    for (const CHAR *Inf = (const CHAR *)LockedResource, *InfEnd = Inf + SizeResource; Inf < InfEnd; ++Inf)
+    {
+        if (*Inf == ';')
+        {
+            Inf = SkipNonLF(Inf + 1, InfEnd);
+            continue;
+        }
+        Inf = SkipWSpace(Inf, InfEnd);
+        if (*Inf == '[')
+        {
+            Section = Inf + 9 <= InfEnd && !_strnicmp(Inf, "[Version]", 9) ? SectVersion : SectUnknown;
+        }
+        else if (Section == SectVersion)
+        {
+            if (Inf + 9 <= InfEnd && !_strnicmp(Inf, "DriverVer", 9))
+            {
+                Inf = SkipWSpace(Inf + 9, InfEnd);
+                if (Inf < InfEnd && *Inf == '=')
+                {
+                    Inf = SkipWSpace(Inf + 1, InfEnd);
+                    /* Duplicate buffer, as resource is not zero-terminated. */
+                    CHAR buf[0x100];
+                    size_t n = InfEnd - Inf;
+                    if (n >= _countof(buf))
+                        n = _countof(buf) - 1;
+                    strncpy_s(buf, _countof(buf), Inf, n);
+                    buf[n] = 0;
+                    const CHAR *p = buf;
+                    CHAR *p_next;
+                    unsigned long date[3] = { 0 };
+                    for (size_t i = 0;; ++i, ++p)
+                    {
+                        date[i] = strtoul(p, &p_next, 10);
+                        p = p_next;
+                        if (i >= _countof(date) - 1)
+                            break;
+                        if (*p != '/' && *p != '-')
+                            return LOG(WINTUN_LOG_ERR, L"Unexpected date delimiter"), ERROR_INVALID_DATA;
+                    }
+                    if (date[0] < 1 || date[0] > 12 || date[1] < 1 || date[1] > 31 || date[2] < 1601 || date[2] > 30827)
+                        return LOG(WINTUN_LOG_ERR, L"Invalid date"), ERROR_INVALID_DATA;
+                    const SYSTEMTIME st = { .wYear = (WORD)date[2], .wMonth = (WORD)date[0], .wDay = (WORD)date[1] };
+                    SystemTimeToFileTime(&st, DriverDate);
+                    p = SkipWSpace(p, buf + n);
+                    ULONGLONG version[4] = { 0 };
+                    if (*p == ',')
+                    {
+                        p = SkipWSpace(p + 1, buf + n);
+                        for (size_t i = 0;; ++i, ++p)
+                        {
+                            version[i] = strtoul(p, &p_next, 10);
+                            if (version[i] > 0xffff)
+                                return LOG(WINTUN_LOG_ERR, L"Version field may not exceed 65535"), ERROR_INVALID_DATA;
+                            p = p_next;
+                            if (i >= _countof(version) - 1 || !*p || *p == ';' || iswspace(*p))
+                                break;
+                            if (*p != '.')
+                                return LOG(WINTUN_LOG_ERR, L"Unexpected version delimiter"), ERROR_INVALID_DATA;
+                        }
+                    }
+                    *DriverVersion = (version[0] << 48) | (version[1] << 32) | (version[2] << 16) | (version[3] << 0);
+                    return ERROR_SUCCESS;
+                }
+            }
+        }
+        Inf = SkipNonLF(Inf, InfEnd);
+    }
+    LOG(WINTUN_LOG_ERR, L"DriverVer not found in INF resource");
+    return ERROR_FILE_NOT_FOUND;
+}
+
 static DWORDLONG
-VersionOfFile(WCHAR *Filename)
+VersionOfFile(_In_z_ const WCHAR *Filename)
 {
     DWORDLONG Version = 0;
     DWORD Zero;
@@ -1020,8 +1098,269 @@ out:
 }
 
 static WINTUN_STATUS
+CreateTemporaryDirectory(_Out_cap_c_(MAX_PATH) WCHAR *RandomTempSubDirectory)
+{
+    WCHAR WindowsDirectory[MAX_PATH];
+    if (!GetWindowsDirectoryW(WindowsDirectory, _countof(WindowsDirectory)))
+        return LOG_LAST_ERROR(L"Failed to get Windows folder");
+    WCHAR WindowsTempDirectory[MAX_PATH];
+    if (!PathCombineW(WindowsTempDirectory, WindowsDirectory, L"Temp"))
+        return ERROR_BUFFER_OVERFLOW;
+    UCHAR RandomBytes[32] = { 0 };
+#pragma warning(suppress : 6387)
+    if (!RtlGenRandom(RandomBytes, sizeof(RandomBytes)))
+        return LOG_LAST_ERROR(L"Failed to generate random");
+    WCHAR RandomSubDirectory[sizeof(RandomBytes) * 2 + 1];
+    for (int i = 0; i < sizeof(RandomBytes); ++i)
+        swprintf_s(&RandomSubDirectory[i * 2], 3, L"%02x", RandomBytes[i]);
+    if (!PathCombineW(RandomTempSubDirectory, WindowsTempDirectory, RandomSubDirectory))
+        return ERROR_BUFFER_OVERFLOW;
+    if (!CreateDirectoryW(RandomTempSubDirectory, &SecurityAttributes))
+        return LOG_LAST_ERROR(L"Failed to create temporary folder");
+    return ERROR_SUCCESS;
+}
+
+DWORDLONG
+WintunGetVersion(void)
+{
+    DWORDLONG Version = 0;
+    PRTL_PROCESS_MODULES Modules;
+    ULONG BufferSize = 128 * 1024;
+    for (;;)
+    {
+        Modules = HeapAlloc(ModuleHeap, 0, BufferSize);
+        if (!Modules)
+        {
+            LOG(WINTUN_LOG_ERR, L"Out of memory");
+            return Version;
+        }
+        NTSTATUS Status = NtQuerySystemInformation(SystemModuleInformation, Modules, BufferSize, &BufferSize);
+        if (NT_SUCCESS(Status))
+            break;
+        HeapFree(ModuleHeap, 0, Modules);
+        if (Status == STATUS_INFO_LENGTH_MISMATCH)
+            continue;
+        LOG(WINTUN_LOG_ERR, L"Failed to enumerate drivers");
+        return Version;
+    }
+    for (ULONG i = Modules->NumberOfModules; i-- > 0;)
+    {
+        const char *NtPath = (const char *)Modules->Modules[i].FullPathName;
+        if (!_stricmp(&NtPath[Modules->Modules[i].OffsetToFileName], "wintun.sys"))
+        {
+            WCHAR FilePath[MAX_PATH * 3 + 15];
+            if (_snwprintf_s(FilePath, _countof(FilePath), _TRUNCATE, L"\\\\?\\GLOBALROOT%S", NtPath) == -1)
+                continue;
+            Version = VersionOfFile(FilePath);
+            goto out;
+        }
+    }
+out:
+    HeapFree(ModuleHeap, 0, Modules);
+    return Version;
+}
+
+static BOOL
+EnsureWintunUnloaded(void)
+{
+    BOOL Loaded;
+    for (int i = 0; (Loaded = WintunGetVersion() != 0) != FALSE && i < 300; ++i)
+        Sleep(50);
+    return !Loaded;
+}
+
+static WINTUN_STATUS
+SelectDriver(
+    _In_ HDEVINFO DevInfo,
+    _In_opt_ SP_DEVINFO_DATA *DevInfoData,
+    _Inout_ SP_DEVINSTALL_PARAMS_W *DevInstallParams,
+    _Inout_ BOOL *RebootRequired)
+{
+    FILETIME OurDriverDate;
+    DWORDLONG OurDriverVersion;
+    DWORD Result = VersionOfInf(&OurDriverDate, &OurDriverVersion);
+    if (Result != ERROR_SUCCESS)
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to determine own driver version");
+        return Result;
+    }
+    HANDLE DriverInstallationLock = NamespaceTakeDriverInstallationMutex();
+    if (!DriverInstallationLock)
+        return LOG_LAST_ERROR(L"Failed to take driver installation mutex");
+    if (!SetupDiBuildDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER))
+    {
+        Result = LOG_LAST_ERROR(L"Failed building driver info list");
+        goto cleanupDriverInstallationLock;
+    }
+    FILETIME DriverDate = { 0 };
+    DWORDLONG DriverVersion = 0;
+    HDEVINFO DevInfoExistingAdapters = INVALID_HANDLE_VALUE;
+    SP_DEVINFO_DATA_LIST *ExistingAdapters = NULL;
+    for (DWORD EnumIndex = 0;; ++EnumIndex)
+    {
+        SP_DRVINFO_DATA_W DrvInfoData = { .cbSize = sizeof(SP_DRVINFO_DATA_W) };
+        if (!SetupDiEnumDriverInfoW(DevInfo, DevInfoData, SPDIT_COMPATDRIVER, EnumIndex, &DrvInfoData))
+        {
+            if (GetLastError() == ERROR_NO_MORE_ITEMS)
+                break;
+            continue;
+        }
+        SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData;
+        if (GetAdapterDrvInfoDetail(DevInfo, DevInfoData, &DrvInfoData, &DrvInfoDetailData) != ERROR_SUCCESS)
+        {
+            LOG(WINTUN_LOG_WARN, L"Failed getting driver info detail");
+            continue;
+        }
+        if (!IsOurDrvInfoDetail(DrvInfoDetailData))
+            goto next;
+        if (IsNewer(&OurDriverDate, OurDriverVersion, &DrvInfoData.DriverDate, DrvInfoData.DriverVersion))
+        {
+            if (DevInfoExistingAdapters == INVALID_HANDLE_VALUE)
+            {
+                DevInfoExistingAdapters =
+                    SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
+                if (DevInfoExistingAdapters == INVALID_HANDLE_VALUE)
+                {
+                    Result = LOG_LAST_ERROR(L"Failed to get present adapters");
+                    goto cleanupDrvInfoDetailData;
+                }
+                _Analysis_assume_(DevInfoExistingAdapters != NULL);
+                DisableAllOurAdapters(DevInfoExistingAdapters, &ExistingAdapters);
+                LOG(WINTUN_LOG_INFO, L"Waiting for existing driver to unload from kernel");
+                if (!EnsureWintunUnloaded())
+                    LOG(WINTUN_LOG_WARN,
+                        L"Failed to unload existing driver, which means a reboot will likely be required");
+            }
+            LOG(WINTUN_LOG_INFO, TEXT("Removing existing driver"));
+            if (!SetupUninstallOEMInfW(PathFindFileNameW(DrvInfoDetailData->InfFileName), SUOI_FORCEDELETE, NULL))
+                LOG_LAST_ERROR(TEXT("Unable to remove existing driver"));
+            goto next;
+        }
+        if (!IsNewer(&DrvInfoData.DriverDate, DrvInfoData.DriverVersion, &DriverDate, DriverVersion))
+            goto next;
+        if (!SetupDiSetSelectedDriverW(DevInfo, DevInfoData, &DrvInfoData))
+        {
+            LOG_ERROR(L"Failed to select driver", GetLastError());
+            goto next;
+        }
+        DriverDate = DrvInfoData.DriverDate;
+        DriverVersion = DrvInfoData.DriverVersion;
+    next:
+        HeapFree(ModuleHeap, 0, DrvInfoDetailData);
+        continue;
+    cleanupDrvInfoDetailData:
+        HeapFree(ModuleHeap, 0, DrvInfoDetailData);
+        goto cleanupExistingAdapters;
+    }
+
+    if (DriverVersion)
+        goto cleanupExistingAdapters;
+
+    WCHAR RandomTempSubDirectory[MAX_PATH];
+    if ((Result = CreateTemporaryDirectory(RandomTempSubDirectory)) != ERROR_SUCCESS)
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder");
+        goto cleanupExistingAdapters;
+    }
+
+    WCHAR CatPath[MAX_PATH] = { 0 };
+    WCHAR SysPath[MAX_PATH] = { 0 };
+    WCHAR InfPath[MAX_PATH] = { 0 };
+    if (!PathCombineW(CatPath, RandomTempSubDirectory, L"wintun.cat") ||
+        !PathCombineW(SysPath, RandomTempSubDirectory, L"wintun.sys") ||
+        !PathCombineW(InfPath, RandomTempSubDirectory, L"wintun.inf"))
+    {
+        Result = ERROR_BUFFER_OVERFLOW;
+        goto cleanupDirectory;
+    }
+
+    BOOL UseWHQL = HaveWHQL();
+    if (!UseWHQL && (Result = InstallCertificate(L"wintun.cat")) != ERROR_SUCCESS)
+        LOG(WINTUN_LOG_WARN, L"Failed to install code signing certificate");
+
+    LOG(WINTUN_LOG_INFO, L"Extracting driver");
+    if ((Result = ResourceCopyToFile(CatPath, UseWHQL ? L"wintun-whql.cat" : L"wintun.cat")) != ERROR_SUCCESS ||
+        (Result = ResourceCopyToFile(SysPath, UseWHQL ? L"wintun-whql.sys" : L"wintun.sys")) != ERROR_SUCCESS ||
+        (Result = ResourceCopyToFile(InfPath, UseWHQL ? L"wintun-whql.inf" : L"wintun.inf")) != ERROR_SUCCESS)
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to extract driver");
+        goto cleanupDelete;
+    }
+    LOG(WINTUN_LOG_INFO, L"Installing driver");
+    WCHAR InfStorePath[MAX_PATH];
+    if (!SetupCopyOEMInfW(InfPath, NULL, SPOST_NONE, 0, InfStorePath, MAX_PATH, NULL, NULL))
+    {
+        Result = LOG_LAST_ERROR(L"Could not install driver to store");
+        goto cleanupDelete;
+    }
+    _Analysis_assume_nullterminated_(InfStorePath);
+    BOOL UpdateRebootRequired = FALSE;
+    if (ExistingAdapters &&
+        !UpdateDriverForPlugAndPlayDevicesW(
+            NULL, WINTUN_HWID, InfStorePath, INSTALLFLAG_FORCE | INSTALLFLAG_NONINTERACTIVE, &UpdateRebootRequired))
+        LOG(WINTUN_LOG_WARN, L"Could not update existing adapters");
+    *RebootRequired = *RebootRequired || UpdateRebootRequired;
+
+    SetupDiDestroyDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER);
+    DevInstallParams->Flags |= DI_ENUMSINGLEINF;
+    if (wcsncpy_s(DevInstallParams->DriverPath, _countof(DevInstallParams->DriverPath), InfStorePath, _TRUNCATE) ==
+        STRUNCATE)
+    {
+        LOG(WINTUN_LOG_ERR, L"Inf path too long");
+        Result = ERROR_INVALID_PARAMETER;
+        goto cleanupDelete;
+    }
+    if (!SetupDiSetDeviceInstallParamsW(DevInfo, DevInfoData, DevInstallParams))
+    {
+        Result = LOG_LAST_ERROR(L"Setting device installation parameters failed");
+        goto cleanupDelete;
+    }
+    if (!SetupDiBuildDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER))
+    {
+        Result = LOG_LAST_ERROR(L"Failed rebuilding driver info list");
+        goto cleanupDelete;
+    }
+    SP_DRVINFO_DATA_W DrvInfoData = { .cbSize = sizeof(SP_DRVINFO_DATA_W) };
+    if (!SetupDiEnumDriverInfoW(DevInfo, DevInfoData, SPDIT_COMPATDRIVER, 0, &DrvInfoData))
+    {
+        Result = LOG_LAST_ERROR(L"Failed to get driver");
+        goto cleanupDelete;
+    }
+    if (!SetupDiSetSelectedDriverW(DevInfo, DevInfoData, &DrvInfoData))
+    {
+        Result = LOG_LAST_ERROR(L"Failed to set driver");
+        goto cleanupDelete;
+    }
+    Result = ERROR_SUCCESS;
+
+cleanupDelete:
+    DeleteFileW(CatPath);
+    DeleteFileW(SysPath);
+    DeleteFileW(InfPath);
+cleanupDirectory:
+    RemoveDirectoryW(RandomTempSubDirectory);
+cleanupExistingAdapters:
+    if (ExistingAdapters)
+    {
+        EnableAllOurAdapters(DevInfoExistingAdapters, ExistingAdapters);
+        while (ExistingAdapters)
+        {
+            SP_DEVINFO_DATA_LIST *Next = ExistingAdapters->Next;
+            HeapFree(ModuleHeap, 0, ExistingAdapters);
+            ExistingAdapters = Next;
+        }
+    }
+    if (DevInfoExistingAdapters != INVALID_HANDLE_VALUE)
+        SetupDiDestroyDeviceInfoList(DevInfoExistingAdapters);
+    if (Result != ERROR_SUCCESS)
+        SetupDiDestroyDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER);
+cleanupDriverInstallationLock:
+    NamespaceReleaseMutex(DriverInstallationLock);
+    return Result;
+}
+
+static WINTUN_STATUS
 CreateAdapter(
-    _In_z_ const WCHAR *InfPath,
     _In_z_ const WCHAR *Pool,
     _In_z_ const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
@@ -1030,18 +1369,10 @@ CreateAdapter(
 {
     LOG(WINTUN_LOG_INFO, L"Creating adapter");
 
-    DWORD Result;
-    HANDLE Mutex = NamespaceTakePoolMutex(Pool);
-    if (!Mutex)
-        return ERROR_INVALID_HANDLE;
-
     HDEVINFO DevInfo = SetupDiCreateDeviceInfoListExW(&GUID_DEVCLASS_NET, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
-    {
-        Result = LOG_LAST_ERROR(L"Creating empty device information set failed");
-        goto cleanupMutex;
-    }
-
+        return LOG_LAST_ERROR(L"Creating empty device information set failed");
+    DWORD Result;
     WCHAR ClassName[MAX_CLASS_NAME_LEN];
     if (!SetupDiClassNameFromGuidExW(&GUID_DEVCLASS_NET, ClassName, _countof(ClassName), NULL, NULL, NULL))
     {
@@ -1066,78 +1397,35 @@ CreateAdapter(
         Result = LOG_LAST_ERROR(L"Retrieving device installation parameters failed");
         goto cleanupDevInfo;
     }
-    DevInstallParams.Flags |= DI_QUIETINSTALL | DI_ENUMSINGLEINF;
-    if (wcsncpy_s(DevInstallParams.DriverPath, _countof(DevInstallParams.DriverPath), InfPath, _TRUNCATE) == STRUNCATE)
-    {
-        LOG(WINTUN_LOG_ERR, L"Inf path too long");
-        Result = ERROR_INVALID_PARAMETER;
-        goto cleanupDevInfo;
-    }
+    DevInstallParams.Flags |= DI_QUIETINSTALL;
     if (!SetupDiSetDeviceInstallParamsW(DevInfo, &DevInfoData, &DevInstallParams))
     {
         Result = LOG_LAST_ERROR(L"Setting device installation parameters failed");
         goto cleanupDevInfo;
     }
-
     if (!SetupDiSetSelectedDevice(DevInfo, &DevInfoData))
     {
         Result = LOG_LAST_ERROR(L"Failed selecting device");
         goto cleanupDevInfo;
     }
-
     static const WCHAR Hwids[_countof(WINTUN_HWID) + 1 /*Multi-string terminator*/] = WINTUN_HWID;
     if (!SetupDiSetDeviceRegistryPropertyW(DevInfo, &DevInfoData, SPDRP_HARDWAREID, (const BYTE *)Hwids, sizeof(Hwids)))
     {
         Result = LOG_LAST_ERROR(L"Failed setting hardware ID");
         goto cleanupDevInfo;
     }
-    if (!SetupDiBuildDriverInfoList(DevInfo, &DevInfoData, SPDIT_COMPATDRIVER)) /* TODO: This takes ~510ms */
+
+    Result = SelectDriver(DevInfo, &DevInfoData, &DevInstallParams, RebootRequired);
+    if (Result != ERROR_SUCCESS)
     {
-        Result = LOG_LAST_ERROR(L"Failed building driver info list");
+        LOG(WINTUN_LOG_ERR, L"Failed to select driver");
         goto cleanupDevInfo;
     }
 
-    FILETIME DriverDate = { 0, 0 };
-    DWORDLONG DriverVersion = 0;
-    for (DWORD EnumIndex = 0;; ++EnumIndex) /* TODO: This loop takes ~600ms */
+    HANDLE Mutex = NamespaceTakePoolMutex(Pool);
+    if (!Mutex)
     {
-        SP_DRVINFO_DATA_W DrvInfoData = { .cbSize = sizeof(SP_DRVINFO_DATA_W) };
-        if (!SetupDiEnumDriverInfoW(DevInfo, &DevInfoData, SPDIT_COMPATDRIVER, EnumIndex, &DrvInfoData))
-        {
-            if (GetLastError() == ERROR_NO_MORE_ITEMS)
-                break;
-            continue;
-        }
-
-        /* Check the driver version first, since the check is trivial and will save us iterating over hardware IDs for
-         * any driver versioned prior our best match. */
-        if (!IsNewer(&DrvInfoData, &DriverDate, DriverVersion))
-            continue;
-
-        SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData;
-        if (AdapterGetDrvInfoDetail(DevInfo, &DevInfoData, &DrvInfoData, &DrvInfoDetailData) != ERROR_SUCCESS)
-        {
-            LOG(WINTUN_LOG_WARN, L"Failed getting driver info detail");
-            continue;
-        }
-        if (!IsOurDrvInfoDetail(DrvInfoDetailData))
-        {
-            HeapFree(ModuleHeap, 0, DrvInfoDetailData);
-            continue;
-        }
-        HeapFree(ModuleHeap, 0, DrvInfoDetailData);
-
-        if (!SetupDiSetSelectedDriverW(DevInfo, &DevInfoData, &DrvInfoData))
-            continue;
-
-        DriverDate = DrvInfoData.DriverDate;
-        DriverVersion = DrvInfoData.DriverVersion;
-    }
-
-    if (!DriverVersion)
-    {
-        LOG(WINTUN_LOG_ERR, L"No appropriate drivers found");
-        Result = ERROR_FILE_NOT_FOUND;
+        Result = LOG_LAST_ERROR(L"Failed to take pool mutex");
         goto cleanupDriverInfoList;
     }
 
@@ -1312,6 +1600,7 @@ CreateAdapter(
             if (ProblemStatus != STATUS_PNP_DEVICE_CONFIGURATION_PENDING || Tries == 999)
             {
                 LOG_ERROR(L"Failed to setup adapter", Result);
+                Result = ERROR_GEN_FAILURE;
                 goto cleanupTcpipInterfaceRegKey;
             }
             Sleep(10);
@@ -1343,187 +1632,11 @@ cleanupDevice:
             SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
             *RebootRequired = *RebootRequired || CheckReboot(DevInfo, &DevInfoData);
     }
+    NamespaceReleaseMutex(Mutex);
 cleanupDriverInfoList:
     SetupDiDestroyDriverInfoList(DevInfo, &DevInfoData, SPDIT_COMPATDRIVER);
 cleanupDevInfo:
     SetupDiDestroyDeviceInfoList(DevInfo);
-cleanupMutex:
-    NamespaceReleaseMutex(Mutex);
-    return Result;
-}
-
-static WINTUN_STATUS
-CreateTemporaryDirectory(_Out_cap_c_(MAX_PATH) WCHAR *RandomTempSubDirectory)
-{
-    WCHAR WindowsDirectory[MAX_PATH];
-    if (!GetWindowsDirectoryW(WindowsDirectory, _countof(WindowsDirectory)))
-        return LOG_LAST_ERROR(L"Failed to get Windows folder");
-    WCHAR WindowsTempDirectory[MAX_PATH];
-    if (!PathCombineW(WindowsTempDirectory, WindowsDirectory, L"Temp"))
-        return ERROR_BUFFER_OVERFLOW;
-    UCHAR RandomBytes[32] = { 0 };
-#pragma warning(suppress : 6387)
-    if (!RtlGenRandom(RandomBytes, sizeof(RandomBytes)))
-        return LOG_LAST_ERROR(L"Failed to generate random");
-    WCHAR RandomSubDirectory[sizeof(RandomBytes) * 2 + 1];
-    for (int i = 0; i < sizeof(RandomBytes); ++i)
-        swprintf_s(&RandomSubDirectory[i * 2], 3, L"%02x", RandomBytes[i]);
-    if (!PathCombineW(RandomTempSubDirectory, WindowsTempDirectory, RandomSubDirectory))
-        return ERROR_BUFFER_OVERFLOW;
-    if (!CreateDirectoryW(RandomTempSubDirectory, &SecurityAttributes))
-        return LOG_LAST_ERROR(L"Failed to create temporary folder");
-    return ERROR_SUCCESS;
-}
-
-DWORDLONG
-WintunGetVersion(void)
-{
-    DWORDLONG Version = 0;
-    PRTL_PROCESS_MODULES Modules;
-    ULONG BufferSize = 128 * 1024;
-    for (;;)
-    {
-        Modules = HeapAlloc(ModuleHeap, 0, BufferSize);
-        if (!Modules)
-        {
-            LOG(WINTUN_LOG_ERR, L"Out of memory");
-            return Version;
-        }
-        NTSTATUS Status = NtQuerySystemInformation(SystemModuleInformation, Modules, BufferSize, &BufferSize);
-        if (NT_SUCCESS(Status))
-            break;
-        HeapFree(ModuleHeap, 0, Modules);
-        if (Status == STATUS_INFO_LENGTH_MISMATCH)
-            continue;
-        LOG(WINTUN_LOG_ERR, L"Failed to enumerate drivers");
-        return Version;
-    }
-    for (ULONG i = Modules->NumberOfModules; i-- > 0;)
-    {
-        const char *NtPath = (const char *)Modules->Modules[i].FullPathName;
-        if (!_stricmp(&NtPath[Modules->Modules[i].OffsetToFileName], "wintun.sys"))
-        {
-            WCHAR FilePath[MAX_PATH * 3 + 15];
-            if (_snwprintf_s(FilePath, _countof(FilePath), _TRUNCATE, L"\\\\?\\GLOBALROOT%S", NtPath) == -1)
-                continue;
-            Version = VersionOfFile(FilePath);
-            goto out;
-        }
-    }
-out:
-    HeapFree(ModuleHeap, 0, Modules);
-    return Version;
-}
-
-static BOOL EnsureWintunUnloaded(VOID)
-{
-    BOOL Loaded;
-    for (int i = 0; (Loaded = WintunGetVersion() != 0) != FALSE && i < 300; ++i)
-        Sleep(50);
-    return !Loaded;
-}
-
-static WINTUN_STATUS
-InstallDriver(_Out_writes_z_(MAX_PATH) WCHAR InfStorePath[MAX_PATH], _Inout_ BOOL *RebootRequired)
-{
-    HANDLE DriverInstallationLock = NamespaceTakeDriverInstallationMutex();
-    if (!DriverInstallationLock)
-        return LOG_LAST_ERROR(L"Failed to take driver installation mutex");
-    DWORD Result;
-    WCHAR RandomTempSubDirectory[MAX_PATH];
-    if ((Result = CreateTemporaryDirectory(RandomTempSubDirectory)) != ERROR_SUCCESS)
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder");
-        goto cleanupDriverInstallationLock;
-    }
-
-    WCHAR CatPath[MAX_PATH] = { 0 };
-    WCHAR SysPath[MAX_PATH] = { 0 };
-    WCHAR InfPath[MAX_PATH] = { 0 };
-    if (!PathCombineW(CatPath, RandomTempSubDirectory, L"wintun.cat") ||
-        !PathCombineW(SysPath, RandomTempSubDirectory, L"wintun.sys") ||
-        !PathCombineW(InfPath, RandomTempSubDirectory, L"wintun.inf"))
-    {
-        Result = ERROR_BUFFER_OVERFLOW;
-        goto cleanupDirectory;
-    }
-
-    BOOL UseWHQL = HaveWHQL();
-    if (!UseWHQL && (Result = InstallCertificate(L"wintun.cat")) != ERROR_SUCCESS)
-        LOG(WINTUN_LOG_WARN, L"Failed to install code signing certificate");
-
-    LOG(WINTUN_LOG_INFO, L"Extracting driver");
-    if ((Result = ResourceCopyToFile(CatPath, UseWHQL ? L"wintun-whql.cat" : L"wintun.cat")) != ERROR_SUCCESS ||
-        (Result = ResourceCopyToFile(SysPath, UseWHQL ? L"wintun-whql.sys" : L"wintun.sys")) != ERROR_SUCCESS ||
-        (Result = ResourceCopyToFile(InfPath, UseWHQL ? L"wintun-whql.inf" : L"wintun.inf")) != ERROR_SUCCESS)
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to extract driver");
-        goto cleanupDelete;
-    }
-
-    DWORDLONG LoadedDriverVersion = WintunGetVersion();
-    HDEVINFO DevInfo = INVALID_HANDLE_VALUE;
-    SP_DEVINFO_DATA_LIST *ExistingAdapters = NULL;
-    if (LoadedDriverVersion)
-    {
-        DWORDLONG ProposedDriverVersion = VersionOfFile(SysPath);
-        if (!ProposedDriverVersion)
-        {
-            LOG(WINTUN_LOG_ERR, L"Failed to get driver file version");
-            Result = ERROR_INVALID_DATA;
-            goto cleanupDelete;
-        }
-        if (ProposedDriverVersion > LoadedDriverVersion)
-        {
-            DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
-            if (DevInfo == INVALID_HANDLE_VALUE)
-            {
-                Result = LOG_LAST_ERROR(L"Failed to get present adapters");
-                goto cleanupDelete;
-            }
-            AdapterDisableAllOurs(DevInfo, &ExistingAdapters);
-            LOG(WINTUN_LOG_INFO, L"Waiting for existing driver to unload from kernel");
-            if (!EnsureWintunUnloaded())
-                LOG(WINTUN_LOG_WARN, L"Failed to unload existing driver, which means a reboot will likely be required");
-        }
-    }
-
-    LOG(WINTUN_LOG_INFO, L"Installing driver");
-    if (!SetupCopyOEMInfW(InfPath, NULL, SPOST_NONE, 0, InfStorePath, MAX_PATH, NULL, NULL))
-    {
-        Result = LOG_LAST_ERROR(L"Could not install driver to store");
-        goto cleanupCloseDevInfo;
-    }
-    _Analysis_assume_nullterminated_(InfStorePath);
-    BOOL UpdateRebootRequired = FALSE;
-    if (ExistingAdapters &&
-        !UpdateDriverForPlugAndPlayDevicesW(
-            NULL, WINTUN_HWID, InfStorePath, INSTALLFLAG_FORCE | INSTALLFLAG_NONINTERACTIVE, &UpdateRebootRequired))
-        LOG(WINTUN_LOG_WARN, L"Could not update existing adapters");
-    *RebootRequired = *RebootRequired || UpdateRebootRequired;
-
-cleanupCloseDevInfo:
-    if (ExistingAdapters)
-    {
-        AdapterEnableAll(DevInfo, ExistingAdapters);
-        while (ExistingAdapters)
-        {
-            SP_DEVINFO_DATA_LIST *Next = ExistingAdapters->Next;
-            HeapFree(ModuleHeap, 0, ExistingAdapters);
-            ExistingAdapters = Next;
-        }
-    }
-    if (DevInfo != INVALID_HANDLE_VALUE)
-        SetupDiDestroyDeviceInfoList(DevInfo);
-
-cleanupDelete:
-    DeleteFileW(CatPath);
-    DeleteFileW(SysPath);
-    DeleteFileW(InfPath);
-cleanupDirectory:
-    RemoveDirectoryW(RandomTempSubDirectory);
-cleanupDriverInstallationLock:
-    NamespaceReleaseMutex(DriverInstallationLock);
     return Result;
 }
 
@@ -1822,7 +1935,7 @@ WintunCreateAdapter(
     if (!RebootRequired)
         RebootRequired = &DummyRebootRequired;
     *RebootRequired = FALSE;
-    DWORD Result = ERROR_SUCCESS;
+    DWORD Result;
 #ifdef MAYBE_WOW64
     if (NativeMachine != IMAGE_FILE_PROCESS)
     {
@@ -1831,22 +1944,7 @@ WintunCreateAdapter(
         return Result;
     }
 #endif
-
-    WCHAR InfStorePath[MAX_PATH];
-    if ((Result = InstallDriver(InfStorePath, RebootRequired)) != ERROR_SUCCESS)
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to install driver");
-        goto cleanupToken;
-    }
-
-    Result = CreateAdapter(InfStorePath, Pool, Name, RequestedGUID, Adapter, RebootRequired);
-
-    if (!SetupUninstallOEMInfW(PathFindFileNameW(InfStorePath), SUOI_FORCEDELETE, NULL))
-    {
-        LOG_LAST_ERROR(L"Failed to remove existing driver");
-        Result = Result != ERROR_SUCCESS ? Result : GetLastError();
-    }
-cleanupToken:
+    Result = CreateAdapter(Pool, Name, RequestedGUID, Adapter, RebootRequired);
     RevertToSelf();
     return Result;
 }
@@ -1871,7 +1969,10 @@ DeleteAdapterNatively(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSe
     WCHAR Response[8 + 1 + 8 + 1];
     DWORD Result = ExecuteRunDll32(Arguments, Response, _countof(Response));
     if (Result != ERROR_SUCCESS)
+    {
         LOG(WINTUN_LOG_ERR, L"Error executing worker process");
+        return Result;
+    }
     int Argc;
     WCHAR **Argv = CommandLineToArgvW(Response, &Argc);
     if (Argc < 2)
@@ -1938,6 +2039,142 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSess
     else
         Result = LOG_LAST_ERROR(L"Failed to remove existing adapter");
     SetupDiDestroyDeviceInfoList(DevInfo);
+cleanupToken:
+    RevertToSelf();
+    return Result;
+}
+
+#ifdef MAYBE_WOW64
+
+static WINTUN_STATUS
+DeleteDriverNatively()
+{
+    LOG(WINTUN_LOG_INFO, L"Spawning native process");
+    WCHAR Response[8 + 1];
+    DWORD Result = ExecuteRunDll32(L"DeleteDriver", Response, _countof(Response));
+    if (Result != ERROR_SUCCESS)
+    {
+        LOG(WINTUN_LOG_ERR, L"Error executing worker process");
+        return Result;
+    }
+    int Argc;
+    WCHAR **Argv = CommandLineToArgvW(Response, &Argc);
+    if (Argc < 1)
+    {
+        LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response");
+        Result = ERROR_INVALID_PARAMETER;
+        goto cleanupArgv;
+    }
+    Result = wcstoul(Argv[0], NULL, 16);
+cleanupArgv:
+    LocalFree(Argv);
+    return Result;
+}
+
+#endif
+
+static WINTUN_STATUS
+DeleteAllOurAdapters(void)
+{
+    DWORD Result = ERROR_SUCCESS;
+    HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
+    if (DevInfo == INVALID_HANDLE_VALUE)
+        return LOG_LAST_ERROR(L"Failed to get present adapters");
+    SP_REMOVEDEVICE_PARAMS Params = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
+                                                              .InstallFunction = DIF_REMOVE },
+                                      .Scope = DI_REMOVEDEVICE_GLOBAL };
+    for (DWORD EnumIndex = 0;; ++EnumIndex)
+    {
+        SP_DEVINFO_DATA DevInfoData = { .cbSize = sizeof(SP_DEVINFO_DATA) };
+        if (!SetupDiEnumDeviceInfo(DevInfo, EnumIndex, &DevInfoData))
+        {
+            if (GetLastError() == ERROR_NO_MORE_ITEMS)
+                break;
+            continue;
+        }
+
+        BOOL IsOurs;
+        if (IsOurAdapter(DevInfo, &DevInfoData, &IsOurs) != ERROR_SUCCESS || !IsOurs)
+            continue;
+
+        LOG(WINTUN_LOG_INFO, L"Force closing all open handles for existing adapter");
+        if (ForceCloseWintunAdapterHandle(DevInfo, &DevInfoData) != ERROR_SUCCESS)
+            LOG(WINTUN_LOG_WARN, L"Failed to force close adapter handles");
+
+        LOG(WINTUN_LOG_INFO, L"Removing existing adapter");
+        if (!SetupDiSetClassInstallParamsW(DevInfo, &DevInfoData, &Params.ClassInstallHeader, sizeof(Params)) ||
+            !SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
+        {
+            LOG_LAST_ERROR(L"Failed to remove existing adapter");
+            Result = Result != ERROR_SUCCESS ? Result : GetLastError();
+        }
+    }
+    SetupDiDestroyDeviceInfoList(DevInfo);
+    return Result;
+}
+
+WINTUN_STATUS WINAPI
+WintunDeleteDriver(void)
+{
+    if (!ElevateToSystem())
+        return LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user"), ERROR_ACCESS_DENIED;
+
+#ifdef MAYBE_WOW64
+    if (NativeMachine != IMAGE_FILE_PROCESS)
+    {
+        Result = DeleteDriverNatively();
+        RevertToSelf();
+        return Result;
+    }
+#endif
+
+    /* DeleteAllOurAdapters(); */
+    DWORD Result = ERROR_SUCCESS;
+    HANDLE DriverInstallationLock = NamespaceTakeDriverInstallationMutex();
+    if (!DriverInstallationLock)
+    {
+        Result = LOG_LAST_ERROR(L"Failed to take driver installation mutex");
+        goto cleanupToken;
+    }
+    HDEVINFO DeviceInfoSet = SetupDiGetClassDevsW(&GUID_DEVCLASS_NET, NULL, NULL, 0);
+    if (!DeviceInfoSet)
+    {
+        Result = LOG_LAST_ERROR(L"Failed to get adapter information");
+        goto cleanupDriverInstallationLock;
+    }
+    if (!SetupDiBuildDriverInfoList(DeviceInfoSet, NULL, SPDIT_CLASSDRIVER))
+    {
+        Result = LOG_LAST_ERROR(L"Failed building driver info list");
+        goto cleanupDeviceInfoSet;
+    }
+    for (DWORD EnumIndex = 0;; ++EnumIndex)
+    {
+        SP_DRVINFO_DATA_W DriverInfo = { .cbSize = sizeof(DriverInfo) };
+        if (!SetupDiEnumDriverInfoW(DeviceInfoSet, NULL, SPDIT_CLASSDRIVER, EnumIndex, &DriverInfo))
+        {
+            if (GetLastError() == ERROR_NO_MORE_ITEMS)
+                break;
+            continue;
+        }
+        SP_DRVINFO_DETAIL_DATA_W *DriverDetail;
+        if (GetAdapterDrvInfoDetail(DeviceInfoSet, NULL, &DriverInfo, &DriverDetail) != ERROR_SUCCESS)
+            continue;
+        if (!_wcsicmp(DriverDetail->HardwareID, WINTUN_HWID))
+        {
+            LOG(WINTUN_LOG_INFO, TEXT("Removing existing driver"));
+            if (!SetupUninstallOEMInfW(PathFindFileNameW(DriverDetail->InfFileName), SUOI_FORCEDELETE, NULL))
+            {
+                LOG_LAST_ERROR(TEXT("Unable to remove existing driver"));
+                Result = Result != ERROR_SUCCESS ? Result : GetLastError();
+            }
+        }
+        HeapFree(ModuleHeap, 0, DriverDetail);
+    }
+    SetupDiDestroyDriverInfoList(DeviceInfoSet, NULL, SPDIT_CLASSDRIVER);
+cleanupDeviceInfoSet:
+    SetupDiDestroyDeviceInfoList(DeviceInfoSet);
+cleanupDriverInstallationLock:
+    NamespaceReleaseMutex(DriverInstallationLock);
 cleanupToken:
     RevertToSelf();
     return Result;

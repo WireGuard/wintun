@@ -71,6 +71,13 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_DELETE_ADAPTER_FUNC)(
     _Out_opt_ BOOL *RebootRequired);
 
 /**
+ * Deletes all Wintun drivers from the driver store
+ *
+ * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ */
+typedef WINTUN_STATUS(WINAPI *WINTUN_DELETE_DRIVER_FUNC)(void);
+
+/**
  * Called by WintunEnumAdapters for each adapter in the pool.
  *
  * @param Adapter       Adapter handle.
@@ -93,8 +100,10 @@ typedef BOOL(CALLBACK *WINTUN_ENUM_CALLBACK_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Ada
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
-typedef WINTUN_STATUS(
-    WINAPI *WINTUN_ENUM_ADAPTERS_FUNC)(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK_FUNC Callback, _In_ LPARAM Param);
+typedef WINTUN_STATUS(WINAPI *WINTUN_ENUM_ADAPTERS_FUNC)(
+    _In_z_ const WCHAR *Pool,
+    _In_ WINTUN_ENUM_CALLBACK_FUNC Callback,
+    _In_ LPARAM Param);
 
 /**
  * Releases Wintun adapter resources.
@@ -166,7 +175,7 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_GET_ADAPTER_NAME_FUNC)(
 /**
  * Determines the version of the Wintun driver currently loaded.
  *
- * @return The version number on success, or 0 if failure.
+ * @return The version number on success, or 0 if failure or Wintun not loaded.
  */
 typedef DWORDLONG(WINAPI *WINTUN_GET_VERSION_FUNC)(void);
 

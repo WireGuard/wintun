@@ -145,6 +145,19 @@ cleanup:
     Done();
 }
 
+VOID __stdcall DeleteDriver(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
+{
+#    pragma EXPORT
+    UNREFERENCED_PARAMETER(hwnd);
+    UNREFERENCED_PARAMETER(hinst);
+    UNREFERENCED_PARAMETER(lpszCmdLine);
+    UNREFERENCED_PARAMETER(nCmdShow);
+
+    Init();
+    WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X!", WintunDeleteDriver());
+    Done();
+}
+
 #ifdef _DEBUG
 VOID __stdcall DoThingsForDebugging(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
 {

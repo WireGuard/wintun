@@ -13,68 +13,6 @@
 #define MAX_INSTANCE_ID MAX_PATH /* TODO: Is MAX_PATH always enough? */
 #define WINTUN_HWID L"Wintun"
 
-typedef struct _SP_DEVINFO_DATA_LIST
-{
-    SP_DEVINFO_DATA Data;
-    struct _SP_DEVINFO_DATA_LIST *Next;
-} SP_DEVINFO_DATA_LIST;
-
-/**
- * Retrieves driver information detail for a device information set or a particular device information element in the
- * device information set.
- *
- * @param DevInfo       A handle to the device information set that contains a device information element that
- *                      represents the device for which to retrieve driver information.
- *
- * @param DevInfoData   A pointer to a structure that specifies the device information element in DevInfo.
- *
- * @param DrvInfoData   A pointer to a structure that specifies the driver information element that represents the
- *                      driver for which to retrieve details.
- *
- * @param DrvInfoDetailData  A pointer to a structure that receives detailed information about the specified driver.
- *                      Must be released with HeapFree(ModuleHeap, 0, *DrvInfoDetailData) after use.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
-WINTUN_STATUS
-AdapterGetDrvInfoDetail(
-    _In_ HDEVINFO DevInfo,
-    _In_opt_ SP_DEVINFO_DATA *DevInfoData,
-    _In_ SP_DRVINFO_DATA_W *DrvInfoData,
-    _Out_ SP_DRVINFO_DETAIL_DATA_W **DrvInfoDetailData);
-
-/**
- * Disables all Wintun adapters.
- *
- * @param DevInfo       A handle to the device information set.
- *
- * @param DisabledAdapters  Output list of disabled adapters. The adapters disabled are inserted in the list head.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
-WINTUN_STATUS
-AdapterDisableAllOurs(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **DisabledAdapters);
-
-/**
- * Enables all adapters.
- *
- * @param DevInfo       A handle to the device information set.
- *
- * @param AdaptersToEnable  Input list of adapters to enable.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
-WINTUN_STATUS
-AdapterEnableAll(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA_LIST *AdaptersToEnable);
-
-/**
- * Removes all Wintun adapters.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
- */
-WINTUN_STATUS
-AdapterDeleteAllOurs(void);
-
 void
 AdapterInit(void);
 
@@ -118,3 +56,9 @@ WintunCreateAdapter(
  */
 WINTUN_STATUS WINAPI
 WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSessions, _Out_opt_ BOOL *RebootRequired);
+
+/**
+ * @copydoc WINTUN_DELETE_DRIVER_FUNC
+ */
+WINTUN_STATUS WINAPI
+WintunDeleteDriver(void);
