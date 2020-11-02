@@ -19,6 +19,8 @@ WINTUN_LOGGER_CALLBACK_FUNC Logger = NopLogger;
 void CALLBACK
 WintunSetLogger(_In_ WINTUN_LOGGER_CALLBACK_FUNC NewLogger)
 {
+    if (!NewLogger)
+        NewLogger = NopLogger;
     Logger = NewLogger;
 }
 

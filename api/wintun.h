@@ -173,13 +173,6 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_GET_ADAPTER_NAME_FUNC)(
     _Out_cap_c_(MAX_ADAPTER_NAME) WCHAR *Name);
 
 /**
- * Determines the version of the Wintun driver currently loaded.
- *
- * @return The version number on success, or 0 if failure or Wintun not loaded.
- */
-typedef DWORDLONG(WINAPI *WINTUN_GET_VERSION_FUNC)(void);
-
-/**
  * Sets name of the Wintun adapter.
  *
  * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
@@ -190,6 +183,13 @@ typedef DWORDLONG(WINAPI *WINTUN_GET_VERSION_FUNC)(void);
  */
 typedef WINTUN_STATUS(
     WINAPI *WINTUN_SET_ADAPTER_NAME_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In_z_ const WCHAR *Name);
+
+/**
+ * Determines the version of the Wintun driver currently loaded.
+ *
+ * @return The version number on success, or 0 if failure or Wintun not loaded.
+ */
+typedef DWORDLONG(WINAPI *WINTUN_GET_VERSION_FUNC)(void);
 
 typedef enum _WINTUN_LOGGER_LEVEL
 {
@@ -214,7 +214,7 @@ typedef BOOL(CALLBACK *WINTUN_LOGGER_CALLBACK_FUNC)(_In_ WINTUN_LOGGER_LEVEL Lev
  *
  * @param NewLogger     Pointer to callback function to use as a new global logger. NewLogger may be called from various
  *                      threads concurrently. Should the logging require serialization, you must handle serialization in
- *                      NewLogger.
+ *                      NewLogger. Set to NULL to disable.
  */
 typedef void(WINAPI *WINTUN_SET_LOGGER_FUNC)(_In_ WINTUN_LOGGER_CALLBACK_FUNC NewLogger);
 
