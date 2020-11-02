@@ -165,7 +165,7 @@ IsOurAdapter(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ BOO
     WCHAR *Hwids;
     DWORD Result = GetDeviceRegistryMultiString(DevInfo, DevInfoData, SPDRP_HARDWAREID, &Hwids);
     if (Result != ERROR_SUCCESS)
-        return LOG(WINTUN_LOG_ERR, L"Failed to query hardware ID"), Result;
+        return LOG(WINTUN_LOG_ERR, L"Failed to get hardware ID"), Result;
     *IsOurs = IsOurHardwareID(Hwids);
     return ERROR_SUCCESS;
 }
@@ -178,7 +178,7 @@ GetDeviceObject(_In_opt_z_ const WCHAR *InstanceId, _Out_ HANDLE *Handle)
         &InterfacesLen, (GUID *)&GUID_DEVINTERFACE_NET, (DEVINSTID_W)InstanceId, CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
     if (Result != CR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get device associated device instances size");
+        LOG(WINTUN_LOG_ERR, L"Failed to query associated instances size");
         return ERROR_GEN_FAILURE;
     }
     WCHAR *Interfaces = HeapAlloc(ModuleHeap, 0, InterfacesLen * sizeof(WCHAR));
@@ -192,7 +192,7 @@ GetDeviceObject(_In_opt_z_ const WCHAR *InstanceId, _Out_ HANDLE *Handle)
         CM_GET_DEVICE_INTERFACE_LIST_PRESENT);
     if (Result != CR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get device associated device instances");
+        LOG(WINTUN_LOG_ERR, L"Failed to get associated instances");
         Result = ERROR_GEN_FAILURE;
         goto cleanupBuf;
     }
@@ -204,7 +204,7 @@ GetDeviceObject(_In_opt_z_ const WCHAR *InstanceId, _Out_ HANDLE *Handle)
         OPEN_EXISTING,
         0,
         NULL);
-    Result = *Handle != INVALID_HANDLE_VALUE ? ERROR_SUCCESS : LOG_LAST_ERROR(L"Failed to connect to device");
+    Result = *Handle != INVALID_HANDLE_VALUE ? ERROR_SUCCESS : LOG_LAST_ERROR(L"Failed to connect to adapter");
 cleanupBuf:
     HeapFree(ModuleHeap, 0, Interfaces);
     return Result;
@@ -219,20 +219,20 @@ ForceCloseWintunAdapterHandle(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevIn
     DWORD RequiredBytes;
     if (SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, NULL, 0, &RequiredBytes) ||
         (Result = GetLastError()) != ERROR_INSUFFICIENT_BUFFER)
-        return LOG_ERROR(L"Failed to query device instance ID size", Result);
+        return LOG_ERROR(L"Failed to query instance ID size", Result);
     WCHAR *InstanceId = HeapAlloc(ModuleHeap, HEAP_ZERO_MEMORY, sizeof(*InstanceId) * RequiredBytes);
     if (!InstanceId)
         return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
     if (!SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, InstanceId, RequiredBytes, &RequiredBytes))
     {
-        Result = LOG_LAST_ERROR(L"Failed to get device instance ID");
+        Result = LOG_LAST_ERROR(L"Failed to get instance ID");
         goto out;
     }
     HANDLE NdisHandle;
     Result = GetDeviceObject(InstanceId, &NdisHandle);
     if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get adapter device object");
+        LOG(WINTUN_LOG_ERR, L"Failed to get adapter object");
         goto out;
     }
     if (DeviceIoControl(NdisHandle, TUN_IOCTL_FORCE_CLOSE_HANDLES, NULL, 0, NULL, 0, &RequiredBytes, NULL))
@@ -290,7 +290,7 @@ AdapterDisableAllOurs(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
         if (!SetupDiSetClassInstallParamsW(DevInfo, &DeviceNode->Data, &Params.ClassInstallHeader, sizeof(Params)) ||
             !SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, DevInfo, &DeviceNode->Data))
         {
-            LOG_LAST_ERROR(L"Unable to disable existing adapter");
+            LOG_LAST_ERROR(L"Failed to disable existing adapter");
             Result = Result != ERROR_SUCCESS ? Result : GetLastError();
             goto cleanupDeviceInfoData;
         }
@@ -319,7 +319,7 @@ AdapterEnableAll(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA_LIST *AdaptersToEna
         if (!SetupDiSetClassInstallParamsW(DevInfo, &DeviceNode->Data, &Params.ClassInstallHeader, sizeof(Params)) ||
             !SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, DevInfo, &DeviceNode->Data))
         {
-            LOG_LAST_ERROR(L"Unable to enable existing adapter");
+            LOG_LAST_ERROR(L"Failed to enable existing adapter");
             Result = Result != ERROR_SUCCESS ? Result : GetLastError();
         }
     }
@@ -332,7 +332,7 @@ AdapterDeleteAllOurs(void)
     DWORD Result = ERROR_SUCCESS;
     HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
-        return LOG_LAST_ERROR(L"Failed to get present class devices");
+        return LOG_LAST_ERROR(L"Failed to get present adapters");
     SP_REMOVEDEVICE_PARAMS Params = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
                                                               .InstallFunction = DIF_REMOVE },
                                       .Scope = DI_REMOVEDEVICE_GLOBAL };
@@ -358,7 +358,7 @@ AdapterDeleteAllOurs(void)
         if (!SetupDiSetClassInstallParamsW(DevInfo, &DevInfoData, &Params.ClassInstallHeader, sizeof(Params)) ||
             !SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
         {
-            LOG_LAST_ERROR(L"Unable to remove existing adapter");
+            LOG_LAST_ERROR(L"Failed to remove existing adapter");
             Result = Result != ERROR_SUCCESS ? Result : GetLastError();
         }
     }
@@ -420,7 +420,7 @@ GetNetCfgInstanceId(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _O
     DWORD Result = RegistryQueryString(Key, L"NetCfgInstanceId", &ValueStr, TRUE);
     if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to query NetCfgInstanceId value");
+        LOG(WINTUN_LOG_ERR, L"Failed to get NetCfgInstanceId");
         goto cleanupKey;
     }
     if (FAILED(CLSIDFromString(ValueStr, CfgInstanceID)))
@@ -441,7 +441,7 @@ GetDevInfoData(_In_ const GUID *CfgInstanceID, _Out_ HDEVINFO *DevInfo, _Out_ SP
 {
     *DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (!*DevInfo)
-        return LOG_LAST_ERROR(L"Failed to get present class devices");
+        return LOG_LAST_ERROR(L"Failed to get present adapters");
     for (DWORD EnumIndex = 0;; ++EnumIndex)
     {
         DevInfoData->cbSize = sizeof(SP_DEVINFO_DATA);
@@ -486,13 +486,13 @@ IsPoolMember(_In_z_ const WCHAR *Pool, _In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DA
     DWORD Result = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_DEVICEDESC, &DeviceDesc);
     if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to query device description property");
+        LOG(WINTUN_LOG_ERR, L"Failed to get adapter description");
         return Result;
     }
     Result = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_FRIENDLYNAME, &FriendlyName);
     if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to query friendly name property");
+        LOG(WINTUN_LOG_ERR, L"Failed to get adapter friendly name");
         goto cleanupDeviceDesc;
     }
     WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
@@ -546,7 +546,7 @@ CreateAdapterData(
     Result = RegistryQueryString(Key, L"NetCfgInstanceId", &ValueStr, TRUE);
     if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to query NetCfgInstanceId value");
+        LOG(WINTUN_LOG_ERR, L"Failed to get NetCfgInstanceId");
         goto cleanupAdapter;
     }
     if (FAILED(CLSIDFromString(ValueStr, &a->CfgInstanceID)))
@@ -562,7 +562,7 @@ CreateAdapterData(
     Result = RegistryQueryDWORD(Key, L"NetLuidIndex", &a->LuidIndex, TRUE);
     if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to query NetLuidIndex value");
+        LOG(WINTUN_LOG_ERR, L"Failed to get NetLuidIndex");
         goto cleanupAdapter;
     }
 
@@ -570,14 +570,14 @@ CreateAdapterData(
     Result = RegistryQueryDWORD(Key, L"*IfType", &a->IfType, TRUE);
     if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to query *IfType value");
+        LOG(WINTUN_LOG_ERR, L"Failed to get *IfType");
         goto cleanupAdapter;
     }
 
     DWORD Size;
     if (!SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, a->DevInstanceID, _countof(a->DevInstanceID), &Size))
     {
-        Result = LOG_LAST_ERROR(L"Failed to get device instance ID");
+        Result = LOG_LAST_ERROR(L"Failed to get instance ID");
         goto cleanupAdapter;
     }
 
@@ -635,7 +635,7 @@ WintunGetAdapter(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name, _Out_ WINTU
     HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
     {
-        Result = LOG_LAST_ERROR(L"Failed to get present class devices");
+        Result = LOG_LAST_ERROR(L"Failed to get present adapters");
         goto cleanupMutex;
     }
 
@@ -670,7 +670,7 @@ WintunGetAdapter(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name, _Out_ WINTU
         Result = IsOurAdapter(DevInfo, &DevInfoData, &IsOurs);
         if (Result != ERROR_SUCCESS)
         {
-            LOG(WINTUN_LOG_ERR, L"Failed to determine hardware ID");
+            LOG(WINTUN_LOG_ERR, L"Failed to get hardware ID");
             goto cleanupDevInfo;
         }
         if (!IsOurs)
@@ -684,7 +684,7 @@ WintunGetAdapter(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name, _Out_ WINTU
         Result = IsPoolMember(Pool, DevInfo, &DevInfoData, &IsMember);
         if (Result != ERROR_SUCCESS)
         {
-            LOG(WINTUN_LOG_ERR, L"Failed to determine pool membership");
+            LOG(WINTUN_LOG_ERR, L"Failed to get pool membership");
             goto cleanupDevInfo;
         }
         if (!IsMember)
@@ -966,7 +966,7 @@ GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG
     Result = RegistryQueryString(TcpipAdapterRegKey, L"IpConfig", &Paths, TRUE);
     if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to query IpConfig value");
+        LOG(WINTUN_LOG_ERR, L"Failed to get IpConfig");
         goto cleanupTcpipAdapterRegKey;
     }
     if (!Paths[0])
@@ -996,7 +996,7 @@ VersionOfFile(WCHAR *Filename)
     DWORD Zero;
     DWORD Len = GetFileVersionInfoSizeW(Filename, &Zero);
     if (!Len)
-        return LOG_LAST_ERROR(L"Failed to get version info size"), Version;
+        return LOG_LAST_ERROR(L"Failed to query version info size"), Version;
     VOID *VersionInfo = HeapAlloc(ModuleHeap, 0, Len);
     if (!VersionInfo)
     {
@@ -1012,7 +1012,7 @@ VersionOfFile(WCHAR *Filename)
     }
     if (!VerQueryValueW(VersionInfo, L"\\", &FixedInfo, &FixedInfoLen))
     {
-        LOG_LAST_ERROR(L"Failed to query version info root block");
+        LOG_LAST_ERROR(L"Failed to get version info root");
         goto out;
     }
     Version = (DWORDLONG)FixedInfo->dwFileVersionLS | ((DWORDLONG)FixedInfo->dwFileVersionMS << 32);
@@ -1199,7 +1199,7 @@ CreateAdapter(
             (const BYTE *)PoolDeviceTypeName,
             (DWORD)((wcslen(PoolDeviceTypeName) + 1) * sizeof(WCHAR))))
     {
-        Result = LOG_LAST_ERROR(L"Failed to set device description");
+        Result = LOG_LAST_ERROR(L"Failed to set adapter description");
         goto cleanupNetDevRegKey;
     }
 
@@ -1209,7 +1209,7 @@ CreateAdapter(
     Result = RegistryQueryStringWait(NetDevRegKey, L"NetCfgInstanceId", WAIT_FOR_REGISTRY_TIMEOUT, &DummyStr);
     if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to query NetCfgInstanceId value");
+        LOG(WINTUN_LOG_ERR, L"Failed to get NetCfgInstanceId");
         goto cleanupNetDevRegKey;
     }
     HeapFree(ModuleHeap, 0, DummyStr);
@@ -1217,13 +1217,13 @@ CreateAdapter(
     Result = RegistryQueryDWORDWait(NetDevRegKey, L"NetLuidIndex", WAIT_FOR_REGISTRY_TIMEOUT, &DummyDWORD);
     if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to query NetLuidIndex value");
+        LOG(WINTUN_LOG_ERR, L"Failed to get NetLuidIndex");
         goto cleanupNetDevRegKey;
     }
     Result = RegistryQueryDWORDWait(NetDevRegKey, L"*IfType", WAIT_FOR_REGISTRY_TIMEOUT, &DummyDWORD);
     if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to query *IfType value");
+        LOG(WINTUN_LOG_ERR, L"Failed to get *IfType");
         goto cleanupNetDevRegKey;
     }
 
@@ -1248,13 +1248,13 @@ CreateAdapter(
         &TcpipAdapterRegKey);
     if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to open adapter-specific TCP/IP adapter registry key");
+        LOG(WINTUN_LOG_ERR, L"Failed to open adapter-specific TCP/IP interface registry key");
         goto cleanupAdapter;
     }
     Result = RegistryQueryStringWait(TcpipAdapterRegKey, L"IpConfig", WAIT_FOR_REGISTRY_TIMEOUT, &DummyStr);
     if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to query IpConfig value");
+        LOG(WINTUN_LOG_ERR, L"Failed to get IpConfig");
         goto cleanupTcpipAdapterRegKey;
     }
     HeapFree(ModuleHeap, 0, DummyStr);
@@ -1450,14 +1450,14 @@ InstallDriver(_Out_writes_z_(MAX_PATH) WCHAR InfStorePath[MAX_PATH], _Inout_ BOO
 
     BOOL UseWHQL = HaveWHQL();
     if (!UseWHQL && (Result = InstallCertificate(L"wintun.cat")) != ERROR_SUCCESS)
-        LOG(WINTUN_LOG_WARN, L"Unable to install code signing certificate");
+        LOG(WINTUN_LOG_WARN, L"Failed to install code signing certificate");
 
-    LOG(WINTUN_LOG_INFO, L"Extracting driver resources");
+    LOG(WINTUN_LOG_INFO, L"Extracting driver");
     if ((Result = ResourceCopyToFile(CatPath, UseWHQL ? L"wintun-whql.cat" : L"wintun.cat")) != ERROR_SUCCESS ||
         (Result = ResourceCopyToFile(SysPath, UseWHQL ? L"wintun-whql.sys" : L"wintun.sys")) != ERROR_SUCCESS ||
         (Result = ResourceCopyToFile(InfPath, UseWHQL ? L"wintun-whql.inf" : L"wintun.inf")) != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to extract resources");
+        LOG(WINTUN_LOG_ERR, L"Failed to extract driver");
         goto cleanupDelete;
     }
 
@@ -1469,7 +1469,7 @@ InstallDriver(_Out_writes_z_(MAX_PATH) WCHAR InfStorePath[MAX_PATH], _Inout_ BOO
         DWORDLONG ProposedDriverVersion = VersionOfFile(SysPath);
         if (!ProposedDriverVersion)
         {
-            LOG(WINTUN_LOG_ERR, L"Unable to query version of driver file");
+            LOG(WINTUN_LOG_ERR, L"Failed to get driver file version");
             Result = ERROR_INVALID_DATA;
             goto cleanupDelete;
         }
@@ -1478,13 +1478,13 @@ InstallDriver(_Out_writes_z_(MAX_PATH) WCHAR InfStorePath[MAX_PATH], _Inout_ BOO
             DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
             if (DevInfo == INVALID_HANDLE_VALUE)
             {
-                Result = LOG_LAST_ERROR(L"Failed to get present class devices");
+                Result = LOG_LAST_ERROR(L"Failed to get present adapters");
                 goto cleanupDelete;
             }
             AdapterDisableAllOurs(DevInfo, &ExistingAdapters);
             LOG(WINTUN_LOG_INFO, L"Waiting for existing driver to unload from kernel");
             if (!EnsureWintunUnloaded())
-                LOG(WINTUN_LOG_WARN, L"Unable to unload existing driver, which means a reboot will likely be required");
+                LOG(WINTUN_LOG_WARN, L"Failed to unload existing driver, which means a reboot will likely be required");
         }
     }
 
@@ -1635,7 +1635,7 @@ ExecuteRunDll32(
         WintunDllResourceName = L"wintun-arm64.dll";
         break;
     default:
-        LOG(WINTUN_LOG_ERR, L"Failed to copy resource");
+        LOG(WINTUN_LOG_ERR, L"Unsupported platform");
         Result = ERROR_NOT_SUPPORTED;
         goto cleanupDirectory;
     }
@@ -1682,7 +1682,7 @@ ExecuteRunDll32(
     if ((ThreadStdout = CreateThread(&SecurityAttributes, 0, ProcessStdout, &ProcessStdoutState, 0, NULL)) == NULL ||
         (ThreadStderr = CreateThread(&SecurityAttributes, 0, ProcessStderr, StreamRStderr, 0, NULL)) == NULL)
     {
-        Result = LOG_LAST_ERROR(L"Failed to spawn reader threads");
+        Result = LOG_LAST_ERROR(L"Failed to spawn readers");
         goto cleanupThreads;
     }
     STARTUPINFOW si = { .cb = sizeof(STARTUPINFO),
@@ -1713,7 +1713,7 @@ cleanupThreads:
         StreamWStdout = INVALID_HANDLE_VALUE;
         WaitForSingleObject(ThreadStdout, INFINITE);
         if (!GetExitCodeThread(ThreadStdout, &Result))
-            Result = LOG_LAST_ERROR(L"Failed to retrieve thread result");
+            Result = LOG_LAST_ERROR(L"Failed to retrieve stdout reader result");
         else if (Result != ERROR_SUCCESS)
             LOG_ERROR(L"Failed to read process output", Result);
         CloseHandle(ThreadStdout);
@@ -1841,7 +1841,7 @@ WintunCreateAdapter(
 
     if (!SetupUninstallOEMInfW(PathFindFileNameW(InfStorePath), SUOI_FORCEDELETE, NULL))
     {
-        LOG_LAST_ERROR(L"Unable to remove existing driver");
+        LOG_LAST_ERROR(L"Failed to remove existing driver");
         Result = Result != ERROR_SUCCESS ? Result : GetLastError();
     }
 cleanupToken:
@@ -1918,7 +1918,7 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSess
     }
     else if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get device info data");
+        LOG(WINTUN_LOG_ERR, L"Failed to get adapter info data");
         goto cleanupToken;
     }
 
@@ -1934,7 +1934,7 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSess
         SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
         *RebootRequired = *RebootRequired || CheckReboot(DevInfo, &DevInfoData);
     else
-        Result = LOG_LAST_ERROR(L"Unable to remove existing adapter");
+        Result = LOG_LAST_ERROR(L"Failed to remove existing adapter");
     SetupDiDestroyDeviceInfoList(DevInfo);
 cleanupToken:
     RevertToSelf();
@@ -1951,7 +1951,7 @@ WintunEnumAdapters(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK_FUNC Func
     HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
     {
-        Result = LOG_LAST_ERROR(L"Failed to get present class devices");
+        Result = LOG_LAST_ERROR(L"Failed to get present adapters");
         goto cleanupMutex;
     }
     BOOL Continue = TRUE;
@@ -1973,7 +1973,7 @@ WintunEnumAdapters(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK_FUNC Func
         Result = IsPoolMember(Pool, DevInfo, &DevInfoData, &IsMember);
         if (Result != ERROR_SUCCESS)
         {
-            LOG(WINTUN_LOG_ERR, L"Failed to determine pool membership");
+            LOG(WINTUN_LOG_ERR, L"Failed to get pool membership");
             break;
         }
         if (!IsMember)

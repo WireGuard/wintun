@@ -129,7 +129,7 @@ WintunStartSession(
             &BytesReturned,
             NULL))
     {
-        Result = LOG_LAST_ERROR(L"Failed to perform ioctl");
+        Result = LOG_LAST_ERROR(L"Failed to register rings");
         goto cleanupHandle;
     }
     RevertToSelf();

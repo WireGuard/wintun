@@ -16,7 +16,7 @@ ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const void **Address,
         return LOG_LAST_ERROR(L"Failed to find resource");
     *Size = SizeofResource(ResourceModule, FoundResource);
     if (!*Size)
-        return LOG_LAST_ERROR(L"Failed to size resource");
+        return LOG_LAST_ERROR(L"Failed to query resource size");
     HGLOBAL LoadedResource = LoadResource(ResourceModule, FoundResource);
     if (!LoadedResource)
         return LOG_LAST_ERROR(L"Failed to load resource");
