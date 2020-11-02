@@ -121,7 +121,8 @@
       <PreprocessorDefinitions Condition="'$(Platform)'=='ARM64'">_M_ARM64=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <PreLinkEvent>
-      <Command>lib.exe /def:nci.def /out:"$(IntDir)nci.lib" /machine:$(PlatformTarget) /nologo</Command>
+      <Command>cl.exe /nologo /DGENERATE_LIB /Ob0 /c /Fo"$(IntDir)nci.obj" /Tc nci.h
+lib.exe /def:nci.def /out:"$(IntDir)nci.lib" /machine:$(PlatformTarget) /nologo "$(IntDir)nci.obj"</Command>
     </PreLinkEvent>
     <Link>
       <DelayLoadDLLs>bcrypt.dll;iphlpapi.dll;nci.dll;newdev.dll;version.dll</DelayLoadDLLs>

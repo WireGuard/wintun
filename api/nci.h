@@ -7,10 +7,21 @@
 
 #include <Windows.h>
 
-extern DWORD WINAPI NciSetConnectionName(_In_ const GUID *Guid, _In_z_ const WCHAR *NewName);
+#ifdef GENERATE_LIB
+#    define DECLSPEC __declspec(dllexport)
+#    define STUB { return 0; }
+#else
+#    define DECLSPEC __declspec(dllimport)
+#    define STUB ;
+#endif
 
-extern DWORD WINAPI NciGetConnectionName(
+
+EXTERN_C DECLSPEC DWORD WINAPI
+NciSetConnectionName(_In_ const GUID *Guid, _In_z_ const WCHAR *NewName) STUB
+
+EXTERN_C DECLSPEC DWORD WINAPI
+NciGetConnectionName(
     _In_ const GUID *Guid,
     _Out_z_bytecap_(InDestNameBytes) WCHAR *Name,
     _In_ DWORD InDestNameBytes,
-    _Out_opt_ DWORD *OutDestNameBytes);
+    _Out_opt_ DWORD *OutDestNameBytes) STUB

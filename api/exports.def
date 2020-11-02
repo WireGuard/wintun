@@ -1,3 +1,4 @@
+LIBRARY wintun.dll
 EXPORTS
 	WintunAllocateSendPacket
 	WintunCreateAdapter
