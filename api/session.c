@@ -7,7 +7,6 @@
 #include "elevate.h"
 #include "entry.h"
 #include "logger.h"
-#include "session.h"
 #include "wintun.h"
 #include <Windows.h>
 

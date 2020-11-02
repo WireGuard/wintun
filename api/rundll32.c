@@ -5,7 +5,6 @@
 
 #include "adapter.h"
 #include "logger.h"
-#include "session.h"
 #include "wintun.h"
 
 #include <Windows.h>
@@ -16,12 +15,6 @@
 #define EXPORT comment(linker, "/EXPORT:" __FUNCTION__ "=" __FUNCDNAME__)
 
 #if defined(ACCEPT_WOW64) || defined(_DEBUG)
-
-static
-#ifndef _DEBUG
-const
-#endif
-BOOL WriteToConsole = FALSE;
 
 static DWORD
 WriteFormatted(_In_ DWORD StdHandle, _In_z_ const WCHAR *Template, ...)
@@ -38,10 +31,7 @@ WriteFormatted(_In_ DWORD StdHandle, _In_z_ const WCHAR *Template, ...)
         (void *)&FormattedMessage,
         0,
         &Arguments);
-    if (WriteToConsole)
-        WriteConsoleW(GetStdHandle(StdHandle), FormattedMessage, Len, &SizeWritten, NULL);
-    else
-        WriteFile(GetStdHandle(StdHandle), FormattedMessage, Len * sizeof(WCHAR), &SizeWritten, NULL);
+    WriteFile(GetStdHandle(StdHandle), FormattedMessage, Len * sizeof(WCHAR), &SizeWritten, NULL);
     LocalFree(FormattedMessage);
     va_end(Arguments);
     return SizeWritten / sizeof(WCHAR);
@@ -157,31 +147,5 @@ VOID __stdcall DeleteDriver(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int n
     WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X!", WintunDeleteDriver());
     Done();
 }
-
-#ifdef _DEBUG
-VOID __stdcall DoThingsForDebugging(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
-{
-#    pragma EXPORT
-    UNREFERENCED_PARAMETER(hwnd);
-    UNREFERENCED_PARAMETER(hinst);
-    UNREFERENCED_PARAMETER(lpszCmdLine);
-    UNREFERENCED_PARAMETER(nCmdShow);
-
-    AllocConsole();
-    WriteToConsole = TRUE;
-    Init();
-    GUID TestGuid = { 0xdeadbabe, 0xcafe, 0xbeef, { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef } };
-    WINTUN_ADAPTER *Adapter;
-    BOOL RebootRequired;
-    assert(WintunCreateAdapter(L"Wintun", L"Test", &TestGuid, &Adapter, &RebootRequired) == ERROR_SUCCESS);
-    assert(!RebootRequired);
-    TUN_SESSION *Session;
-    assert(WintunStartSession(Adapter, WINTUN_MIN_RING_CAPACITY, &Session) == ERROR_SUCCESS);
-    WintunEndSession(Session);
-    assert(WintunDeleteAdapter(Adapter, TRUE, &RebootRequired) == ERROR_SUCCESS);
-    assert(!RebootRequired);
-    system("pause");
-}
-#endif
 
 #endif

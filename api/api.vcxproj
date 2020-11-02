@@ -101,11 +101,6 @@
     <RunCodeAnalysis>true</RunCodeAnalysis>
     <IgnoreImportLibrary>true</IgnoreImportLibrary>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
-    <LocalDebuggerCommand>rundll32.exe</LocalDebuggerCommand>
-    <LocalDebuggerCommandArguments>$(OutDir)$(TargetName)$(TargetExt),DoThingsForDebugging</LocalDebuggerCommandArguments>
-    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-  </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -171,7 +166,6 @@ lib.exe /def:nci.def /out:"$(IntDir)nci.lib" /machine:$(PlatformTarget) /nologo 
     <ClInclude Include="ntldr.h" />
     <ClInclude Include="registry.h" />
     <ClInclude Include="resource.h" />
-    <ClInclude Include="session.h" />
     <ClInclude Include="wintun.h" />
   </ItemGroup>
   <ItemGroup>
