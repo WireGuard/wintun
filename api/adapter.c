@@ -1597,10 +1597,10 @@ CreateAdapter(
             PropertyType == DEVPROP_TYPE_NTSTATUS)
         {
             Result = RtlNtStatusToDosError(ProblemStatus);
+            _Analysis_assume_(Result != ERROR_SUCCESS);
             if (ProblemStatus != STATUS_PNP_DEVICE_CONFIGURATION_PENDING || Tries == 999)
             {
                 LOG_ERROR(L"Failed to setup adapter", Result);
-                Result = ERROR_GEN_FAILURE;
                 goto cleanupTcpipInterfaceRegKey;
             }
             Sleep(10);
@@ -1608,6 +1608,7 @@ CreateAdapter(
         else
             break;
     }
+    Result = ERROR_SUCCESS;
 
     *Adapter = a;
 
