@@ -25,6 +25,8 @@
 #include <SetupAPI.h>
 #include <Shlwapi.h>
 #include <wchar.h>
+#include <initguid.h> /* Keep these two at bottom in this order, so that we only generate extra GUIDs for devpkey. The other keys we'll get from uuid.lib like usual. */
+#include <devpkey.h>
 
 #pragma warning(disable : 4221) /* nonstandard: address of automatic in initializer */
 
@@ -1291,10 +1293,6 @@ CreateAdapter(
         goto cleanupTcpipInterfaceRegKey;
     }
 
-    /* TODO: This GUIDs is in devpkey.h, but we can't link to it? Which dll? */
-    static const DEVPROPKEY DEVPKEY_Device_ProblemStatus = {
-        { 0x4340a6c5, 0x93fa, 0x4706, { 0x97, 0x2c, 0x7b, 0x64, 0x80, 0x08, 0xa5, 0xa7 } }, 12
-    };
     DEVPROPTYPE PropertyType;
     for (int Tries = 0; Tries < 1000; ++Tries)
     {
