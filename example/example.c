@@ -320,8 +320,7 @@ main(void)
         (Version >> 48) & 0xff,
         (Version >> 32) & 0xff,
         (Version >> 16) & 0xff,
-        (Version >> 0) & 0xff,
-        WINTUN_VERSION_MIN);
+        (Version >> 0) & 0xff);
 
     MIB_UNICASTIPADDRESS_ROW AddressRow;
     InitializeUnicastIpAddressEntry(&AddressRow);
