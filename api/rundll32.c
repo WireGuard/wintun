@@ -3,6 +3,10 @@
  * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
  */
 
+#include "entry.h"
+
+#if ACCEPT_WOW64 == 1
+
 #include "adapter.h"
 #include "logger.h"
 #include "wintun.h"
@@ -13,8 +17,6 @@
 #include <assert.h>
 
 #define EXPORT comment(linker, "/EXPORT:" __FUNCTION__ "=" __FUNCDNAME__)
-
-#if defined(ACCEPT_WOW64) || defined(_DEBUG)
 
 static DWORD
 WriteFormatted(_In_ DWORD StdHandle, _In_z_ const WCHAR *Template, ...)
@@ -147,5 +149,4 @@ VOID __stdcall DeleteDriver(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int n
     WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X!", WintunDeleteDriver());
     Done();
 }
-
 #endif

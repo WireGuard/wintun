@@ -340,7 +340,8 @@ EnableAllOurAdapters(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA_LIST *AdaptersT
 void
 AdapterInit(void)
 {
-#ifdef MAYBE_WOW64
+    if (!MAYBE_WOW64)
+        return;
     typedef BOOL(WINAPI * IsWow64Process2_t)(
         _In_ HANDLE hProcess, _Out_ USHORT * pProcessMachine, _Out_opt_ USHORT * pNativeMachine);
     HANDLE Kernel32;
@@ -354,7 +355,6 @@ AdapterInit(void)
         NativeMachine =
             IsWow64Process(GetCurrentProcess(), &IsWoW64) && IsWoW64 ? IMAGE_FILE_MACHINE_AMD64 : IMAGE_FILE_PROCESS;
     }
-#endif
 }
 
 static BOOL
@@ -801,13 +801,13 @@ RtlGetNtVersionNumbers(_Out_opt_ DWORD *MajorVersion, _Out_opt_ DWORD *MinorVers
 static BOOL
 HaveWHQL(void)
 {
-#if defined(HAVE_WHQL)
-    DWORD MajorVersion;
-    RtlGetNtVersionNumbers(&MajorVersion, NULL, NULL);
-    return MajorVersion >= 10;
-#else
+    if (HAVE_WHQL)
+    {
+        DWORD MajorVersion;
+        RtlGetNtVersionNumbers(&MajorVersion, NULL, NULL);
+        return MajorVersion >= 10;
+    }
     return FALSE;
-#endif
 }
 
 static WINTUN_STATUS
@@ -1682,15 +1682,10 @@ WintunCreateAdapter(
         RebootRequired = &DummyRebootRequired;
     *RebootRequired = FALSE;
     DWORD Result;
-#ifdef MAYBE_WOW64
-    if (NativeMachine != IMAGE_FILE_PROCESS)
-    {
+    if (MAYBE_WOW64 && NativeMachine != IMAGE_FILE_PROCESS)
         Result = CreateAdapterViaRundll32(Pool, Name, RequestedGUID, Adapter, RebootRequired);
-        RevertToSelf();
-        return Result;
-    }
-#endif
-    Result = CreateAdapter(Pool, Name, RequestedGUID, Adapter, RebootRequired);
+    else
+        Result = CreateAdapter(Pool, Name, RequestedGUID, Adapter, RebootRequired);
     RevertToSelf();
     return Result;
 }
@@ -1706,14 +1701,12 @@ WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSess
         RebootRequired = &DummyRebootRequired;
     *RebootRequired = FALSE;
     DWORD Result;
-#ifdef MAYBE_WOW64
-    if (NativeMachine != IMAGE_FILE_PROCESS)
+    if (MAYBE_WOW64 && NativeMachine != IMAGE_FILE_PROCESS)
     {
         Result = DeleteAdapterViaRundll32(Adapter, ForceCloseSessions, RebootRequired);
         RevertToSelf();
         return Result;
     }
-#endif
 
     HDEVINFO DevInfo;
     SP_DEVINFO_DATA DevInfoData;
@@ -1796,14 +1789,12 @@ WintunDeleteDriver(void)
 
     DWORD Result = ERROR_SUCCESS;
 
-#ifdef MAYBE_WOW64
-    if (NativeMachine != IMAGE_FILE_PROCESS)
+    if (MAYBE_WOW64 && NativeMachine != IMAGE_FILE_PROCESS)
     {
         Result = DeleteDriverViaRundll32();
         RevertToSelf();
         return Result;
     }
-#endif
 
     /* DeleteAllOurAdapters(); */
     HANDLE DriverInstallationLock = NamespaceTakeDriverInstallationMutex();
