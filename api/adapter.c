@@ -593,8 +593,7 @@ WINTUN_STATUS WINAPI
 WintunGetAdapter(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name, _Out_ WINTUN_ADAPTER **Adapter)
 {
     if (!ElevateToSystem())
-        return LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user"), ERROR_ACCESS_DENIED;
-
+        return LOG_LAST_ERROR(L"Failed to impersonate SYSTEM user");
     DWORD Result;
     HANDLE Mutex = NamespaceTakePoolMutex(Pool);
     if (!Mutex)
@@ -1681,7 +1680,7 @@ WintunCreateAdapter(
     _Out_opt_ BOOL *RebootRequired)
 {
     if (!ElevateToSystem())
-        return LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user"), ERROR_ACCESS_DENIED;
+        return LOG_LAST_ERROR(L"Failed to impersonate SYSTEM user");
     BOOL DummyRebootRequired;
     if (!RebootRequired)
         RebootRequired = &DummyRebootRequired;
@@ -1699,7 +1698,7 @@ WINTUN_STATUS WINAPI
 WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSessions, _Out_opt_ BOOL *RebootRequired)
 {
     if (!ElevateToSystem())
-        return LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user"), ERROR_ACCESS_DENIED;
+        return LOG_LAST_ERROR(L"Failed to impersonate SYSTEM user");
 
     BOOL DummyRebootRequired;
     if (!RebootRequired)
@@ -1790,7 +1789,7 @@ WINTUN_STATUS WINAPI
 WintunDeleteDriver(void)
 {
     if (!ElevateToSystem())
-        return LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user"), ERROR_ACCESS_DENIED;
+        return LOG_LAST_ERROR(L"Failed to impersonate SYSTEM user");
 
     DWORD Result = ERROR_SUCCESS;
 

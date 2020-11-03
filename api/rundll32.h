@@ -157,8 +157,8 @@ ExecuteRunDll32(
                                                 .Response = Response,
                                                 .ResponseCapacity = ResponseCapacity };
     HANDLE ThreadStdout = NULL, ThreadStderr = NULL;
-    if ((ThreadStdout = CreateThread(&SecurityAttributes, 0, ProcessStdout, &ProcessStdoutState, 0, NULL)) == NULL ||
-        (ThreadStderr = CreateThread(&SecurityAttributes, 0, ProcessStderr, StreamRStderr, 0, NULL)) == NULL)
+    if ((ThreadStdout = CreateThread(NULL, 0, ProcessStdout, &ProcessStdoutState, 0, NULL)) == NULL ||
+        (ThreadStderr = CreateThread(NULL, 0, ProcessStderr, StreamRStderr, 0, NULL)) == NULL)
     {
         Result = LOG_LAST_ERROR(L"Failed to spawn readers");
         goto cleanupThreads;
@@ -169,14 +169,22 @@ ExecuteRunDll32(
                         .hStdOutput = StreamWStdout,
                         .hStdError = StreamWStderr };
     PROCESS_INFORMATION pi;
-    if (!CreateProcessW(RunDll32Path, CommandLine, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
+    HANDLE ProcessToken = GetPrimarySystemTokenFromThread();
+    if (!ProcessToken)
     {
-        Result = LOG_LAST_ERROR(L"Creating process failed");
+        Result = LOG_LAST_ERROR(L"Failed to get primary system token from thread");
         goto cleanupThreads;
+    }
+    if (!CreateProcessAsUserW(ProcessToken, RunDll32Path, CommandLine, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
+    {
+        Result = LOG_LAST_ERROR(L"Failed to create process");
+        goto cleanupToken;
     }
     WaitForSingleObject(pi.hProcess, INFINITE);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
+cleanupToken:
+    CloseHandle(ProcessToken);
 cleanupThreads:
     if (ThreadStderr)
     {

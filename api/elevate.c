@@ -102,3 +102,59 @@ cleanup:
     SetLastError(LastError);
     return FALSE;
 }
+
+HANDLE
+GetPrimarySystemTokenFromThread(void)
+{
+    HANDLE CurrentThreadToken, DuplicatedToken;
+    BOOL Ret;
+    DWORD LastError;
+    TOKEN_PRIVILEGES Privileges = { .PrivilegeCount = 1, .Privileges = { { .Attributes = SE_PRIVILEGE_ENABLED } } };
+    CHAR LocalSystemSid[0x400];
+    DWORD RequiredBytes = sizeof(LocalSystemSid);
+    struct
+    {
+        TOKEN_USER MaybeLocalSystem;
+        CHAR LargeEnoughForLocalSystem[0x400];
+    } TokenUserBuffer;
+
+    Ret = CreateWellKnownSid(WinLocalSystemSid, NULL, &LocalSystemSid, &RequiredBytes);
+    if (!Ret)
+        return NULL;
+    Ret = OpenThreadToken(
+        GetCurrentThread(), TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES | TOKEN_DUPLICATE, FALSE, &CurrentThreadToken);
+    if (!Ret)
+        return NULL;
+    Ret = GetTokenInformation(CurrentThreadToken, TokenUser, &TokenUserBuffer, sizeof(TokenUserBuffer), &RequiredBytes);
+    LastError = GetLastError();
+    if (!Ret)
+        goto cleanup;
+    LastError = ERROR_ACCESS_DENIED;
+    if (!EqualSid(TokenUserBuffer.MaybeLocalSystem.User.Sid, LocalSystemSid))
+        goto cleanup;
+    Ret = LookupPrivilegeValueW(NULL, SE_ASSIGNPRIMARYTOKEN_NAME, &Privileges.Privileges[0].Luid);
+    LastError = GetLastError();
+    if (!Ret)
+        goto cleanup;
+    Ret = AdjustTokenPrivileges(CurrentThreadToken, FALSE, &Privileges, sizeof(Privileges), NULL, NULL);
+    LastError = GetLastError();
+    if (!Ret)
+        goto cleanup;
+    Ret = DuplicateTokenEx(
+        CurrentThreadToken,
+        TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
+        NULL,
+        SecurityImpersonation,
+        TokenPrimary,
+        &DuplicatedToken);
+    LastError = GetLastError();
+    if (!Ret)
+        goto cleanup;
+    CloseHandle(CurrentThreadToken);
+    return DuplicatedToken;
+
+cleanup:
+    CloseHandle(CurrentThreadToken);
+    SetLastError(LastError);
+    return FALSE;
+}

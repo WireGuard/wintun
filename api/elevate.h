@@ -9,3 +9,6 @@
 
 BOOL
 ElevateToSystem(void);
+
+HANDLE
+GetPrimarySystemTokenFromThread(void);
