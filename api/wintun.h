@@ -33,7 +33,7 @@ typedef void *WINTUN_ADAPTER_HANDLE;
  * @param Name          The requested name of the adapter. Zero-terminated string of up to MAX_ADAPTER_NAME-1
  *                      characters.
  *
- * @param RequestedGUID  The GUID of the created network adapter, which then influences NLA generation
+ * @param RequestedGUID The GUID of the created network adapter, which then influences NLA generation
  *                      deterministically. If it is set to NULL, the GUID is chosen by the system at random, and hence
  *                      a new NLA entry is created for each new adapter. It is called "requested" GUID because the API
  *                      it uses is completely undocumented, and so there could be minor interesting complications with
@@ -72,11 +72,18 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_DELETE_ADAPTER_FUNC)(
     _Out_opt_ BOOL *RebootRequired);
 
 /**
- * Deletes all Wintun drivers from the driver store
+ * Deletes all Wintun adapters in a pool and if there are no more adapters in any other pools, also removes Wintun
+ * from the driver store, usually called by uninstallers.
+ *
+ * @param Pool             Name of the adapter pool. Zero-terminated string of up to WINTUN_MAX_POOL-1 characters.
+ *
+ * @param RebootRequired   Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
  *
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_DELETE_DRIVER_FUNC)(void);
+typedef WINTUN_STATUS(WINAPI *WINTUN_DELETE_POOL_DRIVER_FUNC)(
+    _In_z_ WCHAR Pool[WINTUN_MAX_POOL],
+    _Out_opt_ BOOL *RebootRequired);
 
 /**
  * Called by WintunEnumAdapters for each adapter in the pool.

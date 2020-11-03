@@ -131,12 +131,19 @@ cleanup:
     Done();
 }
 
-VOID __stdcall DeleteDriver(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
+VOID __stdcall DeletePoolDriver(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
 {
 #    pragma EXPORT
 
     Init();
-    WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X!", WintunDeleteDriver());
+    if (Argc < 2)
+        goto cleanup;
+
+    BOOL RebootRequired;
+    WINTUN_STATUS Ret = WintunDeletePoolDriver(Argv[2], &RebootRequired);
+    WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X! %2!X!", Ret, RebootRequired);
+
+cleanup:
     Done();
 }
 #endif

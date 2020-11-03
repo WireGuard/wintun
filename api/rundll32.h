@@ -306,11 +306,15 @@ cleanupArgv:
 }
 
 static WINTUN_STATUS
-DeleteDriverViaRundll32()
+DeletePoolDriverViaRundll32(_In_z_ WCHAR Pool[WINTUN_MAX_POOL], _Inout_ BOOL *RebootRequired)
 {
     LOG(WINTUN_LOG_INFO, L"Spawning native process");
-    WCHAR Response[8 + 1];
-    DWORD Result = ExecuteRunDll32(L"DeleteDriver", Response, _countof(Response));
+
+    WCHAR Arguments[17 + WINTUN_MAX_POOL + 1];
+    if (_snwprintf_s(Arguments, _countof(Arguments), _TRUNCATE, L"DeletePoolDriver %s", Pool) == -1)
+        return LOG(WINTUN_LOG_ERR, L"Command line too long"), ERROR_INVALID_PARAMETER;
+    WCHAR Response[8 + 1 + 8 + 1];
+    DWORD Result = ExecuteRunDll32(Arguments, Response, _countof(Response));
     if (Result != ERROR_SUCCESS)
     {
         LOG(WINTUN_LOG_ERR, L"Error executing worker process");
@@ -318,13 +322,15 @@ DeleteDriverViaRundll32()
     }
     int Argc;
     WCHAR **Argv = CommandLineToArgvW(Response, &Argc);
-    if (Argc < 1)
+    if (Argc < 2)
     {
         LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response");
         Result = ERROR_INVALID_PARAMETER;
         goto cleanupArgv;
     }
     Result = wcstoul(Argv[0], NULL, 16);
+    if (wcstoul(Argv[1], NULL, 16))
+        *RebootRequired = TRUE;
 cleanupArgv:
     LocalFree(Argv);
     return Result;

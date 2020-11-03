@@ -1750,12 +1750,18 @@ cleanupToken:
 }
 
 static WINTUN_STATUS
-DeleteAllOurAdapters(void)
+DeleteAllOurAdapters(_In_ WCHAR Pool[WINTUN_MAX_POOL], _Inout_ BOOL *RebootRequired)
 {
+    HANDLE Mutex = NamespaceTakePoolMutex(Pool);
+    if (!Mutex)
+        return ERROR_INVALID_HANDLE;
     DWORD Result = ERROR_SUCCESS;
     HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
+    {
+        NamespaceReleaseMutex(Mutex);
         return LOG_LAST_ERROR(L"Failed to get present adapters");
+    }
     SP_REMOVEDEVICE_PARAMS Params = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
                                                               .InstallFunction = DIF_REMOVE },
                                       .Scope = DI_REMOVEDEVICE_GLOBAL };
@@ -1772,39 +1778,58 @@ DeleteAllOurAdapters(void)
         BOOL IsOurs;
         if (IsOurAdapter(DevInfo, &DevInfoData, &IsOurs) != ERROR_SUCCESS || !IsOurs)
             continue;
+        BOOL IsMember;
+        Result = IsPoolMember(Pool, DevInfo, &DevInfoData, &IsMember);
+        if (Result != ERROR_SUCCESS)
+        {
+            LOG(WINTUN_LOG_ERR, L"Failed to get pool membership");
+            break;
+        }
+        if (!IsMember)
+            continue;
 
         LOG(WINTUN_LOG_INFO, L"Force closing all open handles for existing adapter");
         if (ForceCloseWintunAdapterHandle(DevInfo, &DevInfoData) != ERROR_SUCCESS)
             LOG(WINTUN_LOG_WARN, L"Failed to force close adapter handles");
 
         LOG(WINTUN_LOG_INFO, L"Removing existing adapter");
-        if (!SetupDiSetClassInstallParamsW(DevInfo, &DevInfoData, &Params.ClassInstallHeader, sizeof(Params)) ||
-            !SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
+        if (SetupDiSetClassInstallParamsW(DevInfo, &DevInfoData, &Params.ClassInstallHeader, sizeof(Params)) &&
+            SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
+            *RebootRequired = *RebootRequired || CheckReboot(DevInfo, &DevInfoData);
+        else
         {
             LOG_LAST_ERROR(L"Failed to remove existing adapter");
             Result = Result != ERROR_SUCCESS ? Result : GetLastError();
         }
     }
     SetupDiDestroyDeviceInfoList(DevInfo);
+    NamespaceReleaseMutex(Mutex);
     return Result;
 }
 
 WINTUN_STATUS WINAPI
-WintunDeleteDriver(void)
+WintunDeletePoolDriver(_In_z_ WCHAR Pool[WINTUN_MAX_POOL], _Out_opt_ BOOL *RebootRequired)
 {
     if (!ElevateToSystem())
         return LOG_LAST_ERROR(L"Failed to impersonate SYSTEM user");
 
-    DWORD Result = ERROR_SUCCESS;
+    BOOL DummyRebootRequired;
+    if (!RebootRequired)
+        RebootRequired = &DummyRebootRequired;
+    *RebootRequired = FALSE;
 
+    DWORD Result;
     if (MAYBE_WOW64 && NativeMachine != IMAGE_FILE_PROCESS)
     {
-        Result = DeleteDriverViaRundll32();
+        Result = DeletePoolDriverViaRundll32(Pool, RebootRequired);
         RevertToSelf();
         return Result;
     }
 
-    /* DeleteAllOurAdapters(); */
+    Result = DeleteAllOurAdapters(Pool, RebootRequired);
+    if (Result != ERROR_SUCCESS)
+        goto cleanupToken;
+
     HANDLE DriverInstallationLock = NamespaceTakeDriverInstallationMutex();
     if (!DriverInstallationLock)
     {
@@ -1837,7 +1862,7 @@ WintunDeleteDriver(void)
         if (!_wcsicmp(DriverDetail->HardwareID, WINTUN_HWID))
         {
             LOG(WINTUN_LOG_INFO, TEXT("Removing existing driver"));
-            if (!SetupUninstallOEMInfW(PathFindFileNameW(DriverDetail->InfFileName), SUOI_FORCEDELETE, NULL))
+            if (!SetupUninstallOEMInfW(PathFindFileNameW(DriverDetail->InfFileName), 0, NULL))
             {
                 LOG_LAST_ERROR(TEXT("Unable to remove existing driver"));
                 Result = Result != ERROR_SUCCESS ? Result : GetLastError();

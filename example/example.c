@@ -14,7 +14,7 @@
 
 static WINTUN_CREATE_ADAPTER_FUNC WintunCreateAdapter;
 static WINTUN_DELETE_ADAPTER_FUNC WintunDeleteAdapter;
-static WINTUN_DELETE_DRIVER_FUNC WintunDeleteDriver;
+static WINTUN_DELETE_POOL_DRIVER_FUNC WintunDeletePoolDriver;
 static WINTUN_ENUM_ADAPTERS_FUNC WintunEnumAdapters;
 static WINTUN_FREE_ADAPTER_FUNC WintunFreeAdapter;
 static WINTUN_GET_ADAPTER_FUNC WintunGetAdapter;
@@ -258,8 +258,9 @@ InitializeWintun(void)
         return NULL;
 #define X(Name, Type) ((Name = (Type)GetProcAddress(Wintun, #Name)) == NULL)
     if (X(WintunCreateAdapter, WINTUN_CREATE_ADAPTER_FUNC) || X(WintunDeleteAdapter, WINTUN_DELETE_ADAPTER_FUNC) ||
-        X(WintunDeleteDriver, WINTUN_DELETE_DRIVER_FUNC) || X(WintunEnumAdapters, WINTUN_ENUM_ADAPTERS_FUNC) ||
-        X(WintunFreeAdapter, WINTUN_FREE_ADAPTER_FUNC) || X(WintunGetAdapter, WINTUN_GET_ADAPTER_FUNC) ||
+        X(WintunDeletePoolDriver, WINTUN_DELETE_POOL_DRIVER_FUNC) ||
+        X(WintunEnumAdapters, WINTUN_ENUM_ADAPTERS_FUNC) || X(WintunFreeAdapter, WINTUN_FREE_ADAPTER_FUNC) ||
+        X(WintunGetAdapter, WINTUN_GET_ADAPTER_FUNC) ||
         X(WintunGetAdapterDeviceObject, WINTUN_GET_ADAPTER_DEVICE_OBJECT_FUNC) ||
         X(WintunGetAdapterGUID, WINTUN_GET_ADAPTER_GUID_FUNC) ||
         X(WintunGetAdapterLUID, WINTUN_GET_ADAPTER_LUID_FUNC) ||
@@ -315,17 +316,14 @@ main(void)
     }
 
     DWORD Version = WintunGetVersion();
-    Log(WINTUN_LOG_INFO,
-        L"Wintun v%u.%u loaded",
-        (Version >> 16) & 0xff,
-        (Version >> 0) & 0xff);
+    Log(WINTUN_LOG_INFO, L"Wintun v%u.%u loaded", (Version >> 16) & 0xff, (Version >> 0) & 0xff);
 
     MIB_UNICASTIPADDRESS_ROW AddressRow;
     InitializeUnicastIpAddressEntry(&AddressRow);
     WintunGetAdapterLUID(Adapter, &AddressRow.InterfaceLuid);
     AddressRow.Address.Ipv4.sin_family = AF_INET;
     AddressRow.Address.Ipv4.sin_addr.S_un.S_addr = htonl((10 << 24) | (6 << 16) | (7 << 8) | (7 << 0)); /* 10.6.7.7 */
-    AddressRow.OnLinkPrefixLength = 24;                                                                 /* This is a /24 network */
+    AddressRow.OnLinkPrefixLength = 24; /* This is a /24 network */
     Result = CreateUnicastIpAddressEntry(&AddressRow);
     if (Result != ERROR_SUCCESS)
     {

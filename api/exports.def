@@ -3,7 +3,7 @@ EXPORTS
 	WintunAllocateSendPacket
 	WintunCreateAdapter
 	WintunDeleteAdapter
-	WintunDeleteDriver
+	WintunDeletePoolDriver
 	WintunEndSession
 	WintunEnumAdapters
 	WintunFreeAdapter

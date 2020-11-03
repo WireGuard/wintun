@@ -58,7 +58,7 @@ WINTUN_STATUS WINAPI
 WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSessions, _Out_opt_ BOOL *RebootRequired);
 
 /**
- * @copydoc WINTUN_DELETE_DRIVER_FUNC
+ * @copydoc WINTUN_DELETE_POOL_DRIVER_FUNC
  */
 WINTUN_STATUS WINAPI
-WintunDeleteDriver(void);
+WintunDeletePoolDriver(_In_z_ WCHAR Pool[WINTUN_MAX_POOL], _Out_opt_ BOOL *RebootRequired);
