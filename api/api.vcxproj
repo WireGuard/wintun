@@ -115,10 +115,12 @@
       <PreprocessorDefinitions Condition="'$(Platform)'=='ARM'">_M_ARM=7;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='ARM64'">_M_ARM64=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
-    <PreLinkEvent Condition="!exists('$(IntDir)nci.lib')">
-      <Command>cl.exe /nologo /DGENERATE_LIB /Ob0 /c /Fo"$(IntDir)nci.obj" /Tc nci.h
-lib.exe /def:nci.def /out:"$(IntDir)nci.lib" /machine:$(PlatformTarget) /nologo "$(IntDir)nci.obj"</Command>
-    </PreLinkEvent>
+    <CustomBuildStep>
+      <Command>cl.exe /nologo /DGENERATE_LIB /Ob0 /c /Fo"$(IntDir)nci.obj" /Tc "$(ProjectDir)nci.h"
+lib.exe /def:"$(ProjectDir)nci.def" /out:"$(IntDir)nci.lib" /machine:$(PlatformTarget) /nologo "$(IntDir)nci.obj"</Command>
+      <Outputs>$(IntDir)nci.lib</Outputs>
+      <Inputs>$(ProjectDir)nci.def;$(ProjectDir)nci.h</Inputs>
+    </CustomBuildStep>
     <Link>
       <DelayLoadDLLs>bcrypt.dll;iphlpapi.dll;nci.dll;newdev.dll;version.dll</DelayLoadDLLs>
       <AdditionalDependencies>Bcrypt.lib;Crypt32.lib;Cfgmgr32.lib;Iphlpapi.lib;$(IntDir)nci.lib;newdev.lib;ntdll.lib;Setupapi.lib;shlwapi.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -189,6 +191,7 @@ lib.exe /def:nci.def /out:"$(IntDir)nci.lib" /machine:$(PlatformTarget) /nologo 
     <CleanDependsOn>CleanSignTarget;$(CleanDependsOn)</CleanDependsOn>
     <SignTargetCommandLine Condition="$(SignMode)=='TestSign'">"$(SignToolPath)" sign /sha1 "$(TestCertificate)" /fd sha256 "$(TargetPath)"</SignTargetCommandLine>
     <SignTargetCommandLine Condition="$(SignMode)=='ProductionSign'">"$(SignToolPath)" sign /sha1 "$(ProductionCertificate)" /fd sha256 /tr "$(TimeStampServer)" /td sha256 "$(TargetPath)"</SignTargetCommandLine>
+    <CustomBuildBeforeTargets>Link</CustomBuildBeforeTargets>
   </PropertyGroup>
   <Target Name="SignTarget" Condition="'$(SignTargetCommandLine)'!=''" Inputs="$(TargetPath)" Outputs="$(IntermediateOutputPath)$(TargetName).sign">
     <Exec Command="$(SignTargetCommandLine)" />
