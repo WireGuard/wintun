@@ -998,7 +998,7 @@ VersionOfInf(_Out_ FILETIME *DriverDate, _Out_ DWORDLONG *DriverVersion)
         SectUnknown,
         SectVersion
     } Section = SectNone;
-    for (const CHAR *Inf = (const CHAR *)LockedResource, *InfEnd = Inf + SizeResource; Inf < InfEnd; ++Inf)
+    for (const char *Inf = (const char *)LockedResource, *InfEnd = Inf + SizeResource; Inf < InfEnd; ++Inf)
     {
         if (*Inf == ';')
         {
@@ -1019,46 +1019,48 @@ VersionOfInf(_Out_ FILETIME *DriverDate, _Out_ DWORDLONG *DriverVersion)
                 {
                     Inf = SkipWSpace(Inf + 1, InfEnd);
                     /* Duplicate buffer, as resource is not zero-terminated. */
-                    CHAR buf[0x100];
-                    size_t n = InfEnd - Inf;
-                    if (n >= _countof(buf))
-                        n = _countof(buf) - 1;
-                    strncpy_s(buf, _countof(buf), Inf, n);
-                    buf[n] = 0;
-                    const CHAR *p = buf;
-                    CHAR *p_next;
-                    unsigned long date[3] = { 0 };
-                    for (size_t i = 0;; ++i, ++p)
+                    char Buffer[0x100];
+                    size_t BufferLen = InfEnd - Inf;
+                    if (BufferLen >= _countof(Buffer))
+                        BufferLen = _countof(Buffer) - 1;
+                    strncpy_s(Buffer, _countof(Buffer), Inf, BufferLen);
+                    Buffer[BufferLen] = 0;
+                    const char *Ptr = Buffer;
+                    unsigned long Date[3] = { 0 };
+                    for (size_t i = 0;; ++i, ++Ptr)
                     {
-                        date[i] = strtoul(p, &p_next, 10);
-                        p = p_next;
-                        if (i >= _countof(date) - 1)
+                        char *PtrNext;
+                        Date[i] = strtoul(Ptr, &PtrNext, 10);
+                        Ptr = PtrNext;
+                        if (i >= _countof(Date) - 1)
                             break;
-                        if (*p != '/' && *p != '-')
+                        if (*Ptr != '/' && *Ptr != '-')
                             return LOG(WINTUN_LOG_ERR, L"Unexpected date delimiter"), ERROR_INVALID_DATA;
                     }
-                    if (date[0] < 1 || date[0] > 12 || date[1] < 1 || date[1] > 31 || date[2] < 1601 || date[2] > 30827)
+                    if (Date[0] < 1 || Date[0] > 12 || Date[1] < 1 || Date[1] > 31 || Date[2] < 1601 || Date[2] > 30827)
                         return LOG(WINTUN_LOG_ERR, L"Invalid date"), ERROR_INVALID_DATA;
-                    const SYSTEMTIME st = { .wYear = (WORD)date[2], .wMonth = (WORD)date[0], .wDay = (WORD)date[1] };
-                    SystemTimeToFileTime(&st, DriverDate);
-                    p = SkipWSpace(p, buf + n);
-                    ULONGLONG version[4] = { 0 };
-                    if (*p == ',')
+                    const SYSTEMTIME SystemTime = { .wYear = (WORD)Date[2], .wMonth = (WORD)Date[0], .wDay = (WORD)Date[1] };
+                    if (!SystemTimeToFileTime(&SystemTime, DriverDate))
+                        return LOG_LAST_ERROR(L"Failed to convert system time to file time");
+                    Ptr = SkipWSpace(Ptr, Buffer + BufferLen);
+                    ULONGLONG Version[4] = { 0 };
+                    if (*Ptr == ',')
                     {
-                        p = SkipWSpace(p + 1, buf + n);
-                        for (size_t i = 0;; ++i, ++p)
+                        Ptr = SkipWSpace(Ptr + 1, Buffer + BufferLen);
+                        for (size_t i = 0;; ++i, ++Ptr)
                         {
-                            version[i] = strtoul(p, &p_next, 10);
-                            if (version[i] > 0xffff)
+                            char *PtrNext;
+                            Version[i] = strtoul(Ptr, &PtrNext, 10);
+                            if (Version[i] > 0xffff)
                                 return LOG(WINTUN_LOG_ERR, L"Version field may not exceed 65535"), ERROR_INVALID_DATA;
-                            p = p_next;
-                            if (i >= _countof(version) - 1 || !*p || *p == ';' || iswspace(*p))
+                            Ptr = PtrNext;
+                            if (i >= _countof(Version) - 1 || !*Ptr || *Ptr == ';' || iswspace(*Ptr))
                                 break;
-                            if (*p != '.')
+                            if (*Ptr != '.')
                                 return LOG(WINTUN_LOG_ERR, L"Unexpected version delimiter"), ERROR_INVALID_DATA;
                         }
                     }
-                    *DriverVersion = (version[0] << 48) | (version[1] << 32) | (version[2] << 16) | (version[3] << 0);
+                    *DriverVersion = (Version[0] << 48) | (Version[1] << 32) | (Version[2] << 16) | (Version[3] << 0);
                     return ERROR_SUCCESS;
                 }
             }
