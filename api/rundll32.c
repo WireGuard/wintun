@@ -77,13 +77,11 @@ Done(void)
     LocalFree(Argv);
 }
 
+#pragma warning(disable: 4100) /* unreferenced formal parameter */
+
 VOID __stdcall CreateAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
 {
 #    pragma EXPORT
-    UNREFERENCED_PARAMETER(hwnd);
-    UNREFERENCED_PARAMETER(hinst);
-    UNREFERENCED_PARAMETER(lpszCmdLine);
-    UNREFERENCED_PARAMETER(nCmdShow);
 
     Init();
     if (Argc < 4)
@@ -116,10 +114,6 @@ cleanup:
 VOID __stdcall DeleteAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
 {
 #    pragma EXPORT
-    UNREFERENCED_PARAMETER(hwnd);
-    UNREFERENCED_PARAMETER(hinst);
-    UNREFERENCED_PARAMETER(lpszCmdLine);
-    UNREFERENCED_PARAMETER(nCmdShow);
 
     Init();
     if (Argc < 3)
@@ -140,10 +134,6 @@ cleanup:
 VOID __stdcall DeleteDriver(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
 {
 #    pragma EXPORT
-    UNREFERENCED_PARAMETER(hwnd);
-    UNREFERENCED_PARAMETER(hinst);
-    UNREFERENCED_PARAMETER(lpszCmdLine);
-    UNREFERENCED_PARAMETER(nCmdShow);
 
     Init();
     WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X!", WintunDeleteDriver());
