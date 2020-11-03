@@ -1197,6 +1197,7 @@ SelectDriver(
         Result = LOG_LAST_ERROR(L"Failed building driver info list");
         goto cleanupDriverInstallationLock;
     }
+    BOOL DestroyDriverInfoListOnCleanup = TRUE;
     FILETIME DriverDate = { 0 };
     DWORDLONG DriverVersion = 0;
     HDEVINFO DevInfoExistingAdapters = INVALID_HANDLE_VALUE;
@@ -1227,7 +1228,8 @@ SelectDriver(
                 if (DevInfoExistingAdapters == INVALID_HANDLE_VALUE)
                 {
                     Result = LOG_LAST_ERROR(L"Failed to get present adapters");
-                    goto cleanupDrvInfoDetailData;
+                    HeapFree(ModuleHeap, 0, DrvInfoDetailData);
+                    goto cleanupExistingAdapters;
                 }
                 _Analysis_assume_(DevInfoExistingAdapters != NULL);
                 DisableAllOurAdapters(DevInfoExistingAdapters, &ExistingAdapters);
@@ -1252,14 +1254,13 @@ SelectDriver(
         DriverVersion = DrvInfoData.DriverVersion;
     next:
         HeapFree(ModuleHeap, 0, DrvInfoDetailData);
-        continue;
-    cleanupDrvInfoDetailData:
-        HeapFree(ModuleHeap, 0, DrvInfoDetailData);
-        goto cleanupExistingAdapters;
     }
 
     if (DriverVersion)
+    {
+        DestroyDriverInfoListOnCleanup = FALSE;
         goto cleanupExistingAdapters;
+    }
 
     WCHAR RandomTempSubDirectory[MAX_PATH];
     if ((Result = CreateTemporaryDirectory(RandomTempSubDirectory)) != ERROR_SUCCESS)
@@ -1307,6 +1308,7 @@ SelectDriver(
     *RebootRequired = *RebootRequired || UpdateRebootRequired;
 
     SetupDiDestroyDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER);
+    DestroyDriverInfoListOnCleanup = FALSE;
     DevInstallParams->Flags |= DI_ENUMSINGLEINF;
     if (wcsncpy_s(DevInstallParams->DriverPath, _countof(DevInstallParams->DriverPath), InfStorePath, _TRUNCATE) ==
         STRUNCATE)
@@ -1325,6 +1327,7 @@ SelectDriver(
         Result = LOG_LAST_ERROR(L"Failed rebuilding driver info list");
         goto cleanupDelete;
     }
+    DestroyDriverInfoListOnCleanup = TRUE;
     SP_DRVINFO_DATA_W DrvInfoData = { .cbSize = sizeof(SP_DRVINFO_DATA_W) };
     if (!SetupDiEnumDriverInfoW(DevInfo, DevInfoData, SPDIT_COMPATDRIVER, 0, &DrvInfoData))
     {
@@ -1337,6 +1340,7 @@ SelectDriver(
         goto cleanupDelete;
     }
     Result = ERROR_SUCCESS;
+    DestroyDriverInfoListOnCleanup = FALSE;
 
 cleanupDelete:
     DeleteFileW(CatPath);
@@ -1357,7 +1361,7 @@ cleanupExistingAdapters:
     }
     if (DevInfoExistingAdapters != INVALID_HANDLE_VALUE)
         SetupDiDestroyDeviceInfoList(DevInfoExistingAdapters);
-    if (Result != ERROR_SUCCESS)
+    if (DestroyDriverInfoListOnCleanup)
         SetupDiDestroyDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER);
 cleanupDriverInstallationLock:
     NamespaceReleaseMutex(DriverInstallationLock);
