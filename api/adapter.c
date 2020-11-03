@@ -12,6 +12,7 @@
 #include "ntdll.h"
 #include "registry.h"
 #include "resource.h"
+#include "wintun-inf.h"
 
 #include <Windows.h>
 #include <winternl.h>
@@ -950,109 +951,6 @@ cleanupTcpipAdapterRegKey:
     return Result;
 }
 
-static const CHAR *
-SkipWSpace(_In_ const CHAR *Beg, _In_ const CHAR *End)
-{
-    for (; Beg < End && iswspace(*Beg); ++Beg)
-        ;
-    return Beg;
-}
-
-static const CHAR *
-SkipNonLF(_In_ const CHAR *Beg, _In_ const CHAR *End)
-{
-    for (; Beg < End && *Beg != '\n'; ++Beg)
-        ;
-    return Beg;
-}
-
-static WINTUN_STATUS
-VersionOfInf(_Out_ FILETIME *DriverDate, _Out_ DWORDLONG *DriverVersion)
-{
-    const VOID *LockedResource;
-    DWORD SizeResource;
-    DWORD Result = ResourceGetAddress(HaveWHQL() ? L"wintun-whql.inf" : L"wintun.inf", &LockedResource, &SizeResource);
-    if (Result != ERROR_SUCCESS)
-        return LOG(WINTUN_LOG_ERR, L"Failed to locate resource"), Result;
-    enum
-    {
-        SectNone,
-        SectUnknown,
-        SectVersion
-    } Section = SectNone;
-    for (const char *Inf = (const char *)LockedResource, *InfEnd = Inf + SizeResource; Inf < InfEnd; ++Inf)
-    {
-        if (*Inf == ';')
-        {
-            Inf = SkipNonLF(Inf + 1, InfEnd);
-            continue;
-        }
-        Inf = SkipWSpace(Inf, InfEnd);
-        if (*Inf == '[')
-        {
-            Section = Inf + 9 <= InfEnd && !_strnicmp(Inf, "[Version]", 9) ? SectVersion : SectUnknown;
-        }
-        else if (Section == SectVersion)
-        {
-            if (Inf + 9 <= InfEnd && !_strnicmp(Inf, "DriverVer", 9))
-            {
-                Inf = SkipWSpace(Inf + 9, InfEnd);
-                if (Inf < InfEnd && *Inf == '=')
-                {
-                    Inf = SkipWSpace(Inf + 1, InfEnd);
-                    /* Duplicate buffer, as resource is not zero-terminated. */
-                    char Buffer[0x100];
-                    size_t BufferLen = InfEnd - Inf;
-                    if (BufferLen >= _countof(Buffer))
-                        BufferLen = _countof(Buffer) - 1;
-                    strncpy_s(Buffer, _countof(Buffer), Inf, BufferLen);
-                    Buffer[BufferLen] = 0;
-                    const char *Ptr = Buffer;
-                    unsigned long Date[3] = { 0 };
-                    for (size_t i = 0;; ++i, ++Ptr)
-                    {
-                        char *PtrNext;
-                        Date[i] = strtoul(Ptr, &PtrNext, 10);
-                        Ptr = PtrNext;
-                        if (i >= _countof(Date) - 1)
-                            break;
-                        if (*Ptr != '/' && *Ptr != '-')
-                            return LOG(WINTUN_LOG_ERR, L"Unexpected date delimiter"), ERROR_INVALID_DATA;
-                    }
-                    if (Date[0] < 1 || Date[0] > 12 || Date[1] < 1 || Date[1] > 31 || Date[2] < 1601 || Date[2] > 30827)
-                        return LOG(WINTUN_LOG_ERR, L"Invalid date"), ERROR_INVALID_DATA;
-                    const SYSTEMTIME SystemTime = { .wYear = (WORD)Date[2], .wMonth = (WORD)Date[0], .wDay = (WORD)Date[1] };
-                    if (!SystemTimeToFileTime(&SystemTime, DriverDate))
-                        return LOG_LAST_ERROR(L"Failed to convert system time to file time");
-                    Ptr = SkipWSpace(Ptr, Buffer + BufferLen);
-                    ULONGLONG Version[4] = { 0 };
-                    if (*Ptr == ',')
-                    {
-                        Ptr = SkipWSpace(Ptr + 1, Buffer + BufferLen);
-                        for (size_t i = 0;; ++i, ++Ptr)
-                        {
-                            char *PtrNext;
-                            Version[i] = strtoul(Ptr, &PtrNext, 10);
-                            if (Version[i] > 0xffff)
-                                return LOG(WINTUN_LOG_ERR, L"Version field may not exceed 65535"), ERROR_INVALID_DATA;
-                            Ptr = PtrNext;
-                            if (i >= _countof(Version) - 1 || !*Ptr || *Ptr == ';' || iswspace(*Ptr))
-                                break;
-                            if (*Ptr != '.')
-                                return LOG(WINTUN_LOG_ERR, L"Unexpected version delimiter"), ERROR_INVALID_DATA;
-                        }
-                    }
-                    *DriverVersion = (Version[0] << 48) | (Version[1] << 32) | (Version[2] << 16) | (Version[3] << 0);
-                    return ERROR_SUCCESS;
-                }
-            }
-        }
-        Inf = SkipNonLF(Inf, InfEnd);
-    }
-    LOG(WINTUN_LOG_ERR, L"DriverVer not found in INF resource");
-    return ERROR_FILE_NOT_FOUND;
-}
-
 static DWORD
 VersionOfFile(_In_z_ const WCHAR *Filename)
 {
@@ -1164,17 +1062,12 @@ SelectDriver(
     _Inout_ SP_DEVINSTALL_PARAMS_W *DevInstallParams,
     _Inout_ BOOL *RebootRequired)
 {
-    FILETIME OurDriverDate;
-    DWORDLONG OurDriverVersion;
-    DWORD Result = VersionOfInf(&OurDriverDate, &OurDriverVersion);
-    if (Result != ERROR_SUCCESS)
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to determine own driver version");
-        return Result;
-    }
+    static const FILETIME OurDriverDate = WINTUN_INF_FILETIME;
+    static const DWORDLONG OurDriverVersion = WINTUN_INF_VERSION;
     HANDLE DriverInstallationLock = NamespaceTakeDriverInstallationMutex();
     if (!DriverInstallationLock)
         return LOG_LAST_ERROR(L"Failed to take driver installation mutex");
+    DWORD Result = ERROR_SUCCESS;
     if (!SetupDiBuildDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER))
     {
         Result = LOG_LAST_ERROR(L"Failed building driver info list");
