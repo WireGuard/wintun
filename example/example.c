@@ -314,11 +314,9 @@ main(void)
         goto cleanupQuit;
     }
 
-    DWORDLONG Version = WintunGetVersion();
+    DWORD Version = WintunGetVersion();
     Log(WINTUN_LOG_INFO,
-        L"Wintun v%d.%d.%d.%d loaded",
-        (Version >> 48) & 0xff,
-        (Version >> 32) & 0xff,
+        L"Wintun v%u.%u loaded",
         (Version >> 16) & 0xff,
         (Version >> 0) & 0xff);
 

@@ -1070,10 +1070,10 @@ VersionOfInf(_Out_ FILETIME *DriverDate, _Out_ DWORDLONG *DriverVersion)
     return ERROR_FILE_NOT_FOUND;
 }
 
-static DWORDLONG
+static DWORD
 VersionOfFile(_In_z_ const WCHAR *Filename)
 {
-    DWORDLONG Version = 0;
+    DWORD Version = 0;
     DWORD Zero;
     DWORD Len = GetFileVersionInfoSizeW(Filename, &Zero);
     if (!Len)
@@ -1096,7 +1096,7 @@ VersionOfFile(_In_z_ const WCHAR *Filename)
         LOG_LAST_ERROR(L"Failed to get version info root");
         goto out;
     }
-    Version = (DWORDLONG)FixedInfo->dwFileVersionLS | ((DWORDLONG)FixedInfo->dwFileVersionMS << 32);
+    Version = FixedInfo->dwFileVersionMS;
 out:
     HeapFree(ModuleHeap, 0, VersionInfo);
     return Version;
@@ -1125,10 +1125,10 @@ CreateTemporaryDirectory(_Out_cap_c_(MAX_PATH) WCHAR *RandomTempSubDirectory)
     return ERROR_SUCCESS;
 }
 
-DWORDLONG
+DWORD
 WintunGetVersion(void)
 {
-    DWORDLONG Version = 0;
+    DWORD Version = 0;
     PRTL_PROCESS_MODULES Modules;
     ULONG BufferSize = 128 * 1024;
     for (;;)

@@ -190,7 +190,7 @@ typedef WINTUN_STATUS(
  *
  * @return The version number on success, or 0 if failure or Wintun not loaded.
  */
-typedef DWORDLONG(WINAPI *WINTUN_GET_VERSION_FUNC)(void);
+typedef DWORD(WINAPI *WINTUN_GET_VERSION_FUNC)(void);
 
 typedef enum _WINTUN_LOGGER_LEVEL
 {
