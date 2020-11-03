@@ -9,42 +9,54 @@
 #include <Windows.h>
 #include <wchar.h>
 
-static WINTUN_STATUS
-OpenKeyWait(_In_ HKEY Key, _Inout_z_ WCHAR *Path, _In_ DWORD Access, _In_ ULONGLONG Deadline, _Out_ HKEY *KeyOut)
+static _Return_type_success_(return != NULL) HKEY
+    OpenKeyWait(_In_ HKEY Key, _Inout_z_ WCHAR *Path, _In_ DWORD Access, _In_ ULONGLONG Deadline)
 {
-    DWORD Result;
+    DWORD LastError;
     WCHAR *PathNext = wcschr(Path, L'\\');
     if (PathNext)
         *PathNext = 0;
 
     HANDLE Event = CreateEventW(NULL, FALSE, FALSE, NULL);
     if (!Event)
-        return LOG_LAST_ERROR(L"Failed to create event");
+    {
+        LOG_LAST_ERROR(L"Failed to create event");
+        return NULL;
+    }
     for (;;)
     {
-        Result = RegNotifyChangeKeyValue(Key, FALSE, REG_NOTIFY_CHANGE_NAME, Event, TRUE);
-        if (Result != ERROR_SUCCESS)
+        LastError = RegNotifyChangeKeyValue(Key, FALSE, REG_NOTIFY_CHANGE_NAME, Event, TRUE);
+        if (LastError != ERROR_SUCCESS)
         {
-            LOG_ERROR(L"Failed to setup notification", Result);
+            LOG_ERROR(L"Failed to setup notification", LastError);
             break;
         }
 
         HKEY Subkey;
-        Result = RegOpenKeyExW(Key, Path, 0, PathNext ? KEY_NOTIFY : Access, &Subkey);
-        if (Result == ERROR_SUCCESS)
+        LastError = RegOpenKeyExW(Key, Path, 0, PathNext ? KEY_NOTIFY : Access, &Subkey);
+        if (LastError == ERROR_SUCCESS)
         {
             if (PathNext)
             {
-                Result = OpenKeyWait(Subkey, PathNext + 1, Access, Deadline, KeyOut);
-                RegCloseKey(Subkey);
+                HKEY KeyOut = OpenKeyWait(Subkey, PathNext + 1, Access, Deadline);
+                if (KeyOut)
+                {
+                    RegCloseKey(Subkey);
+                    CloseHandle(Event);
+                    return KeyOut;
+                }
+                LastError = GetLastError();
+                break;
             }
             else
-                *KeyOut = Subkey;
-            break;
+            {
+                CloseHandle(Event);
+                return Subkey;
+            }
         }
-        if (Result != ERROR_FILE_NOT_FOUND && Result != ERROR_PATH_NOT_FOUND)
+        if (LastError != ERROR_FILE_NOT_FOUND && LastError != ERROR_PATH_NOT_FOUND)
         {
-            LOG_ERROR(L"Failed to open", Result);
+            LOG_ERROR(L"Failed to open", LastError);
             break;
         }
 
@@ -58,27 +70,35 @@ OpenKeyWait(_In_ HKEY Key, _Inout_z_ WCHAR *Path, _In_ DWORD Access, _In_ ULONGL
         }
     }
     CloseHandle(Event);
-    return Result;
+    SetLastError(LastError);
+    return NULL;
 }
 
-WINTUN_STATUS
-RegistryOpenKeyWait(_In_ HKEY Key, _In_z_ const WCHAR *Path, _In_ DWORD Access, _In_ DWORD Timeout, _Out_ HKEY *KeyOut)
+_Return_type_success_(return != NULL) HKEY
+    RegistryOpenKeyWait(_In_ HKEY Key, _In_z_ const WCHAR *Path, _In_ DWORD Access, _In_ DWORD Timeout)
 {
     WCHAR Buf[MAX_REG_PATH];
     if (wcsncpy_s(Buf, _countof(Buf), Path, _TRUNCATE) == STRUNCATE)
-        return LOG(WINTUN_LOG_ERR, L"Registry path too long"), ERROR_INVALID_PARAMETER;
-    return OpenKeyWait(Key, Buf, Access, GetTickCount64() + Timeout, KeyOut);
+    {
+        LOG(WINTUN_LOG_ERR, L"Registry path too long");
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
+    return OpenKeyWait(Key, Buf, Access, GetTickCount64() + Timeout);
 }
 
-WINTUN_STATUS
-RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
+_Return_type_success_(return != FALSE) BOOL RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
 {
     if (wcsnlen(*Buf, Len) >= Len)
     {
         /* String is missing zero-terminator. */
         WCHAR *BufZ = HeapAlloc(ModuleHeap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
         if (!BufZ)
-            return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
+        {
+            LOG(WINTUN_LOG_ERR, L"Out of memory");
+            SetLastError(ERROR_OUTOFMEMORY);
+            return FALSE;
+        }
         wmemcpy(BufZ, *Buf, Len);
         BufZ[Len] = 0;
         HeapFree(ModuleHeap, 0, *Buf);
@@ -86,25 +106,30 @@ RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
     }
 
     if (ValueType != REG_EXPAND_SZ)
-        return ERROR_SUCCESS;
+        return TRUE;
 
     /* ExpandEnvironmentStringsW() returns strlen on success or 0 on error. Bail out on empty input strings to
      * disambiguate. */
     if (!(*Buf)[0])
-        return ERROR_SUCCESS;
+        return TRUE;
 
     Len = Len * 2 + 64;
     for (;;)
     {
         WCHAR *Expanded = HeapAlloc(ModuleHeap, 0, Len * sizeof(WCHAR));
         if (!Expanded)
-            return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
+        {
+            LOG(WINTUN_LOG_ERR, L"Out of memory");
+            SetLastError(ERROR_OUTOFMEMORY);
+            return FALSE;
+        }
         DWORD Result = ExpandEnvironmentStringsW(*Buf, Expanded, Len);
         if (!Result)
         {
-            Result = LOG_LAST_ERROR(L"Failed to expand environment variables");
+            DWORD LastError = LOG_LAST_ERROR(L"Failed to expand environment variables");
             HeapFree(ModuleHeap, 0, Expanded);
-            return Result;
+            SetLastError(LastError);
+            return FALSE;
         }
         if (Result > Len)
         {
@@ -114,12 +139,12 @@ RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
         }
         HeapFree(ModuleHeap, 0, *Buf);
         *Buf = Expanded;
-        return ERROR_SUCCESS;
+        return TRUE;
     }
 }
 
-WINTUN_STATUS
-RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
+_Return_type_success_(return != FALSE) BOOL
+    RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
 {
     if (ValueType == REG_MULTI_SZ)
     {
@@ -130,52 +155,61 @@ RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType
                 /* Missing string and list terminators. */
                 WCHAR *BufZ = HeapAlloc(ModuleHeap, 0, ((size_t)Len + 2) * sizeof(WCHAR));
                 if (!BufZ)
-                    return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
+                {
+                    LOG(WINTUN_LOG_ERR, L"Out of memory");
+                    SetLastError(ERROR_OUTOFMEMORY);
+                    return FALSE;
+                }
                 wmemcpy(BufZ, *Buf, Len);
                 BufZ[Len] = 0;
                 BufZ[Len + 1] = 0;
                 HeapFree(ModuleHeap, 0, *Buf);
                 *Buf = BufZ;
-                return ERROR_SUCCESS;
+                return TRUE;
             }
             if (i == Len)
             {
                 /* Missing list terminator. */
                 WCHAR *BufZ = HeapAlloc(ModuleHeap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
                 if (!BufZ)
-                    return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
+                {
+                    LOG(WINTUN_LOG_ERR, L"Out of memory");
+                    SetLastError(ERROR_OUTOFMEMORY);
+                    return FALSE;
+                }
                 wmemcpy(BufZ, *Buf, Len);
                 BufZ[Len] = 0;
                 HeapFree(ModuleHeap, 0, *Buf);
                 *Buf = BufZ;
-                return ERROR_SUCCESS;
+                return TRUE;
             }
             if (!(*Buf)[i])
-                return ERROR_SUCCESS;
+                return TRUE;
         }
     }
 
     /* Sanitize REG_SZ/REG_EXPAND_SZ and append a list terminator to make a multi-string. */
-    DWORD Result = RegistryGetString(Buf, Len, ValueType);
-    if (Result != ERROR_SUCCESS)
-        return Result;
+    if (!RegistryGetString(Buf, Len, ValueType))
+        return FALSE;
     Len = (DWORD)wcslen(*Buf) + 1;
     WCHAR *BufZ = HeapAlloc(ModuleHeap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
     if (!BufZ)
-        return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
+    {
+        LOG(WINTUN_LOG_ERR, L"Out of memory");
+        SetLastError(ERROR_OUTOFMEMORY);
+        return FALSE;
+    }
     wmemcpy(BufZ, *Buf, Len);
     BufZ[Len] = 0;
     HeapFree(ModuleHeap, 0, *Buf);
     *Buf = BufZ;
-    return ERROR_SUCCESS;
+    return TRUE;
 }
 
-static WINTUN_STATUS
-RegistryQuery(
+static _Return_type_success_(return != NULL) void *RegistryQuery(
     _In_ HKEY Key,
     _In_opt_z_ const WCHAR *Name,
     _Out_opt_ DWORD *ValueType,
-    _Out_ void **Buf,
     _Inout_ DWORD *BufLen,
     _In_ BOOL Log)
 {
@@ -183,60 +217,77 @@ RegistryQuery(
     {
         BYTE *p = HeapAlloc(ModuleHeap, 0, *BufLen);
         if (!p)
-            return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
-        LSTATUS Result = RegQueryValueExW(Key, Name, NULL, ValueType, p, BufLen);
-        if (Result == ERROR_SUCCESS)
         {
-            *Buf = p;
-            return ERROR_SUCCESS;
+            LOG(WINTUN_LOG_ERR, L"Out of memory");
+            SetLastError(ERROR_OUTOFMEMORY);
+            return NULL;
         }
+        LSTATUS LastError = RegQueryValueExW(Key, Name, NULL, ValueType, p, BufLen);
+        if (LastError == ERROR_SUCCESS)
+            return p;
         HeapFree(ModuleHeap, 0, p);
-        if (Result != ERROR_MORE_DATA)
-            return Log ? LOG_ERROR(L"Querying value failed", Result) : Result;
+        if (LastError != ERROR_MORE_DATA)
+        {
+            if (Log)
+                LOG_ERROR(L"Querying value failed", LastError);
+            SetLastError(LastError);
+            return NULL;
+        }
     }
 }
 
-WINTUN_STATUS
-RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ WCHAR **Value, _In_ BOOL Log)
+_Return_type_success_(
+    return != NULL) WCHAR *RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ BOOL Log)
 {
-    DWORD ValueType, Size = 256 * sizeof(WCHAR);
-    DWORD Result = RegistryQuery(Key, Name, &ValueType, Value, &Size, Log);
-    if (Result != ERROR_SUCCESS)
-        return Result;
+    DWORD LastError, ValueType, Size = 256 * sizeof(WCHAR);
+    WCHAR *Value = RegistryQuery(Key, Name, &ValueType, &Size, Log);
+    if (!Value)
+        return NULL;
     switch (ValueType)
     {
     case REG_SZ:
     case REG_EXPAND_SZ:
     case REG_MULTI_SZ:
-        Result = RegistryGetString(Value, Size / sizeof(WCHAR), ValueType);
-        if (Result != ERROR_SUCCESS)
-            HeapFree(ModuleHeap, 0, *Value);
-        return Result;
+        if (RegistryGetString(&Value, Size / sizeof(WCHAR), ValueType))
+            return Value;
+        LastError = GetLastError();
+        break;
     default:
         LOG(WINTUN_LOG_ERR, L"Value is not a string");
-        HeapFree(ModuleHeap, 0, *Value);
-        return ERROR_INVALID_DATATYPE;
+        LastError = ERROR_INVALID_DATATYPE;
     }
+    HeapFree(ModuleHeap, 0, Value);
+    SetLastError(LastError);
+    return NULL;
 }
 
-WINTUN_STATUS
-RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout, _Out_ WCHAR **Value)
+_Return_type_success_(
+    return != NULL) WCHAR *RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout)
 {
-    DWORD Result;
+    DWORD LastError;
     ULONGLONG Deadline = GetTickCount64() + Timeout;
     HANDLE Event = CreateEventW(NULL, FALSE, FALSE, NULL);
     if (!Event)
-        return LOG_LAST_ERROR(L"Failed to create event");
+    {
+        LOG_LAST_ERROR(L"Failed to create event");
+        return NULL;
+    }
     for (;;)
     {
-        Result = RegNotifyChangeKeyValue(Key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, Event, TRUE);
-        if (Result != ERROR_SUCCESS)
+        LastError = RegNotifyChangeKeyValue(Key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, Event, TRUE);
+        if (LastError != ERROR_SUCCESS)
         {
-            LOG_ERROR(L"Failed to setup notification", Result);
+            LOG_ERROR(L"Failed to setup notification", LastError);
             break;
         }
-        Result = RegistryQueryString(Key, Name, Value, FALSE);
-        if (Result != ERROR_FILE_NOT_FOUND && Result != ERROR_PATH_NOT_FOUND)
+        WCHAR *Value = RegistryQueryString(Key, Name, FALSE);
+        if (Value)
+        {
+            CloseHandle(Event);
+            return Value;
+        }
+        LastError = GetLastError();
+        if (LastError != ERROR_FILE_NOT_FOUND && LastError != ERROR_PATH_NOT_FOUND)
             break;
         LONGLONG TimeLeft = Deadline - GetTickCount64();
         if (TimeLeft < 0)
@@ -248,51 +299,63 @@ RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD 
         }
     }
     CloseHandle(Event);
-    return Result;
+    SetLastError(LastError);
+    return NULL;
 }
 
-WINTUN_STATUS
-RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ DWORD *Value, _In_ BOOL Log)
+_Return_type_success_(return != FALSE) BOOL
+    RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ DWORD *Value, _In_ BOOL Log)
 {
     DWORD ValueType, Size = sizeof(DWORD);
-    DWORD Result = RegQueryValueExW(Key, Name, NULL, &ValueType, (BYTE *)Value, &Size);
-    if (Result != ERROR_SUCCESS)
+    DWORD LastError = RegQueryValueExW(Key, Name, NULL, &ValueType, (BYTE *)Value, &Size);
+    if (LastError != ERROR_SUCCESS)
     {
         if (Log)
-            LOG_ERROR(L"Querying failed", Result);
-        return Result;
+            LOG_ERROR(L"Querying failed", LastError);
+        SetLastError(LastError);
+        return FALSE;
     }
     if (ValueType != REG_DWORD)
     {
         LOG(WINTUN_LOG_ERR, L"Value is not a DWORD");
-        return ERROR_INVALID_DATATYPE;
+        SetLastError(ERROR_INVALID_DATATYPE);
+        return FALSE;
     }
     if (Size != sizeof(DWORD))
     {
         LOG(WINTUN_LOG_ERR, L"Value size is not 4 bytes");
-        return ERROR_INVALID_DATA;
+        SetLastError(ERROR_INVALID_DATA);
+        return FALSE;
     }
-    return ERROR_SUCCESS;
+    return TRUE;
 }
 
-WINTUN_STATUS
-RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout, _Out_ DWORD *Value)
+_Return_type_success_(return != FALSE) BOOL
+    RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout, _Out_ DWORD *Value)
 {
-    DWORD Result;
+    DWORD LastError;
     ULONGLONG Deadline = GetTickCount64() + Timeout;
     HANDLE Event = CreateEventW(NULL, FALSE, FALSE, NULL);
     if (!Event)
-        return LOG_LAST_ERROR(L"Failed to create event");
+    {
+        LOG_LAST_ERROR(L"Failed to create event");
+        return FALSE;
+    }
     for (;;)
     {
-        Result = RegNotifyChangeKeyValue(Key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, Event, TRUE);
-        if (Result != ERROR_SUCCESS)
+        LastError = RegNotifyChangeKeyValue(Key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, Event, TRUE);
+        if (LastError != ERROR_SUCCESS)
         {
-            LOG_ERROR(L"Failed to setup notification", Result);
+            LOG_ERROR(L"Failed to setup notification", LastError);
             break;
         }
-        Result = RegistryQueryDWORD(Key, Name, Value, FALSE);
-        if (Result != ERROR_FILE_NOT_FOUND && Result != ERROR_PATH_NOT_FOUND)
+        if (RegistryQueryDWORD(Key, Name, Value, FALSE))
+        {
+            CloseHandle(Event);
+            return TRUE;
+        }
+        LastError = GetLastError();
+        if (LastError != ERROR_FILE_NOT_FOUND && LastError != ERROR_PATH_NOT_FOUND)
             break;
         LONGLONG TimeLeft = Deadline - GetTickCount64();
         if (TimeLeft < 0)
@@ -304,5 +367,6 @@ RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD T
         }
     }
     CloseHandle(Event);
-    return Result;
+    SetLastError(LastError);
+    return FALSE;
 }

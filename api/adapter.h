@@ -37,28 +37,28 @@ WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter);
 /**
  * @copydoc WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC
  */
-WINTUN_STATUS WINAPI
-WintunOpenAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *Handle);
+_Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE WINAPI
+    WintunOpenAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter);
 
 /**
  * @copydoc WINTUN_CREATE_ADAPTER_FUNC
  */
-WINTUN_STATUS WINAPI
-WintunCreateAdapter(
+_Return_type_success_(return != NULL) WINTUN_ADAPTER *WINAPI WintunCreateAdapter(
     _In_z_ const WCHAR *Pool,
     _In_z_ const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
-    _Out_ WINTUN_ADAPTER **Adapter,
     _Out_opt_ BOOL *RebootRequired);
 
 /**
  * @copydoc WINTUN_DELETE_ADAPTER_FUNC
  */
-WINTUN_STATUS WINAPI
-WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSessions, _Out_opt_ BOOL *RebootRequired);
+_Return_type_success_(return != FALSE) BOOL WINAPI WintunDeleteAdapter(
+    _In_ const WINTUN_ADAPTER *Adapter,
+    _In_ BOOL ForceCloseSessions,
+    _Out_opt_ BOOL *RebootRequired);
 
 /**
  * @copydoc WINTUN_DELETE_POOL_DRIVER_FUNC
  */
-WINTUN_STATUS WINAPI
-WintunDeletePoolDriver(_In_z_ const WCHAR Pool[WINTUN_MAX_POOL], _Out_opt_ BOOL *RebootRequired);
+_Return_type_success_(return != FALSE) BOOL WINAPI
+    WintunDeletePoolDriver(_In_z_ const WCHAR *Pool, _Out_opt_ BOOL *RebootRequired);

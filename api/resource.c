@@ -8,35 +8,47 @@
 #include "resource.h"
 #include <Windows.h>
 
-WINTUN_STATUS
-ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const void **Address, _Out_ DWORD *Size)
+_Return_type_success_(return != NULL) _Ret_bytecount_(*Size) const
+    void *ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ DWORD *Size)
 {
     HRSRC FoundResource = FindResourceW(ResourceModule, ResourceName, RT_RCDATA);
     if (!FoundResource)
-        return LOG_LAST_ERROR(L"Failed to find resource");
+    {
+        LOG_LAST_ERROR(L"Failed to find resource");
+        return NULL;
+    }
     *Size = SizeofResource(ResourceModule, FoundResource);
     if (!*Size)
-        return LOG_LAST_ERROR(L"Failed to query resource size");
+    {
+        LOG_LAST_ERROR(L"Failed to query resource size");
+        return NULL;
+    }
     HGLOBAL LoadedResource = LoadResource(ResourceModule, FoundResource);
     if (!LoadedResource)
-        return LOG_LAST_ERROR(L"Failed to load resource");
-    *Address = LockResource(LoadedResource);
-    if (!*Address)
+    {
+        LOG_LAST_ERROR(L"Failed to load resource");
+        return NULL;
+    }
+    BYTE *Address = LockResource(LoadedResource);
+    if (!Address)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to lock resource");
-        return ERROR_LOCK_FAILED;
+        SetLastError(ERROR_LOCK_FAILED);
+        return NULL;
     }
-    return ERROR_SUCCESS;
+    return Address;
 }
 
-WINTUN_STATUS
-ResourceCopyToFile(_In_z_ const WCHAR *DestinationPath, _In_z_ const WCHAR *ResourceName)
+_Return_type_success_(return != FALSE) BOOL
+    ResourceCopyToFile(_In_z_ const WCHAR *DestinationPath, _In_z_ const WCHAR *ResourceName)
 {
-    const void *LockedResource;
     DWORD SizeResource;
-    DWORD Result = ResourceGetAddress(ResourceName, &LockedResource, &SizeResource);
-    if (Result != ERROR_SUCCESS)
-        return LOG(WINTUN_LOG_ERR, L"Failed to locate resource"), Result;
+    const void *LockedResource = ResourceGetAddress(ResourceName, &SizeResource);
+    if (!LockedResource)
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to locate resource");
+        return FALSE;
+    }
     HANDLE DestinationHandle = CreateFileW(
         DestinationPath,
         GENERIC_WRITE,
@@ -46,15 +58,25 @@ ResourceCopyToFile(_In_z_ const WCHAR *DestinationPath, _In_z_ const WCHAR *Reso
         FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_TEMPORARY,
         NULL);
     if (DestinationHandle == INVALID_HANDLE_VALUE)
-        return LOG_LAST_ERROR(L"Failed to create file");
+    {
+        LOG_LAST_ERROR(L"Failed to create file");
+        return FALSE;
+    }
     DWORD BytesWritten;
+    DWORD LastError;
     if (!WriteFile(DestinationHandle, LockedResource, SizeResource, &BytesWritten, NULL))
-        Result = LOG_LAST_ERROR(L"Failed to write file");
+    {
+        LastError = LOG_LAST_ERROR(L"Failed to write file");
+        goto cleanupDestinationHandle;
+    }
     if (BytesWritten != SizeResource)
     {
         LOG(WINTUN_LOG_ERR, L"Incomplete write");
-        Result = Result != ERROR_SUCCESS ? Result : ERROR_WRITE_FAULT;
+        LastError = ERROR_WRITE_FAULT;
+        goto cleanupDestinationHandle;
     }
+    LastError = ERROR_SUCCESS;
+cleanupDestinationHandle:
     CloseHandle(DestinationHandle);
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }

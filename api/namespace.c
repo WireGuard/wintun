@@ -15,41 +15,48 @@ static BOOL HasInitialized = FALSE;
 static CRITICAL_SECTION Initializing;
 static BCRYPT_ALG_HANDLE AlgProvider;
 
-static WCHAR *
-NormalizeStringAlloc(_In_ NORM_FORM NormForm, _In_z_ const WCHAR *Source)
+static _Return_type_success_(
+    return != NULL) WCHAR *NormalizeStringAlloc(_In_ NORM_FORM NormForm, _In_z_ const WCHAR *Source)
 {
     int Len = NormalizeString(NormForm, Source, -1, NULL, 0);
     for (;;)
     {
         WCHAR *Str = HeapAlloc(ModuleHeap, 0, sizeof(WCHAR) * Len);
         if (!Str)
-            return LOG(WINTUN_LOG_ERR, L"Out of memory"), NULL;
+        {
+            LOG(WINTUN_LOG_ERR, L"Out of memory");
+            SetLastError(ERROR_OUTOFMEMORY);
+            return NULL;
+        }
         Len = NormalizeString(NormForm, Source, -1, Str, Len);
         if (Len > 0)
             return Str;
-        DWORD Result = GetLastError();
+        DWORD LastError = GetLastError();
         HeapFree(ModuleHeap, 0, Str);
-        if (Result != ERROR_INSUFFICIENT_BUFFER)
-            return LOG_ERROR(L"Failed", Result), NULL;
+        if (LastError != ERROR_INSUFFICIENT_BUFFER)
+        {
+            SetLastError(LOG_ERROR(L"Failed", LastError));
+            return NULL;
+        }
         Len = -Len;
     }
 }
 
-static WINTUN_STATUS
-NamespaceRuntimeInit(void)
+static _Return_type_success_(return != FALSE) BOOL NamespaceRuntimeInit(void)
 {
-    DWORD Result;
+    DWORD LastError;
 
     EnterCriticalSection(&Initializing);
     if (HasInitialized)
     {
         LeaveCriticalSection(&Initializing);
-        return ERROR_SUCCESS;
+        return TRUE;
     }
 
     if (!BCRYPT_SUCCESS(BCryptOpenAlgorithmProvider(&AlgProvider, BCRYPT_SHA256_ALGORITHM, NULL, 0)))
     {
-        Result = ERROR_GEN_FAILURE;
+        LOG(WINTUN_LOG_ERR, L"Failed to open algorithm provider");
+        LastError = ERROR_GEN_FAILURE;
         goto cleanupLeaveCriticalSection;
     }
 
@@ -57,19 +64,19 @@ NamespaceRuntimeInit(void)
     DWORD SidSize = MAX_SID_SIZE;
     if (!CreateWellKnownSid(WinLocalSystemSid, NULL, Sid, &SidSize))
     {
-        Result = GetLastError();
+        LastError = LOG_LAST_ERROR(L"Failed to create SID");
         goto cleanupBCryptCloseAlgorithmProvider;
     }
 
     HANDLE Boundary = CreateBoundaryDescriptorW(L"Wintun", 0);
     if (!Boundary)
     {
-        Result = GetLastError();
+        LastError = LOG_LAST_ERROR(L"Failed to create boundary descriptor");
         goto cleanupBCryptCloseAlgorithmProvider;
     }
     if (!AddSIDToBoundaryDescriptor(&Boundary, Sid))
     {
-        Result = GetLastError();
+        LastError = LOG_LAST_ERROR(L"Failed to add SID to boundary descriptor");
         goto cleanupBCryptCloseAlgorithmProvider;
     }
 
@@ -77,98 +84,124 @@ NamespaceRuntimeInit(void)
     {
         if (CreatePrivateNamespaceW(&SecurityAttributes, Boundary, L"Wintun"))
             break;
-        Result = GetLastError();
-        if (Result == ERROR_ALREADY_EXISTS)
+        if ((LastError = GetLastError()) == ERROR_ALREADY_EXISTS)
         {
             if (OpenPrivateNamespaceW(Boundary, L"Wintun"))
                 break;
-            Result = GetLastError();
-            if (Result == ERROR_PATH_NOT_FOUND)
+            if ((LastError = GetLastError()) == ERROR_PATH_NOT_FOUND)
                 continue;
+            LOG_ERROR(L"Failed to open private namespace", LastError);
         }
+        else
+            LOG_ERROR(L"Failed to create private namespace", LastError);
         goto cleanupBCryptCloseAlgorithmProvider;
     }
 
     HasInitialized = TRUE;
-    Result = ERROR_SUCCESS;
-    goto cleanupLeaveCriticalSection;
+    LeaveCriticalSection(&Initializing);
+    return TRUE;
 
 cleanupBCryptCloseAlgorithmProvider:
     BCryptCloseAlgorithmProvider(AlgProvider, 0);
 cleanupLeaveCriticalSection:
     LeaveCriticalSection(&Initializing);
-    return Result;
+    SetLastError(LastError);
+    return FALSE;
 }
 
 _Check_return_
-HANDLE
-NamespaceTakePoolMutex(_In_z_ const WCHAR *Pool)
+_Return_type_success_(return != NULL) HANDLE NamespaceTakePoolMutex(_In_z_ const WCHAR *Pool)
 {
-    HANDLE Mutex = NULL;
-
-    if (NamespaceRuntimeInit() != ERROR_SUCCESS)
+    if (!NamespaceRuntimeInit())
         return NULL;
 
     BCRYPT_HASH_HANDLE Sha256 = NULL;
     if (!BCRYPT_SUCCESS(BCryptCreateHash(AlgProvider, &Sha256, NULL, 0, NULL, 0, 0)))
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to create hash");
+        SetLastError(ERROR_GEN_FAILURE);
         return NULL;
+    }
+    DWORD LastError;
     static const WCHAR mutex_label[] = L"Wintun Adapter Name Mutex Stable Suffix v1 jason@zx2c4.com";
-    if (!BCRYPT_SUCCESS(BCryptHashData(Sha256, (PUCHAR)mutex_label, sizeof(mutex_label) /* Including NULL 2 bytes */, 0)))
+    if (!BCRYPT_SUCCESS(
+            BCryptHashData(Sha256, (PUCHAR)mutex_label, sizeof(mutex_label) /* Including NULL 2 bytes */, 0)))
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to hash data");
+        LastError = ERROR_GEN_FAILURE;
         goto cleanupSha256;
+    }
     WCHAR *PoolNorm = NormalizeStringAlloc(NormalizationC, Pool);
     if (!PoolNorm)
+    {
+        LastError = GetLastError();
         goto cleanupSha256;
-    if (!BCRYPT_SUCCESS(BCryptHashData(Sha256, (PUCHAR)PoolNorm, (int)wcslen(PoolNorm) + 2 /* Add in NULL 2 bytes */, 0)))
+    }
+    if (!BCRYPT_SUCCESS(
+            BCryptHashData(Sha256, (PUCHAR)PoolNorm, (int)wcslen(PoolNorm) + 2 /* Add in NULL 2 bytes */, 0)))
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to hash data");
+        LastError = ERROR_GEN_FAILURE;
         goto cleanupPoolNorm;
+    }
     BYTE Hash[32];
     if (!BCRYPT_SUCCESS(BCryptFinishHash(Sha256, Hash, sizeof(Hash), 0)))
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to calculate hash");
+        LastError = ERROR_GEN_FAILURE;
         goto cleanupPoolNorm;
+    }
     static const WCHAR MutexNamePrefix[] = L"Wintun\\Wintun-Name-Mutex-";
     WCHAR MutexName[_countof(MutexNamePrefix) + sizeof(Hash) * 2];
     memcpy(MutexName, MutexNamePrefix, sizeof(MutexNamePrefix));
     for (size_t i = 0; i < sizeof(Hash); ++i)
         swprintf_s(&MutexName[_countof(MutexNamePrefix) - 1 + i * 2], 3, L"%02x", Hash[i]);
-    Mutex = CreateMutexW(&SecurityAttributes, FALSE, MutexName);
+    HANDLE Mutex = CreateMutexW(&SecurityAttributes, FALSE, MutexName);
     if (!Mutex)
+    {
+        LastError = LOG_LAST_ERROR(L"Failed to create mutex");
         goto cleanupPoolNorm;
+    }
     switch (WaitForSingleObject(Mutex, INFINITE))
     {
     case WAIT_OBJECT_0:
     case WAIT_ABANDONED:
-        goto cleanupPoolNorm;
+        HeapFree(ModuleHeap, 0, PoolNorm);
+        BCryptDestroyHash(Sha256);
+        return Mutex;
     }
-
+    LOG(WINTUN_LOG_ERR, L"Failed to get mutex");
+    LastError = ERROR_GEN_FAILURE;
     CloseHandle(Mutex);
-    Mutex = NULL;
 cleanupPoolNorm:
     HeapFree(ModuleHeap, 0, PoolNorm);
 cleanupSha256:
     BCryptDestroyHash(Sha256);
-    return Mutex;
+    SetLastError(LastError);
+    return NULL;
 }
 
 _Check_return_
-HANDLE
-NamespaceTakeDriverInstallationMutex(void)
+_Return_type_success_(return != NULL) HANDLE NamespaceTakeDriverInstallationMutex(void)
 {
-    HANDLE Mutex = NULL;
-
-    if (NamespaceRuntimeInit() != ERROR_SUCCESS)
+    if (!NamespaceRuntimeInit())
         return NULL;
-    Mutex = CreateMutexW(&SecurityAttributes, FALSE, L"Wintun\\Wintun-Driver-Installation-Mutex");
+    HANDLE Mutex = CreateMutexW(&SecurityAttributes, FALSE, L"Wintun\\Wintun-Driver-Installation-Mutex");
     if (!Mutex)
+    {
+        LOG_LAST_ERROR(L"Failed to create mutex");
         return NULL;
+    }
     switch (WaitForSingleObject(Mutex, INFINITE))
     {
     case WAIT_OBJECT_0:
     case WAIT_ABANDONED:
-        goto out;
+        return Mutex;
     }
-
+    LOG(WINTUN_LOG_ERR, L"Failed to get mutex");
     CloseHandle(Mutex);
-    Mutex = NULL;
-out:
-    return Mutex;
+    SetLastError(ERROR_GEN_FAILURE);
+    return NULL;
 }
 
 void
@@ -185,7 +218,7 @@ NamespaceInit(void)
 }
 
 void
-NamespaceCleanup(void)
+NamespaceDone(void)
 {
     EnterCriticalSection(&Initializing);
     if (HasInitialized)

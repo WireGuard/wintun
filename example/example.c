@@ -100,6 +100,15 @@ LogError(_In_z_ const WCHAR *Prefix, _In_ DWORD Error)
     return Error;
 }
 
+static DWORD
+LogLastError(_In_z_ const WCHAR *Prefix)
+{
+    DWORD LastError = GetLastError();
+    LogError(Prefix, LastError);
+    SetLastError(LastError);
+    return LastError;
+}
+
 static void
 Log(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Format, ...)
 {
@@ -206,22 +215,26 @@ ReceivePackets(_Inout_ DWORD_PTR SessionPtr)
 
     while (!HaveQuit)
     {
-        BYTE *Packet;
         DWORD PacketSize;
-        DWORD Result = WintunReceivePacket(Session, &Packet, &PacketSize);
-        switch (Result)
+        BYTE *Packet = WintunReceivePacket(Session, &PacketSize);
+        if (Packet)
         {
-        case ERROR_SUCCESS:
             PrintPacket(Packet, PacketSize);
             WintunReceiveRelease(Session, Packet);
-            continue;
-        case ERROR_NO_MORE_ITEMS:
-            if (WaitForMultipleObjects(_countof(WaitHandles), WaitHandles, FALSE, INFINITE) == WAIT_OBJECT_0)
-                continue;
-            return ERROR_SUCCESS;
-        default:
-            LogError(L"Packet read failed", Result);
-            return Result;
+        }
+        else
+        {
+            DWORD LastError = GetLastError();
+            switch (LastError)
+            {
+            case ERROR_NO_MORE_ITEMS:
+                if (WaitForMultipleObjects(_countof(WaitHandles), WaitHandles, FALSE, INFINITE) == WAIT_OBJECT_0)
+                    continue;
+                return ERROR_SUCCESS;
+            default:
+                LogError(L"Packet read failed", LastError);
+                return LastError;
+            }
         }
     }
     return ERROR_SUCCESS;
@@ -233,8 +246,9 @@ SendPackets(_Inout_ DWORD_PTR SessionPtr)
     WINTUN_SESSION_HANDLE Session = (WINTUN_SESSION_HANDLE)SessionPtr;
     while (!HaveQuit)
     {
-        BYTE *Packet;
-        WintunAllocateSendPacket(Session, 28, &Packet);
+        BYTE *Packet = WintunAllocateSendPacket(Session, 28);
+        if (!Packet)
+            return LogLastError(L"Packet write failed");
         MakeICMP(Packet);
         WintunSendPacket(Session, Packet);
 
@@ -269,9 +283,9 @@ InitializeWintun(void)
         X(WintunAllocateSendPacket, WINTUN_ALLOCATE_SEND_PACKET_FUNC) || X(WintunSendPacket, WINTUN_SEND_PACKET_FUNC))
 #undef X
     {
-        DWORD Result = GetLastError();
+        DWORD LastError = GetLastError();
         FreeLibrary(Wintun);
-        SetLastError(Result);
+        SetLastError(LastError);
         return NULL;
     }
     SetLastError(ERROR_SUCCESS);
@@ -287,29 +301,31 @@ main(void)
     WintunSetLogger(ConsoleLogger);
     Log(WINTUN_LOG_INFO, L"Wintun library loaded");
 
-    DWORD Result;
+    DWORD LastError;
     HaveQuit = FALSE;
     QuitEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!QuitEvent)
     {
-        Result = LogError(L"Failed to create event", GetLastError());
+        LastError = LogError(L"Failed to create event", GetLastError());
         goto cleanupWintun;
     }
     if (!SetConsoleCtrlHandler(CtrlHandler, TRUE))
     {
-        Result = LogError(L"Failed to set console handler", GetLastError());
+        LastError = LogError(L"Failed to set console handler", GetLastError());
         goto cleanupQuit;
     }
 
     GUID ExampleGuid = { 0xdeadbabe, 0xcafe, 0xbeef, { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef } };
-    WINTUN_ADAPTER_HANDLE Adapter;
-    Result = WintunGetAdapter(L"Example", L"Demo", &Adapter);
-    if (Result != ERROR_SUCCESS)
-        Result = WintunCreateAdapter(L"Example", L"Demo", &ExampleGuid, &Adapter, NULL);
-    if (Result != ERROR_SUCCESS)
+    WINTUN_ADAPTER_HANDLE Adapter = WintunGetAdapter(L"Example", L"Demo");
+    if (!Adapter)
     {
-        LogError(L"Failed to create adapter", Result);
-        goto cleanupQuit;
+        Adapter = WintunCreateAdapter(L"Example", L"Demo", &ExampleGuid, NULL);
+        if (!Adapter)
+        {
+            LastError = GetLastError();
+            LogError(L"Failed to create adapter", LastError);
+            goto cleanupQuit;
+        }
     }
 
     DWORD Version = WintunGetVersion();
@@ -321,18 +337,17 @@ main(void)
     AddressRow.Address.Ipv4.sin_family = AF_INET;
     AddressRow.Address.Ipv4.sin_addr.S_un.S_addr = htonl((10 << 24) | (6 << 16) | (7 << 8) | (7 << 0)); /* 10.6.7.7 */
     AddressRow.OnLinkPrefixLength = 24; /* This is a /24 network */
-    Result = CreateUnicastIpAddressEntry(&AddressRow);
-    if (Result != ERROR_SUCCESS && Result != ERROR_OBJECT_ALREADY_EXISTS)
+    LastError = CreateUnicastIpAddressEntry(&AddressRow);
+    if (LastError != ERROR_SUCCESS && LastError != ERROR_OBJECT_ALREADY_EXISTS)
     {
-        LogError(L"Failed to set IP address", Result);
+        LogError(L"Failed to set IP address", LastError);
         goto cleanupAdapter;
     }
 
-    WINTUN_SESSION_HANDLE Session;
-    Result = WintunStartSession(Adapter, 0x40000, &Session);
-    if (Result != ERROR_SUCCESS)
+    WINTUN_SESSION_HANDLE Session = WintunStartSession(Adapter, 0x40000);
+    if (!Session)
     {
-        LogError(L"Failed to create adapter", Result);
+        LastError = LogLastError(L"Failed to create adapter");
         goto cleanupAdapter;
     }
 
@@ -342,11 +357,11 @@ main(void)
                          CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)SendPackets, (LPVOID)Session, 0, NULL) };
     if (!Workers[0] || !Workers[1])
     {
-        Result = LogError(L"Failed to create threads", GetLastError());
+        LastError = LogError(L"Failed to create threads", GetLastError());
         goto cleanupWorkers;
     }
     WaitForMultipleObjectsEx(_countof(Workers), Workers, TRUE, INFINITE, TRUE);
-    Result = ERROR_SUCCESS;
+    LastError = ERROR_SUCCESS;
 
 cleanupWorkers:
     HaveQuit = TRUE;
@@ -368,5 +383,5 @@ cleanupQuit:
     CloseHandle(QuitEvent);
 cleanupWintun:
     FreeLibrary(Wintun);
-    return Result;
+    return LastError;
 }

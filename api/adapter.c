@@ -53,110 +53,110 @@ typedef struct _SP_DEVINFO_DATA_LIST
 
 static USHORT NativeMachine = IMAGE_FILE_PROCESS;
 
-static WINTUN_STATUS
-GetAdapterDrvInfoDetail(
+static _Return_type_success_(return != NULL) SP_DRVINFO_DETAIL_DATA_W *GetAdapterDrvInfoDetail(
     _In_ HDEVINFO DevInfo,
     _In_opt_ SP_DEVINFO_DATA *DevInfoData,
-    _In_ SP_DRVINFO_DATA_W *DrvInfoData,
-    _Out_ SP_DRVINFO_DETAIL_DATA_W **DrvInfoDetailData)
+    _In_ SP_DRVINFO_DATA_W *DrvInfoData)
 {
     DWORD Size = sizeof(SP_DRVINFO_DETAIL_DATA_W) + 0x100;
     for (;;)
     {
-        SP_DRVINFO_DETAIL_DATA_W *p = HeapAlloc(ModuleHeap, 0, Size);
-        if (!p)
-            return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
-        p->cbSize = sizeof(SP_DRVINFO_DETAIL_DATA_W);
-        if (SetupDiGetDriverInfoDetailW(DevInfo, DevInfoData, DrvInfoData, p, Size, &Size))
+        SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData = HeapAlloc(ModuleHeap, 0, Size);
+        if (!DrvInfoDetailData)
         {
-            *DrvInfoDetailData = p;
-            return ERROR_SUCCESS;
+            LOG(WINTUN_LOG_ERR, L"Out of memory");
+            SetLastError(ERROR_OUTOFMEMORY);
+            return NULL;
         }
-        DWORD Result = GetLastError();
-        HeapFree(ModuleHeap, 0, p);
-        if (Result != ERROR_INSUFFICIENT_BUFFER)
-            return LOG_ERROR(L"Failed", Result);
+        DrvInfoDetailData->cbSize = sizeof(SP_DRVINFO_DETAIL_DATA_W);
+        if (SetupDiGetDriverInfoDetailW(DevInfo, DevInfoData, DrvInfoData, DrvInfoDetailData, Size, &Size))
+            return DrvInfoDetailData;
+        DWORD LastError = GetLastError();
+        HeapFree(ModuleHeap, 0, DrvInfoDetailData);
+        if (LastError != ERROR_INSUFFICIENT_BUFFER)
+        {
+            SetLastError(LOG_ERROR(L"Failed", LastError));
+            return NULL;
+        }
     }
 }
 
-static WINTUN_STATUS
-GetDeviceRegistryProperty(
+static _Return_type_success_(return != NULL) void *GetDeviceRegistryProperty(
     _In_ HDEVINFO DevInfo,
     _In_ SP_DEVINFO_DATA *DevInfoData,
     _In_ DWORD Property,
     _Out_opt_ DWORD *ValueType,
-    _Out_ void **Buf,
     _Inout_ DWORD *BufLen)
 {
     for (;;)
     {
-        BYTE *p = HeapAlloc(ModuleHeap, 0, *BufLen);
-        if (!p)
-            return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
-        if (SetupDiGetDeviceRegistryPropertyW(DevInfo, DevInfoData, Property, ValueType, p, *BufLen, BufLen))
+        BYTE *Data = HeapAlloc(ModuleHeap, 0, *BufLen);
+        if (!Data)
         {
-            *Buf = p;
-            return ERROR_SUCCESS;
+            LOG(WINTUN_LOG_ERR, L"Out of memory");
+            SetLastError(ERROR_OUTOFMEMORY);
+            return NULL;
         }
-        DWORD Result = GetLastError();
-        HeapFree(ModuleHeap, 0, p);
-        if (Result != ERROR_INSUFFICIENT_BUFFER)
-            return LOG_ERROR(L"Querying property failed", Result);
+        if (SetupDiGetDeviceRegistryPropertyW(DevInfo, DevInfoData, Property, ValueType, Data, *BufLen, BufLen))
+            return Data;
+        DWORD LastError = GetLastError();
+        HeapFree(ModuleHeap, 0, Data);
+        if (LastError != ERROR_INSUFFICIENT_BUFFER)
+        {
+            SetLastError(LOG_ERROR(L"Querying property failed", LastError));
+            return NULL;
+        }
     }
 }
 
-static WINTUN_STATUS
-GetDeviceRegistryString(
-    _In_ HDEVINFO DevInfo,
-    _In_ SP_DEVINFO_DATA *DevInfoData,
-    _In_ DWORD Property,
-    _Out_ WCHAR **Buf)
+static _Return_type_success_(return != NULL)
+    WCHAR *GetDeviceRegistryString(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _In_ DWORD Property)
 {
-    DWORD Result, ValueType, Size = 256 * sizeof(WCHAR);
-    Result = GetDeviceRegistryProperty(DevInfo, DevInfoData, Property, &ValueType, Buf, &Size);
-    if (Result != ERROR_SUCCESS)
-        return Result;
+    DWORD LastError, ValueType, Size = 256 * sizeof(WCHAR);
+    WCHAR *Buf = GetDeviceRegistryProperty(DevInfo, DevInfoData, Property, &ValueType, &Size);
+    if (!Buf)
+        return NULL;
     switch (ValueType)
     {
     case REG_SZ:
     case REG_EXPAND_SZ:
     case REG_MULTI_SZ:
-        Result = RegistryGetString(Buf, Size / sizeof(WCHAR), ValueType);
-        if (Result != ERROR_SUCCESS)
-            HeapFree(ModuleHeap, 0, *Buf);
-        return Result;
+        if (RegistryGetString(&Buf, Size / sizeof(WCHAR), ValueType))
+            return Buf;
+        LastError = GetLastError();
+        break;
     default:
         LOG(WINTUN_LOG_ERR, L"Property is not a string");
-        HeapFree(ModuleHeap, 0, *Buf);
-        return ERROR_INVALID_DATATYPE;
+        LastError = ERROR_INVALID_DATATYPE;
     }
+    HeapFree(ModuleHeap, 0, Buf);
+    SetLastError(LastError);
+    return NULL;
 }
 
-static WINTUN_STATUS
-GetDeviceRegistryMultiString(
-    _In_ HDEVINFO DevInfo,
-    _In_ SP_DEVINFO_DATA *DevInfoData,
-    _In_ DWORD Property,
-    _Out_ WCHAR **Buf)
+static _Return_type_success_(return != NULL)
+    WCHAR *GetDeviceRegistryMultiString(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _In_ DWORD Property)
 {
-    DWORD Result, ValueType, Size = 256 * sizeof(WCHAR);
-    Result = GetDeviceRegistryProperty(DevInfo, DevInfoData, Property, &ValueType, Buf, &Size);
-    if (Result != ERROR_SUCCESS)
-        return Result;
+    DWORD LastError, ValueType, Size = 256 * sizeof(WCHAR);
+    WCHAR *Buf = GetDeviceRegistryProperty(DevInfo, DevInfoData, Property, &ValueType, &Size);
+    if (!Buf)
+        return NULL;
     switch (ValueType)
     {
     case REG_SZ:
     case REG_EXPAND_SZ:
     case REG_MULTI_SZ:
-        Result = RegistryGetMultiString(Buf, Size / sizeof(WCHAR), ValueType);
-        if (Result != ERROR_SUCCESS)
-            HeapFree(ModuleHeap, 0, *Buf);
-        return Result;
+        if (RegistryGetMultiString(&Buf, Size / sizeof(WCHAR), ValueType))
+            return Buf;
+        LastError = GetLastError();
+        break;
     default:
         LOG(WINTUN_LOG_ERR, L"Property is not a string");
-        HeapFree(ModuleHeap, 0, *Buf);
-        return ERROR_INVALID_DATATYPE;
+        LastError = ERROR_INVALID_DATATYPE;
     }
+    HeapFree(ModuleHeap, 0, Buf);
+    SetLastError(LastError);
+    return NULL;
 }
 
 static BOOL
@@ -168,34 +168,44 @@ IsOurHardwareID(_In_z_ const WCHAR *Hwids)
     return FALSE;
 }
 
-static WINTUN_STATUS
-IsOurAdapter(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ BOOL *IsOurs)
+static BOOL
+IsOurAdapter(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
 {
-    WCHAR *Hwids;
-    DWORD Result = GetDeviceRegistryMultiString(DevInfo, DevInfoData, SPDRP_HARDWAREID, &Hwids);
-    if (Result != ERROR_SUCCESS)
-        return LOG(WINTUN_LOG_ERR, L"Failed to get hardware ID"), Result;
-    *IsOurs = IsOurHardwareID(Hwids);
-    return ERROR_SUCCESS;
+    WCHAR *Hwids = GetDeviceRegistryMultiString(DevInfo, DevInfoData, SPDRP_HARDWAREID);
+    if (!Hwids)
+    {
+        LOG_LAST_ERROR(L"Failed to get hardware ID");
+        return FALSE;
+    }
+    BOOL IsOurs = IsOurHardwareID(Hwids);
+    HeapFree(ModuleHeap, 0, Hwids);
+    return IsOurs;
 }
 
-static WINTUN_STATUS
-GetDeviceObject(_In_opt_z_ const WCHAR *InstanceId, _Out_ HANDLE *Handle)
+static _Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE OpenDeviceObject(_In_opt_z_ const WCHAR *InstanceId)
 {
     ULONG InterfacesLen;
-    DWORD Result = CM_MapCrToWin32Err(
+    DWORD LastError = CM_MapCrToWin32Err(
         CM_Get_Device_Interface_List_SizeW(
             &InterfacesLen,
             (GUID *)&GUID_DEVINTERFACE_NET,
             (DEVINSTID_W)InstanceId,
             CM_GET_DEVICE_INTERFACE_LIST_PRESENT),
         ERROR_GEN_FAILURE);
-    if (Result != ERROR_SUCCESS)
-        return LOG_ERROR(L"Failed to query associated instances size", Result);
+    if (LastError != ERROR_SUCCESS)
+    {
+        SetLastError(LOG_ERROR(L"Failed to query associated instances size", LastError));
+        return INVALID_HANDLE_VALUE;
+    }
     WCHAR *Interfaces = HeapAlloc(ModuleHeap, 0, InterfacesLen * sizeof(WCHAR));
     if (!Interfaces)
-        return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
-    Result = CM_MapCrToWin32Err(
+    {
+        LOG(WINTUN_LOG_ERR, L"Out of memory");
+        SetLastError(ERROR_OUTOFMEMORY);
+        return INVALID_HANDLE_VALUE;
+    }
+    HANDLE Handle = INVALID_HANDLE_VALUE;
+    LastError = CM_MapCrToWin32Err(
         CM_Get_Device_Interface_ListW(
             (GUID *)&GUID_DEVINTERFACE_NET,
             (DEVINSTID_W)InstanceId,
@@ -203,12 +213,12 @@ GetDeviceObject(_In_opt_z_ const WCHAR *InstanceId, _Out_ HANDLE *Handle)
             InterfacesLen,
             CM_GET_DEVICE_INTERFACE_LIST_PRESENT),
         ERROR_GEN_FAILURE);
-    if (Result != ERROR_SUCCESS)
+    if (LastError != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to get associated instances", Result);
+        LOG_ERROR(L"Failed to get associated instances", LastError);
         goto cleanupBuf;
     }
-    *Handle = CreateFileW(
+    Handle = CreateFileW(
         Interfaces,
         GENERIC_READ | GENERIC_WRITE,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
@@ -216,65 +226,77 @@ GetDeviceObject(_In_opt_z_ const WCHAR *InstanceId, _Out_ HANDLE *Handle)
         OPEN_EXISTING,
         0,
         NULL);
-    Result = *Handle != INVALID_HANDLE_VALUE ? ERROR_SUCCESS : LOG_LAST_ERROR(L"Failed to connect to adapter");
+    LastError = Handle != INVALID_HANDLE_VALUE ? ERROR_SUCCESS : LOG_LAST_ERROR(L"Failed to connect to adapter");
 cleanupBuf:
     HeapFree(ModuleHeap, 0, Interfaces);
-    return Result;
+    if (LastError != ERROR_SUCCESS)
+        SetLastError(LastError);
+    return Handle;
 }
 
 #define TUN_IOCTL_FORCE_CLOSE_HANDLES CTL_CODE(51820U, 0x971U, METHOD_NEITHER, FILE_READ_DATA | FILE_WRITE_DATA)
 
-static WINTUN_STATUS
-ForceCloseWintunAdapterHandle(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
+static _Return_type_success_(return != FALSE) BOOL
+    ForceCloseWintunAdapterHandle(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
 {
-    DWORD Result = ERROR_SUCCESS;
+    DWORD LastError = ERROR_SUCCESS;
     DWORD RequiredBytes;
     if (SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, NULL, 0, &RequiredBytes) ||
-        (Result = GetLastError()) != ERROR_INSUFFICIENT_BUFFER)
-        return LOG_ERROR(L"Failed to query instance ID size", Result);
+        (LastError = GetLastError()) != ERROR_INSUFFICIENT_BUFFER)
+    {
+        LOG_ERROR(L"Failed to query instance ID size", LastError);
+        return FALSE;
+    }
     WCHAR *InstanceId = HeapAlloc(ModuleHeap, HEAP_ZERO_MEMORY, sizeof(*InstanceId) * RequiredBytes);
     if (!InstanceId)
-        return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
+    {
+        LOG(WINTUN_LOG_ERR, L"Out of memory");
+        SetLastError(ERROR_OUTOFMEMORY);
+        return FALSE;
+    }
     if (!SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, InstanceId, RequiredBytes, &RequiredBytes))
     {
-        Result = LOG_LAST_ERROR(L"Failed to get instance ID");
-        goto out;
+        LastError = LOG_LAST_ERROR(L"Failed to get instance ID");
+        goto cleanupInstanceId;
     }
-    HANDLE NdisHandle;
-    Result = GetDeviceObject(InstanceId, &NdisHandle);
-    if (Result != ERROR_SUCCESS)
+    HANDLE NdisHandle = OpenDeviceObject(InstanceId);
+    if (NdisHandle == INVALID_HANDLE_VALUE)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get adapter object");
-        goto out;
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get adapter object");
+        goto cleanupInstanceId;
     }
     if (DeviceIoControl(NdisHandle, TUN_IOCTL_FORCE_CLOSE_HANDLES, NULL, 0, NULL, 0, &RequiredBytes, NULL))
     {
-        Result = ERROR_SUCCESS;
+        LastError = ERROR_SUCCESS;
         Sleep(200);
     }
     else if (GetLastError() == ERROR_NOTHING_TO_TERMINATE)
-        Result = ERROR_SUCCESS;
+        LastError = ERROR_SUCCESS;
     else
-        Result = LOG_LAST_ERROR(L"Failed to perform ioctl");
+        LastError = LOG_LAST_ERROR(L"Failed to perform ioctl");
     CloseHandle(NdisHandle);
-out:
+cleanupInstanceId:
     HeapFree(ModuleHeap, 0, InstanceId);
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }
 
-static WINTUN_STATUS
-DisableAllOurAdapters(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **DisabledAdapters)
+static _Return_type_success_(return != FALSE) BOOL
+    DisableAllOurAdapters(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **DisabledAdapters)
 {
     SP_PROPCHANGE_PARAMS Params = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
                                                             .InstallFunction = DIF_PROPERTYCHANGE },
                                     .StateChange = DICS_DISABLE,
                                     .Scope = DICS_FLAG_GLOBAL };
-    DWORD Result = ERROR_SUCCESS;
+    DWORD LastError = ERROR_SUCCESS;
     for (DWORD EnumIndex = 0;; ++EnumIndex)
     {
         SP_DEVINFO_DATA_LIST *DeviceNode = HeapAlloc(ModuleHeap, 0, sizeof(SP_DEVINFO_DATA_LIST));
         if (!DeviceNode)
-            return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
+        {
+            LOG(WINTUN_LOG_ERR, L"Out of memory");
+            SetLastError(ERROR_OUTOFMEMORY);
+            return FALSE;
+        }
         DeviceNode->Data.cbSize = sizeof(SP_DEVINFO_DATA);
         if (!SetupDiEnumDeviceInfo(DevInfo, EnumIndex, &DeviceNode->Data))
         {
@@ -285,8 +307,7 @@ DisableAllOurAdapters(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
             }
             goto cleanupDeviceNode;
         }
-        BOOL IsOurs;
-        if (IsOurAdapter(DevInfo, &DeviceNode->Data, &IsOurs) != ERROR_SUCCESS || !IsOurs)
+        if (!IsOurAdapter(DevInfo, &DeviceNode->Data))
             goto cleanupDeviceNode;
 
         ULONG Status, ProblemCode;
@@ -295,7 +316,7 @@ DisableAllOurAdapters(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
             goto cleanupDeviceNode;
 
         LOG(WINTUN_LOG_INFO, L"Force closing all open handles for existing adapter");
-        if (ForceCloseWintunAdapterHandle(DevInfo, &DeviceNode->Data) != ERROR_SUCCESS)
+        if (!ForceCloseWintunAdapterHandle(DevInfo, &DeviceNode->Data))
             LOG(WINTUN_LOG_WARN, L"Failed to force close adapter handles");
 
         LOG(WINTUN_LOG_INFO, L"Disabling existing adapter");
@@ -303,7 +324,7 @@ DisableAllOurAdapters(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
             !SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, DevInfo, &DeviceNode->Data))
         {
             LOG_LAST_ERROR(L"Failed to disable existing adapter");
-            Result = Result != ERROR_SUCCESS ? Result : GetLastError();
+            LastError = LastError != ERROR_SUCCESS ? LastError : GetLastError();
             goto cleanupDeviceNode;
         }
 
@@ -314,17 +335,17 @@ DisableAllOurAdapters(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
     cleanupDeviceNode:
         HeapFree(ModuleHeap, 0, DeviceNode);
     }
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }
 
-static WINTUN_STATUS
-EnableAllOurAdapters(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA_LIST *AdaptersToEnable)
+static _Return_type_success_(return != FALSE) BOOL
+    EnableAllOurAdapters(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA_LIST *AdaptersToEnable)
 {
     SP_PROPCHANGE_PARAMS Params = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
                                                             .InstallFunction = DIF_PROPERTYCHANGE },
                                     .StateChange = DICS_ENABLE,
                                     .Scope = DICS_FLAG_GLOBAL };
-    DWORD Result = ERROR_SUCCESS;
+    DWORD LastError = ERROR_SUCCESS;
     for (SP_DEVINFO_DATA_LIST *DeviceNode = AdaptersToEnable; DeviceNode; DeviceNode = DeviceNode->Next)
     {
         LOG(WINTUN_LOG_INFO, L"Enabling existing adapter");
@@ -332,10 +353,10 @@ EnableAllOurAdapters(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA_LIST *AdaptersT
             !SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, DevInfo, &DeviceNode->Data))
         {
             LOG_LAST_ERROR(L"Failed to enable existing adapter");
-            Result = Result != ERROR_SUCCESS ? Result : GetLastError();
+            LastError = LastError != ERROR_SUCCESS ? LastError : GetLastError();
         }
     }
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }
 
 void
@@ -367,53 +388,64 @@ CheckReboot(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
         LOG_LAST_ERROR(L"Retrieving device installation parameters failed");
         return FALSE;
     }
+    SetLastError(ERROR_SUCCESS);
     return (DevInstallParams.Flags & (DI_NEEDREBOOT | DI_NEEDRESTART)) != 0;
 }
 
-static WINTUN_STATUS
-SetQuietInstall(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
+static _Return_type_success_(return != FALSE) BOOL
+    SetQuietInstall(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
 {
     SP_DEVINSTALL_PARAMS_W DevInstallParams = { .cbSize = sizeof(SP_DEVINSTALL_PARAMS_W) };
     if (!SetupDiGetDeviceInstallParamsW(DevInfo, DevInfoData, &DevInstallParams))
-        return LOG_LAST_ERROR(L"Retrieving device installation parameters failed");
+    {
+        LOG_LAST_ERROR(L"Retrieving device installation parameters failed");
+        return FALSE;
+    }
     DevInstallParams.Flags |= DI_QUIETINSTALL;
     if (!SetupDiSetDeviceInstallParamsW(DevInfo, DevInfoData, &DevInstallParams))
-        return LOG_LAST_ERROR(L"Setting device installation parameters failed");
-    return ERROR_SUCCESS;
+    {
+        LOG_LAST_ERROR(L"Setting device installation parameters failed");
+        return FALSE;
+    }
+    return TRUE;
 }
 
-static WINTUN_STATUS
-GetNetCfgInstanceId(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ GUID *CfgInstanceID)
+static _Return_type_success_(return != FALSE) BOOL
+    GetNetCfgInstanceId(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ GUID *CfgInstanceID)
 {
     HKEY Key = SetupDiOpenDevRegKey(DevInfo, DevInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_QUERY_VALUE);
     if (Key == INVALID_HANDLE_VALUE)
-        return LOG_LAST_ERROR(L"Opening device registry key failed");
-    WCHAR *ValueStr;
-    DWORD Result = RegistryQueryString(Key, L"NetCfgInstanceId", &ValueStr, TRUE);
-    if (Result != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get NetCfgInstanceId");
+        LOG_LAST_ERROR(L"Opening device registry key failed");
+        return FALSE;
+    }
+    DWORD LastError = ERROR_SUCCESS;
+    WCHAR *ValueStr = RegistryQueryString(Key, L"NetCfgInstanceId", TRUE);
+    if (!ValueStr)
+    {
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get NetCfgInstanceId");
         goto cleanupKey;
     }
     if (FAILED(CLSIDFromString(ValueStr, CfgInstanceID)))
     {
         LOG(WINTUN_LOG_ERR, L"NetCfgInstanceId is not a GUID");
-        Result = ERROR_INVALID_DATA;
+        LastError = ERROR_INVALID_DATA;
     }
-    else
-        Result = ERROR_SUCCESS;
     HeapFree(ModuleHeap, 0, ValueStr);
 cleanupKey:
     RegCloseKey(Key);
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }
 
-static WINTUN_STATUS
-GetDevInfoData(_In_ const GUID *CfgInstanceID, _Out_ HDEVINFO *DevInfo, _Out_ SP_DEVINFO_DATA *DevInfoData)
+static _Return_type_success_(return != FALSE) BOOL
+    GetDevInfoData(_In_ const GUID *CfgInstanceID, _Out_ HDEVINFO *DevInfo, _Out_ SP_DEVINFO_DATA *DevInfoData)
 {
     *DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (!*DevInfo)
-        return LOG_LAST_ERROR(L"Failed to get present adapters");
+    {
+        LOG_LAST_ERROR(L"Failed to get present adapters");
+        return FALSE;
+    }
     for (DWORD EnumIndex = 0;; ++EnumIndex)
     {
         DevInfoData->cbSize = sizeof(SP_DEVINFO_DATA);
@@ -424,12 +456,13 @@ GetDevInfoData(_In_ const GUID *CfgInstanceID, _Out_ HDEVINFO *DevInfo, _Out_ SP
             continue;
         }
         GUID CfgInstanceID2;
-        if (GetNetCfgInstanceId(*DevInfo, DevInfoData, &CfgInstanceID2) == ERROR_SUCCESS &&
+        if (GetNetCfgInstanceId(*DevInfo, DevInfoData, &CfgInstanceID2) &&
             !memcmp(CfgInstanceID, &CfgInstanceID2, sizeof(GUID)))
-            return ERROR_SUCCESS;
+            return TRUE;
     }
     SetupDiDestroyDeviceInfoList(*DevInfo);
-    return ERROR_FILE_NOT_FOUND;
+    SetLastError(ERROR_FILE_NOT_FOUND);
+    return FALSE;
 }
 
 static void
@@ -443,135 +476,135 @@ RemoveNumberedSuffix(_Inout_z_ WCHAR *Name)
     }
 }
 
-static WINTUN_STATUS
-GetPoolDeviceTypeName(_In_z_ const WCHAR *Pool, _Out_cap_c_(MAX_POOL_DEVICE_TYPE) WCHAR *Name)
+static _Return_type_success_(return != FALSE) BOOL
+    GetPoolDeviceTypeName(_In_z_ const WCHAR *Pool, _Out_cap_c_(MAX_POOL_DEVICE_TYPE) WCHAR *Name)
 {
     if (_snwprintf_s(Name, MAX_POOL_DEVICE_TYPE, _TRUNCATE, L"%s Tunnel", Pool) == -1)
-        return LOG(WINTUN_LOG_ERR, L"Pool name too long"), ERROR_INVALID_PARAMETER;
-    return ERROR_SUCCESS;
+    {
+        LOG(WINTUN_LOG_ERR, L"Pool name too long");
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    return TRUE;
 }
 
-static WINTUN_STATUS
-IsPoolMember(_In_z_ const WCHAR *Pool, _In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ BOOL *IsMember)
+static BOOL
+IsPoolMember(_In_z_ const WCHAR *Pool, _In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
 {
-    WCHAR *DeviceDesc, *FriendlyName;
-    DWORD Result = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_DEVICEDESC, &DeviceDesc);
-    if (Result != ERROR_SUCCESS)
+    WCHAR *DeviceDesc = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_DEVICEDESC);
+    if (!DeviceDesc)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to get adapter description");
-        return Result;
+        return FALSE;
     }
-    Result = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_FRIENDLYNAME, &FriendlyName);
-    if (Result != ERROR_SUCCESS)
+    DWORD LastError = ERROR_SUCCESS;
+    BOOL Ret = FALSE;
+    WCHAR *FriendlyName = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_FRIENDLYNAME);
+    if (!FriendlyName)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get adapter friendly name");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get adapter friendly name");
         goto cleanupDeviceDesc;
     }
     WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
-    Result = GetPoolDeviceTypeName(Pool, PoolDeviceTypeName);
-    if (Result != ERROR_SUCCESS)
+    if (!GetPoolDeviceTypeName(Pool, PoolDeviceTypeName))
+    {
+        LastError = GetLastError();
         goto cleanupFriendlyName;
+    }
     if (!_wcsicmp(FriendlyName, PoolDeviceTypeName) || !_wcsicmp(DeviceDesc, PoolDeviceTypeName))
     {
-        *IsMember = TRUE;
+        Ret = TRUE;
         goto cleanupFriendlyName;
     }
     RemoveNumberedSuffix(FriendlyName);
     RemoveNumberedSuffix(DeviceDesc);
     if (!_wcsicmp(FriendlyName, PoolDeviceTypeName) || !_wcsicmp(DeviceDesc, PoolDeviceTypeName))
     {
-        *IsMember = TRUE;
+        Ret = TRUE;
         goto cleanupFriendlyName;
     }
-    *IsMember = FALSE;
 cleanupFriendlyName:
     HeapFree(ModuleHeap, 0, FriendlyName);
 cleanupDeviceDesc:
     HeapFree(ModuleHeap, 0, DeviceDesc);
-    return Result;
+    SetLastError(LastError);
+    return Ret;
 }
 
-static WINTUN_STATUS
-CreateAdapterData(
-    _In_z_ const WCHAR *Pool,
-    _In_ HDEVINFO DevInfo,
-    _In_ SP_DEVINFO_DATA *DevInfoData,
-    _Out_ WINTUN_ADAPTER **Adapter)
+static _Return_type_success_(return != NULL) WINTUN_ADAPTER
+    *CreateAdapterData(_In_z_ const WCHAR *Pool, _In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
 {
-    DWORD Result;
-
     /* Open HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\<class>\<id> registry key. */
     HKEY Key = SetupDiOpenDevRegKey(DevInfo, DevInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_QUERY_VALUE);
     if (Key == INVALID_HANDLE_VALUE)
-        return LOG_LAST_ERROR(L"Opening device registry key failed");
+    {
+        LOG_LAST_ERROR(L"Opening device registry key failed");
+        return NULL;
+    }
 
-    WINTUN_ADAPTER *a = HeapAlloc(ModuleHeap, 0, sizeof(WINTUN_ADAPTER));
-    if (!a)
+    DWORD LastError;
+    WINTUN_ADAPTER *Adapter = HeapAlloc(ModuleHeap, 0, sizeof(WINTUN_ADAPTER));
+    if (!Adapter)
     {
         LOG(WINTUN_LOG_ERR, L"Out of memory");
-        Result = ERROR_OUTOFMEMORY;
+        LastError = ERROR_OUTOFMEMORY;
         goto cleanupKey;
     }
 
-    /* Read the NetCfgInstanceId value and convert to GUID. */
-    WCHAR *ValueStr;
-    Result = RegistryQueryString(Key, L"NetCfgInstanceId", &ValueStr, TRUE);
-    if (Result != ERROR_SUCCESS)
+    WCHAR *ValueStr = RegistryQueryString(Key, L"NetCfgInstanceId", TRUE);
+    if (!ValueStr)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get NetCfgInstanceId");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get NetCfgInstanceId");
         goto cleanupAdapter;
     }
-    if (FAILED(CLSIDFromString(ValueStr, &a->CfgInstanceID)))
+    if (FAILED(CLSIDFromString(ValueStr, &Adapter->CfgInstanceID)))
     {
-        LOG(WINTUN_LOG_ERR, L"NetCfgInstanceId is not a GUID");
+        LOG(WINTUN_LOG_ERR, L"NetCfgInstanceId is not Adapter GUID");
         HeapFree(ModuleHeap, 0, ValueStr);
-        Result = ERROR_INVALID_DATA;
+        LastError = ERROR_INVALID_DATA;
         goto cleanupAdapter;
     }
     HeapFree(ModuleHeap, 0, ValueStr);
 
-    /* Read the NetLuidIndex value. */
-    Result = RegistryQueryDWORD(Key, L"NetLuidIndex", &a->LuidIndex, TRUE);
-    if (Result != ERROR_SUCCESS)
+    if (!RegistryQueryDWORD(Key, L"NetLuidIndex", &Adapter->LuidIndex, TRUE))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get NetLuidIndex");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get NetLuidIndex");
         goto cleanupAdapter;
     }
 
-    /* Read the NetLuidIndex value. */
-    Result = RegistryQueryDWORD(Key, L"*IfType", &a->IfType, TRUE);
-    if (Result != ERROR_SUCCESS)
+    if (!RegistryQueryDWORD(Key, L"*IfType", &Adapter->IfType, TRUE))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get *IfType");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get *IfType");
         goto cleanupAdapter;
     }
 
     DWORD Size;
-    if (!SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, a->DevInstanceID, _countof(a->DevInstanceID), &Size))
+    if (!SetupDiGetDeviceInstanceIdW(
+            DevInfo, DevInfoData, Adapter->DevInstanceID, _countof(Adapter->DevInstanceID), &Size))
     {
-        Result = LOG_LAST_ERROR(L"Failed to get instance ID");
+        LastError = LOG_LAST_ERROR(L"Failed to get instance ID");
         goto cleanupAdapter;
     }
 
-    if (wcsncpy_s(a->Pool, _countof(a->Pool), Pool, _TRUNCATE) == STRUNCATE)
+    if (wcsncpy_s(Adapter->Pool, _countof(Adapter->Pool), Pool, _TRUNCATE) == STRUNCATE)
     {
         LOG(WINTUN_LOG_ERR, L"Pool name too long");
-        Result = ERROR_INVALID_PARAMETER;
+        LastError = ERROR_INVALID_PARAMETER;
         goto cleanupAdapter;
     }
-    *Adapter = a;
-    Result = ERROR_SUCCESS;
+    RegCloseKey(Key);
+    return Adapter;
 
 cleanupAdapter:
-    if (Result != ERROR_SUCCESS)
-        HeapFree(ModuleHeap, 0, a);
+    HeapFree(ModuleHeap, 0, Adapter);
 cleanupKey:
     RegCloseKey(Key);
-    return Result;
+    SetLastError(LastError);
+    return NULL;
 }
 
-static WINTUN_STATUS
-GetDeviceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
+static _Return_type_success_(return != FALSE) BOOL
+    GetDeviceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
 {
     if (_snwprintf_s(
             Path,
@@ -580,8 +613,12 @@ GetDeviceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) W
             L"SYSTEM\\CurrentControlSet\\Enum\\%.*s",
             MAX_INSTANCE_ID,
             Adapter->DevInstanceID) == -1)
-        return LOG(WINTUN_LOG_ERR, L"Registry path too long"), ERROR_INVALID_PARAMETER;
-    return ERROR_SUCCESS;
+    {
+        LOG(WINTUN_LOG_ERR, L"Registry path too long");
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    return TRUE;
 }
 
 void WINAPI
@@ -590,23 +627,27 @@ WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
     HeapFree(ModuleHeap, 0, Adapter);
 }
 
-WINTUN_STATUS WINAPI
-WintunGetAdapter(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name, _Out_ WINTUN_ADAPTER **Adapter)
+_Return_type_success_(return != NULL) WINTUN_ADAPTER *WINAPI
+    WintunGetAdapter(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name)
 {
     if (!ElevateToSystem())
-        return LOG_LAST_ERROR(L"Failed to impersonate SYSTEM user");
-    DWORD Result;
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user");
+        return NULL;
+    }
+    DWORD LastError;
+    WINTUN_ADAPTER *Adapter = NULL;
     HANDLE Mutex = NamespaceTakePoolMutex(Pool);
     if (!Mutex)
     {
-        Result = ERROR_INVALID_HANDLE;
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to take pool mutex");
         goto cleanupToken;
     }
 
     HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
     {
-        Result = LOG_LAST_ERROR(L"Failed to get present adapters");
+        LastError = LOG_LAST_ERROR(L"Failed to get present adapters");
         goto cleanupMutex;
     }
 
@@ -621,7 +662,7 @@ WintunGetAdapter(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name, _Out_ WINTU
         }
 
         GUID CfgInstanceID;
-        if (GetNetCfgInstanceId(DevInfo, &DevInfoData, &CfgInstanceID) != ERROR_SUCCESS)
+        if (!GetNetCfgInstanceId(DevInfo, &DevInfoData, &CfgInstanceID))
             continue;
 
         /* TODO: is there a better way than comparing ifnames? */
@@ -637,134 +678,162 @@ WintunGetAdapter(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name, _Out_ WINTU
         }
 
         /* Check the Hardware ID to make sure it's a real Wintun device. */
-        BOOL IsOurs;
-        Result = IsOurAdapter(DevInfo, &DevInfoData, &IsOurs);
-        if (Result != ERROR_SUCCESS)
-        {
-            LOG(WINTUN_LOG_ERR, L"Failed to get hardware ID");
-            goto cleanupDevInfo;
-        }
-        if (!IsOurs)
+        if (!IsOurAdapter(DevInfo, &DevInfoData))
         {
             LOG(WINTUN_LOG_ERR, L"Foreign adapter with the same name exists");
-            Result = ERROR_ALREADY_EXISTS;
+            LastError = ERROR_ALREADY_EXISTS;
             goto cleanupDevInfo;
         }
 
-        BOOL IsMember;
-        Result = IsPoolMember(Pool, DevInfo, &DevInfoData, &IsMember);
-        if (Result != ERROR_SUCCESS)
+        if (!IsPoolMember(Pool, DevInfo, &DevInfoData))
         {
-            LOG(WINTUN_LOG_ERR, L"Failed to get pool membership");
-            goto cleanupDevInfo;
-        }
-        if (!IsMember)
-        {
-            LOG(WINTUN_LOG_ERR, L"Wintun adapter with the same name exists in another pool");
-            Result = ERROR_ALREADY_EXISTS;
-            goto cleanupDevInfo;
+            if ((LastError = GetLastError()) == ERROR_SUCCESS)
+            {
+                LOG(WINTUN_LOG_ERR, L"Wintun adapter with the same name exists in another pool");
+                LastError = ERROR_ALREADY_EXISTS;
+                goto cleanupDevInfo;
+            }
+            else
+            {
+                LOG(WINTUN_LOG_ERR, L"Failed to get pool membership");
+                goto cleanupDevInfo;
+            }
         }
 
-        Result = CreateAdapterData(Pool, DevInfo, &DevInfoData, Adapter);
-        if (Result != ERROR_SUCCESS)
-            LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
-
+        Adapter = CreateAdapterData(Pool, DevInfo, &DevInfoData);
+        LastError = Adapter ? ERROR_SUCCESS : LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
         goto cleanupDevInfo;
     }
-    Result = ERROR_FILE_NOT_FOUND;
+    LastError = ERROR_FILE_NOT_FOUND;
 cleanupDevInfo:
     SetupDiDestroyDeviceInfoList(DevInfo);
 cleanupMutex:
     NamespaceReleaseMutex(Mutex);
 cleanupToken:
     RevertToSelf();
-    return Result;
+    SetLastError(LastError);
+    return Adapter;
 }
 
-WINTUN_STATUS WINAPI
-WintunGetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_ADAPTER_NAME) WCHAR *Name)
+_Return_type_success_(return != FALSE) BOOL WINAPI
+    WintunGetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_ADAPTER_NAME) WCHAR *Name)
 {
-    return NciGetConnectionName(&Adapter->CfgInstanceID, Name, MAX_ADAPTER_NAME * sizeof(WCHAR), NULL);
+    DWORD LastError = NciGetConnectionName(&Adapter->CfgInstanceID, Name, MAX_ADAPTER_NAME * sizeof(WCHAR), NULL);
+    if (LastError != ERROR_SUCCESS)
+    {
+        SetLastError(LOG_ERROR(L"Failed to get name", LastError));
+        return FALSE;
+    }
+    return TRUE;
 }
 
-static WINTUN_STATUS
-ConvertInterfaceAliasToGuid(_In_z_ const WCHAR *Name, _Out_ GUID *Guid)
+static _Return_type_success_(return != FALSE) BOOL
+    ConvertInterfaceAliasToGuid(_In_z_ const WCHAR *Name, _Out_ GUID *Guid)
 {
     NET_LUID Luid;
-    DWORD Result = ConvertInterfaceAliasToLuid(Name, &Luid);
-    if (Result != NO_ERROR)
-        return LOG_ERROR(L"Failed convert interface alias name to the locally unique identifier", Result);
-    return ConvertInterfaceLuidToGuid(&Luid, Guid);
+    DWORD LastError = ConvertInterfaceAliasToLuid(Name, &Luid);
+    if (LastError != NO_ERROR)
+    {
+        SetLastError(LOG_ERROR(L"Failed convert interface alias name to the locally unique identifier", LastError));
+        return FALSE;
+    }
+    LastError = ConvertInterfaceLuidToGuid(&Luid, Guid);
+    if (LastError != NO_ERROR)
+    {
+        SetLastError(LOG_ERROR(L"Failed convert interface locally to globally unique identifier", LastError));
+        return FALSE;
+    }
+    return TRUE;
 }
 
-WINTUN_STATUS WINAPI
-WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_ const WCHAR *Name)
+_Return_type_success_(return != FALSE) BOOL WINAPI
+    WintunSetAdapterName(_In_ const WINTUN_ADAPTER *Adapter, _In_z_ const WCHAR *Name)
 {
-    DWORD Result;
+    DWORD LastError;
     const int MaxSuffix = 1000;
     WCHAR AvailableName[MAX_ADAPTER_NAME];
     if (wcsncpy_s(AvailableName, _countof(AvailableName), Name, _TRUNCATE) == STRUNCATE)
-        return LOG(WINTUN_LOG_ERR, L"Adapter name too long"), ERROR_INVALID_PARAMETER;
+    {
+        LOG(WINTUN_LOG_ERR, L"Adapter name too long");
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
     for (int i = 0;; ++i)
     {
-        Result = NciSetConnectionName(&Adapter->CfgInstanceID, AvailableName);
-        if (Result == ERROR_DUP_NAME)
+        LastError = NciSetConnectionName(&Adapter->CfgInstanceID, AvailableName);
+        if (LastError == ERROR_DUP_NAME)
         {
             GUID Guid2;
-            DWORD Result2 = ConvertInterfaceAliasToGuid(AvailableName, &Guid2);
-            if (Result2 == ERROR_SUCCESS)
+            if (ConvertInterfaceAliasToGuid(AvailableName, &Guid2))
             {
                 for (int j = 0; j < MaxSuffix; ++j)
                 {
                     WCHAR Proposal[MAX_ADAPTER_NAME];
                     if (_snwprintf_s(Proposal, _countof(Proposal), _TRUNCATE, L"%s %d", Name, j + 1) == -1)
-                        return LOG(WINTUN_LOG_ERR, L"Adapter name too long"), ERROR_INVALID_PARAMETER;
+                    {
+                        LOG(WINTUN_LOG_ERR, L"Adapter name too long");
+                        SetLastError(ERROR_INVALID_PARAMETER);
+                        return FALSE;
+                    }
                     if (_wcsnicmp(Proposal, AvailableName, MAX_ADAPTER_NAME) == 0)
                         continue;
-                    Result2 = NciSetConnectionName(&Guid2, Proposal);
-                    if (Result2 == ERROR_DUP_NAME)
+                    DWORD LastError2 = NciSetConnectionName(&Guid2, Proposal);
+                    if (LastError2 == ERROR_DUP_NAME)
                         continue;
-                    if (Result2 == ERROR_SUCCESS)
+                    if (LastError2 == ERROR_SUCCESS)
                     {
-                        Result = NciSetConnectionName(&Adapter->CfgInstanceID, AvailableName);
-                        if (Result == ERROR_SUCCESS)
+                        LastError = NciSetConnectionName(&Adapter->CfgInstanceID, AvailableName);
+                        if (LastError == ERROR_SUCCESS)
                             break;
                     }
                     break;
                 }
             }
         }
-        if (Result == ERROR_SUCCESS)
+        if (LastError == ERROR_SUCCESS)
             break;
-        if (i >= MaxSuffix || Result != ERROR_DUP_NAME)
-            return LOG_ERROR(L"Setting adapter name failed", Result);
+        if (i >= MaxSuffix || LastError != ERROR_DUP_NAME)
+        {
+            SetLastError(LOG_ERROR(L"Setting adapter name failed", LastError));
+            return FALSE;
+        }
         if (_snwprintf_s(AvailableName, _countof(AvailableName), _TRUNCATE, L"%s %d", Name, i + 1) == -1)
-            return LOG(WINTUN_LOG_ERR, L"Adapter name too long"), ERROR_INVALID_PARAMETER;
+        {
+            LOG(WINTUN_LOG_ERR, L"Adapter name too long");
+            SetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+        }
     }
 
     /* TODO: This should use NetSetup2 so that it doesn't get unset. */
     HKEY DeviceRegKey;
     WCHAR DeviceRegPath[MAX_REG_PATH];
-    Result = GetDeviceRegPath(Adapter, DeviceRegPath);
-    if (Result != ERROR_SUCCESS)
-        return Result;
-    Result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, DeviceRegPath, 0, KEY_SET_VALUE, &DeviceRegKey);
-    if (Result != ERROR_SUCCESS)
-        return LOG_ERROR(L"Failed to open registry key", Result);
+    if (!GetDeviceRegPath(Adapter, DeviceRegPath))
+        return FALSE;
+    LastError = RegOpenKeyExW(HKEY_LOCAL_MACHINE, DeviceRegPath, 0, KEY_SET_VALUE, &DeviceRegKey);
+    if (LastError != ERROR_SUCCESS)
+    {
+        SetLastError(LOG_ERROR(L"Failed to open registry key", LastError));
+        return FALSE;
+    }
     WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
-    Result = GetPoolDeviceTypeName(Adapter->Pool, PoolDeviceTypeName);
-    if (Result != ERROR_SUCCESS)
+    if (!GetPoolDeviceTypeName(Adapter->Pool, PoolDeviceTypeName))
+    {
+        LastError = GetLastError();
         goto cleanupDeviceRegKey;
-    Result = RegSetKeyValueW(
+    }
+    LastError = RegSetKeyValueW(
         DeviceRegKey,
         NULL,
         L"FriendlyName",
         REG_SZ,
         PoolDeviceTypeName,
         (DWORD)((wcslen(PoolDeviceTypeName) + 1) * sizeof(WCHAR)));
+    if (LastError != ERROR_SUCCESS)
+        LOG_ERROR(L"Failed to set FriendlyName", LastError);
 cleanupDeviceRegKey:
     RegCloseKey(DeviceRegKey);
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }
 
 void WINAPI
@@ -775,10 +844,10 @@ WintunGetAdapterLUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ NET_LUID *Luid)
     Luid->Info.IfType = Adapter->IfType;
 }
 
-WINTUN_STATUS WINAPI
-WintunOpenAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *Handle)
+_Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE WINAPI
+    WintunOpenAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter)
 {
-    return GetDeviceObject(Adapter->DevInstanceID, Handle);
+    return OpenDeviceObject(Adapter->DevInstanceID);
 }
 
 static BOOL
@@ -793,15 +862,16 @@ HaveWHQL(void)
     return FALSE;
 }
 
-static WINTUN_STATUS
-InstallCertificate(_In_z_ const WCHAR *SignedResource)
+static _Return_type_success_(return != FALSE) BOOL InstallCertificate(_In_z_ const WCHAR *SignedResource)
 {
     LOG(WINTUN_LOG_INFO, L"Trusting code signing certificate");
-    const void *LockedResource;
     DWORD SizeResource;
-    DWORD Result = ResourceGetAddress(SignedResource, &LockedResource, &SizeResource);
-    if (Result != ERROR_SUCCESS)
-        return LOG(WINTUN_LOG_ERR, L"Failed to locate resource"), Result;
+    const void *LockedResource = ResourceGetAddress(SignedResource, &SizeResource);
+    if (!LockedResource)
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to locate resource");
+        return FALSE;
+    }
     const CERT_BLOB CertBlob = { .cbData = SizeResource, .pbData = (BYTE *)LockedResource };
     HCERTSTORE QueriedStore;
     if (!CryptQueryObject(
@@ -816,12 +886,16 @@ InstallCertificate(_In_z_ const WCHAR *SignedResource)
             &QueriedStore,
             0,
             NULL))
-        return LOG_LAST_ERROR(L"Failed to find certificate");
+    {
+        LOG_LAST_ERROR(L"Failed to find certificate");
+        return FALSE;
+    }
+    DWORD LastError = ERROR_SUCCESS;
     HCERTSTORE TrustedStore =
         CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, 0, CERT_SYSTEM_STORE_LOCAL_MACHINE, L"TrustedPublisher");
     if (!TrustedStore)
     {
-        Result = LOG_LAST_ERROR(L"Failed to open store");
+        LastError = LOG_LAST_ERROR(L"Failed to open store");
         goto cleanupQueriedStore;
     }
     LPSTR CodeSigningOid[] = { szOID_PKIX_KP_CODE_SIGNING };
@@ -852,13 +926,13 @@ InstallCertificate(_In_z_ const WCHAR *SignedResource)
             if (!CertAddCertificateContextToStore(TrustedStore, CertContext, CERT_STORE_ADD_REPLACE_EXISTING, NULL))
             {
                 LOG_LAST_ERROR(L"Failed to add certificate to store");
-                Result = Result != ERROR_SUCCESS ? Result : GetLastError();
+                LastError = LastError != ERROR_SUCCESS ? LastError : GetLastError();
             }
     }
     CertCloseStore(TrustedStore, 0);
 cleanupQueriedStore:
     CertCloseStore(QueriedStore, 0);
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }
 
 static BOOL
@@ -897,8 +971,8 @@ IsNewer(
     return FALSE;
 }
 
-static DWORD
-GetTcpipAdapterRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
+static _Return_type_success_(return != FALSE) BOOL
+    GetTcpipAdapterRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
 {
     WCHAR Guid[MAX_GUID_STRING_LEN];
     if (_snwprintf_s(
@@ -908,108 +982,134 @@ GetTcpipAdapterRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_P
             L"SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Adapters\\%.*s",
             StringFromGUID2(&Adapter->CfgInstanceID, Guid, _countof(Guid)),
             Guid) == -1)
-        return LOG(WINTUN_LOG_ERR, L"Registry path too long"), ERROR_INVALID_PARAMETER;
-    return ERROR_SUCCESS;
+    {
+        LOG(WINTUN_LOG_ERR, L"Registry path too long");
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    return TRUE;
 }
 
-static WINTUN_STATUS
-GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
+static _Return_type_success_(return != FALSE) BOOL
+    GetTcpipInterfaceRegPath(_In_ const WINTUN_ADAPTER *Adapter, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
 {
-    DWORD Result;
     HKEY TcpipAdapterRegKey;
     WCHAR TcpipAdapterRegPath[MAX_REG_PATH];
-    Result = GetTcpipAdapterRegPath(Adapter, TcpipAdapterRegPath);
-    if (Result != ERROR_SUCCESS)
-        return Result;
-    Result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, TcpipAdapterRegPath, 0, KEY_QUERY_VALUE, &TcpipAdapterRegKey);
-    if (Result != ERROR_SUCCESS)
-        return LOG_ERROR(L"Failed to open registry key", Result);
-    WCHAR *Paths;
-    Result = RegistryQueryString(TcpipAdapterRegKey, L"IpConfig", &Paths, TRUE);
-    if (Result != ERROR_SUCCESS)
+    if (!GetTcpipAdapterRegPath(Adapter, TcpipAdapterRegPath))
+        return FALSE;
+    DWORD LastError = RegOpenKeyExW(HKEY_LOCAL_MACHINE, TcpipAdapterRegPath, 0, KEY_QUERY_VALUE, &TcpipAdapterRegKey);
+    if (LastError != ERROR_SUCCESS)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get IpConfig");
+        SetLastError(LOG_ERROR(L"Failed to open registry key", LastError));
+        return FALSE;
+    }
+    WCHAR *Paths = RegistryQueryString(TcpipAdapterRegKey, L"IpConfig", TRUE);
+    if (!Paths)
+    {
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get IpConfig");
         goto cleanupTcpipAdapterRegKey;
     }
     if (!Paths[0])
     {
         LOG(WINTUN_LOG_ERR, L"IpConfig is empty");
-        Result = ERROR_INVALID_DATA;
+        LastError = ERROR_INVALID_DATA;
         goto cleanupPaths;
     }
     if (_snwprintf_s(Path, MAX_REG_PATH, _TRUNCATE, L"SYSTEM\\CurrentControlSet\\Services\\%s", Paths) == -1)
     {
         LOG(WINTUN_LOG_ERR, L"Registry path too long");
-        Result = ERROR_INVALID_PARAMETER;
+        LastError = ERROR_INVALID_PARAMETER;
         goto cleanupPaths;
     }
-    Result = ERROR_SUCCESS;
 cleanupPaths:
     HeapFree(ModuleHeap, 0, Paths);
 cleanupTcpipAdapterRegKey:
     RegCloseKey(TcpipAdapterRegKey);
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }
 
-static DWORD
-VersionOfFile(_In_z_ const WCHAR *Filename)
+static _Return_type_success_(return != 0) DWORD VersionOfFile(_In_z_ const WCHAR *Filename)
 {
-    DWORD Version = 0;
     DWORD Zero;
     DWORD Len = GetFileVersionInfoSizeW(Filename, &Zero);
     if (!Len)
-        return LOG_LAST_ERROR(L"Failed to query version info size"), Version;
+    {
+        LOG_LAST_ERROR(L"Failed to query version info size");
+        return 0;
+    }
     VOID *VersionInfo = HeapAlloc(ModuleHeap, 0, Len);
     if (!VersionInfo)
     {
         LOG(WINTUN_LOG_ERR, L"Out of memory");
-        return Version;
+        SetLastError(ERROR_OUTOFMEMORY);
+        return 0;
     }
+    DWORD LastError = ERROR_SUCCESS, Version = 0;
     VS_FIXEDFILEINFO *FixedInfo;
     UINT FixedInfoLen = sizeof(*FixedInfo);
     if (!GetFileVersionInfoW(Filename, 0, Len, VersionInfo))
     {
-        LOG_LAST_ERROR(L"Failed to get version info");
+        LastError = LOG_LAST_ERROR(L"Failed to get version info");
         goto out;
     }
     if (!VerQueryValueW(VersionInfo, L"\\", &FixedInfo, &FixedInfoLen))
     {
-        LOG_LAST_ERROR(L"Failed to get version info root");
+        LastError = LOG_LAST_ERROR(L"Failed to get version info root");
         goto out;
     }
     Version = FixedInfo->dwFileVersionMS;
+    if (!Version)
+    {
+        LOG(WINTUN_LOG_WARN, L"Determined version of file, but was v0.0, so returning failure");
+        LastError = ERROR_VERSION_PARSE_ERROR;
+    }
 out:
     HeapFree(ModuleHeap, 0, VersionInfo);
-    return Version;
+    return RET_ERROR(Version, LastError);
 }
 
-static WINTUN_STATUS
-CreateTemporaryDirectory(_Out_cap_c_(MAX_PATH) WCHAR *RandomTempSubDirectory)
+static _Return_type_success_(return != FALSE) BOOL
+    CreateTemporaryDirectory(_Out_cap_c_(MAX_PATH) WCHAR *RandomTempSubDirectory)
 {
     WCHAR WindowsDirectory[MAX_PATH];
     if (!GetWindowsDirectoryW(WindowsDirectory, _countof(WindowsDirectory)))
-        return LOG_LAST_ERROR(L"Failed to get Windows folder");
+    {
+        LOG_LAST_ERROR(L"Failed to get Windows folder");
+        return FALSE;
+    }
     WCHAR WindowsTempDirectory[MAX_PATH];
     if (!PathCombineW(WindowsTempDirectory, WindowsDirectory, L"Temp"))
-        return ERROR_BUFFER_OVERFLOW;
+    {
+        SetLastError(ERROR_BUFFER_OVERFLOW);
+        return FALSE;
+    }
     UCHAR RandomBytes[32] = { 0 };
 #pragma warning(suppress : 6387)
     if (!RtlGenRandom(RandomBytes, sizeof(RandomBytes)))
-        return LOG_LAST_ERROR(L"Failed to generate random");
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to generate random");
+        SetLastError(ERROR_GEN_FAILURE);
+        return FALSE;
+    }
     WCHAR RandomSubDirectory[sizeof(RandomBytes) * 2 + 1];
     for (int i = 0; i < sizeof(RandomBytes); ++i)
         swprintf_s(&RandomSubDirectory[i * 2], 3, L"%02x", RandomBytes[i]);
     if (!PathCombineW(RandomTempSubDirectory, WindowsTempDirectory, RandomSubDirectory))
-        return ERROR_BUFFER_OVERFLOW;
+    {
+        SetLastError(ERROR_BUFFER_OVERFLOW);
+        return FALSE;
+    }
     if (!CreateDirectoryW(RandomTempSubDirectory, &SecurityAttributes))
-        return LOG_LAST_ERROR(L"Failed to create temporary folder");
-    return ERROR_SUCCESS;
+    {
+        LOG_LAST_ERROR(L"Failed to create temporary folder");
+        return FALSE;
+    }
+    return TRUE;
 }
 
-DWORD
+DWORD WINAPI
 WintunGetVersion(void)
 {
-    DWORD Version = 0;
     PRTL_PROCESS_MODULES Modules;
     ULONG BufferSize = 128 * 1024;
     for (;;)
@@ -1018,7 +1118,8 @@ WintunGetVersion(void)
         if (!Modules)
         {
             LOG(WINTUN_LOG_ERR, L"Out of memory");
-            return Version;
+            SetLastError(ERROR_OUTOFMEMORY);
+            return 0;
         }
         NTSTATUS Status = NtQuerySystemInformation(SystemModuleInformation, Modules, BufferSize, &BufferSize);
         if (NT_SUCCESS(Status))
@@ -1027,8 +1128,10 @@ WintunGetVersion(void)
         if (Status == STATUS_INFO_LENGTH_MISMATCH)
             continue;
         LOG(WINTUN_LOG_ERR, L"Failed to enumerate drivers");
-        return Version;
+        SetLastError(ERROR_GEN_FAILURE);
+        return 0;
     }
+    DWORD LastError = ERROR_SUCCESS, Version = 0;
     for (ULONG i = Modules->NumberOfModules; i-- > 0;)
     {
         const char *NtPath = (const char *)Modules->Modules[i].FullPathName;
@@ -1038,12 +1141,15 @@ WintunGetVersion(void)
             if (_snwprintf_s(FilePath, _countof(FilePath), _TRUNCATE, L"\\\\?\\GLOBALROOT%S", NtPath) == -1)
                 continue;
             Version = VersionOfFile(FilePath);
-            goto out;
+            if (!Version)
+                LastError = GetLastError();
+            goto cleanupModules;
         }
     }
-out:
+    LastError = ERROR_FILE_NOT_FOUND;
+cleanupModules:
     HeapFree(ModuleHeap, 0, Modules);
-    return Version;
+    return RET_ERROR(Version, LastError);
 }
 
 static BOOL
@@ -1055,8 +1161,7 @@ EnsureWintunUnloaded(void)
     return !Loaded;
 }
 
-static WINTUN_STATUS
-SelectDriver(
+static _Return_type_success_(return != FALSE) BOOL SelectDriver(
     _In_ HDEVINFO DevInfo,
     _In_opt_ SP_DEVINFO_DATA *DevInfoData,
     _Inout_ SP_DEVINSTALL_PARAMS_W *DevInstallParams,
@@ -1066,11 +1171,14 @@ SelectDriver(
     static const DWORDLONG OurDriverVersion = WINTUN_INF_VERSION;
     HANDLE DriverInstallationLock = NamespaceTakeDriverInstallationMutex();
     if (!DriverInstallationLock)
-        return LOG_LAST_ERROR(L"Failed to take driver installation mutex");
-    DWORD Result = ERROR_SUCCESS;
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to take driver installation mutex");
+        return FALSE;
+    }
+    DWORD LastError;
     if (!SetupDiBuildDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER))
     {
-        Result = LOG_LAST_ERROR(L"Failed building driver info list");
+        LastError = LOG_LAST_ERROR(L"Failed building driver info list");
         goto cleanupDriverInstallationLock;
     }
     BOOL DestroyDriverInfoListOnCleanup = TRUE;
@@ -1087,8 +1195,8 @@ SelectDriver(
                 break;
             continue;
         }
-        SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData;
-        if (GetAdapterDrvInfoDetail(DevInfo, DevInfoData, &DrvInfoData, &DrvInfoDetailData) != ERROR_SUCCESS)
+        SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData = GetAdapterDrvInfoDetail(DevInfo, DevInfoData, &DrvInfoData);
+        if (!DrvInfoDetailData)
         {
             LOG(WINTUN_LOG_WARN, L"Failed getting driver info detail");
             continue;
@@ -1103,7 +1211,7 @@ SelectDriver(
                     SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
                 if (DevInfoExistingAdapters == INVALID_HANDLE_VALUE)
                 {
-                    Result = LOG_LAST_ERROR(L"Failed to get present adapters");
+                    LastError = LOG_LAST_ERROR(L"Failed to get present adapters");
                     HeapFree(ModuleHeap, 0, DrvInfoDetailData);
                     goto cleanupExistingAdapters;
                 }
@@ -1114,16 +1222,16 @@ SelectDriver(
                     LOG(WINTUN_LOG_WARN,
                         L"Failed to unload existing driver, which means a reboot will likely be required");
             }
-            LOG(WINTUN_LOG_INFO, TEXT("Removing existing driver"));
+            LOG(WINTUN_LOG_INFO, L"Removing existing driver");
             if (!SetupUninstallOEMInfW(PathFindFileNameW(DrvInfoDetailData->InfFileName), SUOI_FORCEDELETE, NULL))
-                LOG_LAST_ERROR(TEXT("Unable to remove existing driver"));
+                LOG_LAST_ERROR(L"Unable to remove existing driver");
             goto next;
         }
         if (!IsNewer(&DrvInfoData.DriverDate, DrvInfoData.DriverVersion, &DriverDate, DriverVersion))
             goto next;
         if (!SetupDiSetSelectedDriverW(DevInfo, DevInfoData, &DrvInfoData))
         {
-            LOG_ERROR(L"Failed to select driver", GetLastError());
+            LOG_LAST_ERROR(L"Failed to select driver");
             goto next;
         }
         DriverDate = DrvInfoData.DriverDate;
@@ -1134,14 +1242,15 @@ SelectDriver(
 
     if (DriverVersion)
     {
+        LastError = ERROR_SUCCESS;
         DestroyDriverInfoListOnCleanup = FALSE;
         goto cleanupExistingAdapters;
     }
 
     WCHAR RandomTempSubDirectory[MAX_PATH];
-    if ((Result = CreateTemporaryDirectory(RandomTempSubDirectory)) != ERROR_SUCCESS)
+    if (!CreateTemporaryDirectory(RandomTempSubDirectory))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder");
         goto cleanupExistingAdapters;
     }
 
@@ -1152,27 +1261,27 @@ SelectDriver(
         !PathCombineW(SysPath, RandomTempSubDirectory, L"wintun.sys") ||
         !PathCombineW(InfPath, RandomTempSubDirectory, L"wintun.inf"))
     {
-        Result = ERROR_BUFFER_OVERFLOW;
+        LastError = ERROR_BUFFER_OVERFLOW;
         goto cleanupDirectory;
     }
 
     BOOL UseWHQL = HaveWHQL();
-    if (!UseWHQL && (Result = InstallCertificate(L"wintun.cat")) != ERROR_SUCCESS)
+    if (!UseWHQL && !InstallCertificate(L"wintun.cat"))
         LOG(WINTUN_LOG_WARN, L"Failed to install code signing certificate");
 
     LOG(WINTUN_LOG_INFO, L"Extracting driver");
-    if ((Result = ResourceCopyToFile(CatPath, UseWHQL ? L"wintun-whql.cat" : L"wintun.cat")) != ERROR_SUCCESS ||
-        (Result = ResourceCopyToFile(SysPath, UseWHQL ? L"wintun-whql.sys" : L"wintun.sys")) != ERROR_SUCCESS ||
-        (Result = ResourceCopyToFile(InfPath, UseWHQL ? L"wintun-whql.inf" : L"wintun.inf")) != ERROR_SUCCESS)
+    if (!ResourceCopyToFile(CatPath, UseWHQL ? L"wintun-whql.cat" : L"wintun.cat") ||
+        !ResourceCopyToFile(SysPath, UseWHQL ? L"wintun-whql.sys" : L"wintun.sys") ||
+        !ResourceCopyToFile(InfPath, UseWHQL ? L"wintun-whql.inf" : L"wintun.inf"))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to extract driver");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to extract driver");
         goto cleanupDelete;
     }
     LOG(WINTUN_LOG_INFO, L"Installing driver");
     WCHAR InfStorePath[MAX_PATH];
     if (!SetupCopyOEMInfW(InfPath, NULL, SPOST_NONE, 0, InfStorePath, MAX_PATH, NULL, NULL))
     {
-        Result = LOG_LAST_ERROR(L"Could not install driver to store");
+        LastError = LOG_LAST_ERROR(L"Could not install driver to store");
         goto cleanupDelete;
     }
     _Analysis_assume_nullterminated_(InfStorePath);
@@ -1190,32 +1299,32 @@ SelectDriver(
         STRUNCATE)
     {
         LOG(WINTUN_LOG_ERR, L"Inf path too long");
-        Result = ERROR_INVALID_PARAMETER;
+        LastError = ERROR_INVALID_PARAMETER;
         goto cleanupDelete;
     }
     if (!SetupDiSetDeviceInstallParamsW(DevInfo, DevInfoData, DevInstallParams))
     {
-        Result = LOG_LAST_ERROR(L"Setting device installation parameters failed");
+        LastError = LOG_LAST_ERROR(L"Setting device installation parameters failed");
         goto cleanupDelete;
     }
     if (!SetupDiBuildDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER))
     {
-        Result = LOG_LAST_ERROR(L"Failed rebuilding driver info list");
+        LastError = LOG_LAST_ERROR(L"Failed rebuilding driver info list");
         goto cleanupDelete;
     }
     DestroyDriverInfoListOnCleanup = TRUE;
     SP_DRVINFO_DATA_W DrvInfoData = { .cbSize = sizeof(SP_DRVINFO_DATA_W) };
     if (!SetupDiEnumDriverInfoW(DevInfo, DevInfoData, SPDIT_COMPATDRIVER, 0, &DrvInfoData))
     {
-        Result = LOG_LAST_ERROR(L"Failed to get driver");
+        LastError = LOG_LAST_ERROR(L"Failed to get driver");
         goto cleanupDelete;
     }
     if (!SetupDiSetSelectedDriverW(DevInfo, DevInfoData, &DrvInfoData))
     {
-        Result = LOG_LAST_ERROR(L"Failed to set driver");
+        LastError = LOG_LAST_ERROR(L"Failed to set driver");
         goto cleanupDelete;
     }
-    Result = ERROR_SUCCESS;
+    LastError = ERROR_SUCCESS;
     DestroyDriverInfoListOnCleanup = FALSE;
 
 cleanupDelete:
@@ -1241,82 +1350,85 @@ cleanupExistingAdapters:
         SetupDiDestroyDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER);
 cleanupDriverInstallationLock:
     NamespaceReleaseMutex(DriverInstallationLock);
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }
 
-static WINTUN_STATUS
-CreateAdapter(
+static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
     _In_z_ const WCHAR *Pool,
     _In_z_ const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
-    _Out_ WINTUN_ADAPTER **Adapter,
     _Inout_ BOOL *RebootRequired)
 {
     LOG(WINTUN_LOG_INFO, L"Creating adapter");
 
     HDEVINFO DevInfo = SetupDiCreateDeviceInfoListExW(&GUID_DEVCLASS_NET, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
-        return LOG_LAST_ERROR(L"Creating empty device information set failed");
-    DWORD Result;
+    {
+        LOG_LAST_ERROR(L"Creating empty device information set failed");
+        return NULL;
+    }
+    DWORD LastError;
+    WINTUN_ADAPTER *Adapter = NULL;
     WCHAR ClassName[MAX_CLASS_NAME_LEN];
     if (!SetupDiClassNameFromGuidExW(&GUID_DEVCLASS_NET, ClassName, _countof(ClassName), NULL, NULL, NULL))
     {
-        Result = LOG_LAST_ERROR(L"Retrieving class name associated with class GUID failed");
+        LastError = LOG_LAST_ERROR(L"Retrieving class name associated with class GUID failed");
         goto cleanupDevInfo;
     }
 
     WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
-    Result = GetPoolDeviceTypeName(Pool, PoolDeviceTypeName);
-    if (Result != ERROR_SUCCESS)
+    if (!GetPoolDeviceTypeName(Pool, PoolDeviceTypeName))
+    {
+        LastError = GetLastError();
         goto cleanupDevInfo;
+    }
     SP_DEVINFO_DATA DevInfoData = { .cbSize = sizeof(SP_DEVINFO_DATA) };
     if (!SetupDiCreateDeviceInfoW(
             DevInfo, ClassName, &GUID_DEVCLASS_NET, PoolDeviceTypeName, NULL, DICD_GENERATE_ID, &DevInfoData))
     {
-        Result = LOG_LAST_ERROR(L"Creating new device information element failed");
+        LastError = LOG_LAST_ERROR(L"Creating new device information element failed");
         goto cleanupDevInfo;
     }
     SP_DEVINSTALL_PARAMS_W DevInstallParams = { .cbSize = sizeof(SP_DEVINSTALL_PARAMS_W) };
     if (!SetupDiGetDeviceInstallParamsW(DevInfo, &DevInfoData, &DevInstallParams))
     {
-        Result = LOG_LAST_ERROR(L"Retrieving device installation parameters failed");
+        LastError = LOG_LAST_ERROR(L"Retrieving device installation parameters failed");
         goto cleanupDevInfo;
     }
     DevInstallParams.Flags |= DI_QUIETINSTALL;
     if (!SetupDiSetDeviceInstallParamsW(DevInfo, &DevInfoData, &DevInstallParams))
     {
-        Result = LOG_LAST_ERROR(L"Setting device installation parameters failed");
+        LastError = LOG_LAST_ERROR(L"Setting device installation parameters failed");
         goto cleanupDevInfo;
     }
     if (!SetupDiSetSelectedDevice(DevInfo, &DevInfoData))
     {
-        Result = LOG_LAST_ERROR(L"Failed selecting device");
+        LastError = LOG_LAST_ERROR(L"Failed selecting device");
         goto cleanupDevInfo;
     }
     static const WCHAR Hwids[_countof(WINTUN_HWID) + 1 /*Multi-string terminator*/] = WINTUN_HWID;
     if (!SetupDiSetDeviceRegistryPropertyW(DevInfo, &DevInfoData, SPDRP_HARDWAREID, (const BYTE *)Hwids, sizeof(Hwids)))
     {
-        Result = LOG_LAST_ERROR(L"Failed setting hardware ID");
+        LastError = LOG_LAST_ERROR(L"Failed setting hardware ID");
         goto cleanupDevInfo;
     }
 
-    Result = SelectDriver(DevInfo, &DevInfoData, &DevInstallParams, RebootRequired);
-    if (Result != ERROR_SUCCESS)
+    if (!SelectDriver(DevInfo, &DevInfoData, &DevInstallParams, RebootRequired))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to select driver");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to select driver");
         goto cleanupDevInfo;
     }
 
     HANDLE Mutex = NamespaceTakePoolMutex(Pool);
     if (!Mutex)
     {
-        Result = LOG_LAST_ERROR(L"Failed to take pool mutex");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to take pool mutex");
         goto cleanupDriverInfoList;
     }
 
     if (!SetupDiCallClassInstaller(DIF_REGISTERDEVICE, DevInfo, &DevInfoData))
     {
-        Result = LOG_LAST_ERROR(L"Registering device failed");
+        LastError = LOG_LAST_ERROR(L"Registering device failed");
         goto cleanupDevice;
     }
     if (!SetupDiCallClassInstaller(DIF_REGISTER_COINSTALLERS, DevInfo, &DevInfoData))
@@ -1333,22 +1445,22 @@ CreateAdapter(
     }
     if (NetDevRegKey == INVALID_HANDLE_VALUE)
     {
-        Result = LOG_LAST_ERROR(L"Failed to open device-specific registry key");
+        LastError = LOG_LAST_ERROR(L"Failed to open device-specific registry key");
         goto cleanupDevice;
     }
     if (RequestedGUID)
     {
         WCHAR RequestedGUIDStr[MAX_GUID_STRING_LEN];
-        Result = RegSetValueExW(
+        LastError = RegSetValueExW(
             NetDevRegKey,
             L"NetSetupAnticipatedInstanceId",
             0,
             REG_SZ,
             (const BYTE *)RequestedGUIDStr,
             StringFromGUID2(RequestedGUID, RequestedGUIDStr, _countof(RequestedGUIDStr)) * sizeof(WCHAR));
-        if (Result != ERROR_SUCCESS)
+        if (LastError != ERROR_SUCCESS)
         {
-            LOG_LAST_ERROR(L"Failed to set NetSetupAnticipatedInstanceId");
+            LOG_ERROR(L"Failed to set NetSetupAnticipatedInstanceId", LastError);
             goto cleanupNetDevRegKey;
         }
     }
@@ -1358,7 +1470,7 @@ CreateAdapter(
 
     if (!SetupDiCallClassInstaller(DIF_INSTALLDEVICE, DevInfo, &DevInfoData))
     {
-        Result = LOG_LAST_ERROR(L"Installing device failed");
+        LastError = LOG_LAST_ERROR(L"Installing device failed");
         goto cleanupNetDevRegKey;
     }
     *RebootRequired = *RebootRequired || CheckReboot(DevInfo, &DevInfoData);
@@ -1370,99 +1482,87 @@ CreateAdapter(
             (const BYTE *)PoolDeviceTypeName,
             (DWORD)((wcslen(PoolDeviceTypeName) + 1) * sizeof(WCHAR))))
     {
-        Result = LOG_LAST_ERROR(L"Failed to set adapter description");
+        LastError = LOG_LAST_ERROR(L"Failed to set adapter description");
         goto cleanupNetDevRegKey;
     }
 
     /* DIF_INSTALLDEVICE returns almost immediately, while the device installation continues in the background. It might
      * take a while, before all registry keys and values are populated. */
-    WCHAR *DummyStr;
-    Result = RegistryQueryStringWait(NetDevRegKey, L"NetCfgInstanceId", WAIT_FOR_REGISTRY_TIMEOUT, &DummyStr);
-    if (Result != ERROR_SUCCESS)
+    WCHAR *DummyStr = RegistryQueryStringWait(NetDevRegKey, L"NetCfgInstanceId", WAIT_FOR_REGISTRY_TIMEOUT);
+    if (!DummyStr)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get NetCfgInstanceId");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get NetCfgInstanceId");
         goto cleanupNetDevRegKey;
     }
     HeapFree(ModuleHeap, 0, DummyStr);
     DWORD DummyDWORD;
-    Result = RegistryQueryDWORDWait(NetDevRegKey, L"NetLuidIndex", WAIT_FOR_REGISTRY_TIMEOUT, &DummyDWORD);
-    if (Result != ERROR_SUCCESS)
+    if (!RegistryQueryDWORDWait(NetDevRegKey, L"NetLuidIndex", WAIT_FOR_REGISTRY_TIMEOUT, &DummyDWORD))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get NetLuidIndex");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get NetLuidIndex");
         goto cleanupNetDevRegKey;
     }
-    Result = RegistryQueryDWORDWait(NetDevRegKey, L"*IfType", WAIT_FOR_REGISTRY_TIMEOUT, &DummyDWORD);
-    if (Result != ERROR_SUCCESS)
+    if (!RegistryQueryDWORDWait(NetDevRegKey, L"*IfType", WAIT_FOR_REGISTRY_TIMEOUT, &DummyDWORD))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get *IfType");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get *IfType");
         goto cleanupNetDevRegKey;
     }
 
-    WINTUN_ADAPTER *a;
-    Result = CreateAdapterData(Pool, DevInfo, &DevInfoData, &a);
-    if (Result != ERROR_SUCCESS)
+    Adapter = CreateAdapterData(Pool, DevInfo, &DevInfoData);
+    if (!Adapter)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
         goto cleanupNetDevRegKey;
     }
 
     HKEY TcpipAdapterRegKey;
     WCHAR TcpipAdapterRegPath[MAX_REG_PATH];
-    Result = GetTcpipAdapterRegPath(a, TcpipAdapterRegPath);
-    if (Result != ERROR_SUCCESS)
-        goto cleanupAdapter;
-    Result = RegistryOpenKeyWait(
-        HKEY_LOCAL_MACHINE,
-        TcpipAdapterRegPath,
-        KEY_QUERY_VALUE | KEY_NOTIFY,
-        WAIT_FOR_REGISTRY_TIMEOUT,
-        &TcpipAdapterRegKey);
-    if (Result != ERROR_SUCCESS)
+    if (!GetTcpipAdapterRegPath(Adapter, TcpipAdapterRegPath))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to open adapter-specific TCP/IP interface registry key");
+        LastError = GetLastError();
         goto cleanupAdapter;
     }
-    Result = RegistryQueryStringWait(TcpipAdapterRegKey, L"IpConfig", WAIT_FOR_REGISTRY_TIMEOUT, &DummyStr);
-    if (Result != ERROR_SUCCESS)
+    TcpipAdapterRegKey = RegistryOpenKeyWait(
+        HKEY_LOCAL_MACHINE, TcpipAdapterRegPath, KEY_QUERY_VALUE | KEY_NOTIFY, WAIT_FOR_REGISTRY_TIMEOUT);
+    if (!TcpipAdapterRegKey)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get IpConfig");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to open adapter-specific TCP/IP interface registry key");
+        goto cleanupAdapter;
+    }
+    DummyStr = RegistryQueryStringWait(TcpipAdapterRegKey, L"IpConfig", WAIT_FOR_REGISTRY_TIMEOUT);
+    if (!DummyStr)
+    {
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get IpConfig");
         goto cleanupTcpipAdapterRegKey;
     }
     HeapFree(ModuleHeap, 0, DummyStr);
 
     HKEY TcpipInterfaceRegKey;
     WCHAR TcpipInterfaceRegPath[MAX_REG_PATH];
-    Result = GetTcpipInterfaceRegPath(a, TcpipInterfaceRegPath);
-    if (Result != ERROR_SUCCESS)
+    if (!GetTcpipInterfaceRegPath(Adapter, TcpipInterfaceRegPath))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to determine interface-specific TCP/IP network registry key path");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to determine interface-specific TCP/IP network registry key path");
         goto cleanupTcpipAdapterRegKey;
     }
-    Result = RegistryOpenKeyWait(
-        HKEY_LOCAL_MACHINE,
-        TcpipInterfaceRegPath,
-        KEY_QUERY_VALUE | KEY_SET_VALUE,
-        WAIT_FOR_REGISTRY_TIMEOUT,
-        &TcpipInterfaceRegKey);
-    if (Result != ERROR_SUCCESS)
+    TcpipInterfaceRegKey = RegistryOpenKeyWait(
+        HKEY_LOCAL_MACHINE, TcpipInterfaceRegPath, KEY_QUERY_VALUE | KEY_SET_VALUE, WAIT_FOR_REGISTRY_TIMEOUT);
+    if (!TcpipInterfaceRegKey)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to open interface-specific TCP/IP network registry key");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to open interface-specific TCP/IP network registry key");
         goto cleanupTcpipAdapterRegKey;
     }
 
     static const DWORD EnableDeadGWDetect = 0;
-    Result = RegSetKeyValueW(
+    LastError = RegSetKeyValueW(
         TcpipInterfaceRegKey, NULL, L"EnableDeadGWDetect", REG_DWORD, &EnableDeadGWDetect, sizeof(EnableDeadGWDetect));
-    if (Result != ERROR_SUCCESS)
+    if (LastError != ERROR_SUCCESS)
     {
-        LOG_ERROR(L"Failed to set EnableDeadGWDetect", Result);
+        LOG_ERROR(L"Failed to set EnableDeadGWDetect", LastError);
         goto cleanupTcpipInterfaceRegKey;
     }
 
-    Result = WintunSetAdapterName(a, Name);
-    if (Result != ERROR_SUCCESS)
+    if (!WintunSetAdapterName(Adapter, Name))
     {
-        LOG_ERROR(L"Failed to set adapter name", Result);
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to set adapter name");
         goto cleanupTcpipInterfaceRegKey;
     }
 
@@ -1481,11 +1581,11 @@ CreateAdapter(
                 0) &&
             PropertyType == DEVPROP_TYPE_NTSTATUS)
         {
-            Result = RtlNtStatusToDosError(ProblemStatus);
-            _Analysis_assume_(Result != ERROR_SUCCESS);
+            LastError = RtlNtStatusToDosError(ProblemStatus);
+            _Analysis_assume_(LastError != ERROR_SUCCESS);
             if (ProblemStatus != STATUS_PNP_DEVICE_CONFIGURATION_PENDING || Tries == 999)
             {
-                LOG_ERROR(L"Failed to setup adapter", Result);
+                LOG_ERROR(L"Failed to setup adapter", LastError);
                 goto cleanupTcpipInterfaceRegKey;
             }
             Sleep(10);
@@ -1493,21 +1593,22 @@ CreateAdapter(
         else
             break;
     }
-    Result = ERROR_SUCCESS;
-
-    *Adapter = a;
+    LastError = ERROR_SUCCESS;
 
 cleanupTcpipInterfaceRegKey:
     RegCloseKey(TcpipInterfaceRegKey);
 cleanupTcpipAdapterRegKey:
     RegCloseKey(TcpipAdapterRegKey);
 cleanupAdapter:
-    if (Result != ERROR_SUCCESS)
-        HeapFree(ModuleHeap, 0, a);
+    if (LastError != ERROR_SUCCESS)
+    {
+        HeapFree(ModuleHeap, 0, Adapter);
+        Adapter = NULL;
+    }
 cleanupNetDevRegKey:
     RegCloseKey(NetDevRegKey);
 cleanupDevice:
-    if (Result != ERROR_SUCCESS)
+    if (LastError != ERROR_SUCCESS)
     {
         /* The adapter failed to install, or the adapter ID was unobtainable. Clean-up. */
         SP_REMOVEDEVICE_PARAMS RemoveDeviceParams = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
@@ -1523,120 +1624,137 @@ cleanupDriverInfoList:
     SetupDiDestroyDriverInfoList(DevInfo, &DevInfoData, SPDIT_COMPATDRIVER);
 cleanupDevInfo:
     SetupDiDestroyDeviceInfoList(DevInfo);
-    return Result;
+    return RET_ERROR(Adapter, LastError);
 }
 
-static WINTUN_STATUS
-GetAdapter(_In_z_ const WCHAR *Pool, _In_ const GUID *CfgInstanceID, _Out_ WINTUN_ADAPTER **Adapter)
+static _Return_type_success_(return != NULL)
+    WINTUN_ADAPTER *GetAdapter(_In_z_ const WCHAR *Pool, _In_ const GUID *CfgInstanceID)
 {
     HANDLE Mutex = NamespaceTakePoolMutex(Pool);
     if (!Mutex)
-        return ERROR_INVALID_HANDLE;
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to take pool mutex");
+        return NULL;
+    }
+    DWORD LastError;
+    WINTUN_ADAPTER *Adapter = NULL;
     HDEVINFO DevInfo;
     SP_DEVINFO_DATA DevInfoData;
-    DWORD Result = GetDevInfoData(CfgInstanceID, &DevInfo, &DevInfoData);
-    if (Result != ERROR_SUCCESS)
+    if (!GetDevInfoData(CfgInstanceID, &DevInfo, &DevInfoData))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to locate adapter");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to locate adapter");
         goto cleanupMutex;
     }
-    Result = CreateAdapterData(Pool, DevInfo, &DevInfoData, Adapter);
-    if (Result != ERROR_SUCCESS)
-        LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
+    Adapter = CreateAdapterData(Pool, DevInfo, &DevInfoData);
+    LastError = Adapter ? ERROR_SUCCESS : LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
     SetupDiDestroyDeviceInfoList(DevInfo);
 cleanupMutex:
     NamespaceReleaseMutex(Mutex);
-    return Result;
+    return RET_ERROR(Adapter, LastError);
 }
 
 #include "rundll32.h"
 
-WINTUN_STATUS WINAPI
-WintunCreateAdapter(
+_Return_type_success_(return != NULL) WINTUN_ADAPTER *WINAPI WintunCreateAdapter(
     _In_z_ const WCHAR *Pool,
     _In_z_ const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
-    _Out_ WINTUN_ADAPTER **Adapter,
     _Out_opt_ BOOL *RebootRequired)
 {
     if (!ElevateToSystem())
-        return LOG_LAST_ERROR(L"Failed to impersonate SYSTEM user");
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user");
+        return NULL;
+    }
     BOOL DummyRebootRequired;
     if (!RebootRequired)
         RebootRequired = &DummyRebootRequired;
     *RebootRequired = FALSE;
-    DWORD Result;
-    if (MAYBE_WOW64 && NativeMachine != IMAGE_FILE_PROCESS)
-        Result = CreateAdapterViaRundll32(Pool, Name, RequestedGUID, Adapter, RebootRequired);
-    else
-        Result = CreateAdapter(Pool, Name, RequestedGUID, Adapter, RebootRequired);
-    RevertToSelf();
-    return Result;
-}
-
-WINTUN_STATUS WINAPI
-WintunDeleteAdapter(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSessions, _Out_opt_ BOOL *RebootRequired)
-{
-    if (!ElevateToSystem())
-        return LOG_LAST_ERROR(L"Failed to impersonate SYSTEM user");
-
-    BOOL DummyRebootRequired;
-    if (!RebootRequired)
-        RebootRequired = &DummyRebootRequired;
-    *RebootRequired = FALSE;
-    DWORD Result;
+    DWORD LastError;
+    WINTUN_ADAPTER *Adapter;
     if (MAYBE_WOW64 && NativeMachine != IMAGE_FILE_PROCESS)
     {
-        Result = DeleteAdapterViaRundll32(Adapter, ForceCloseSessions, RebootRequired);
-        RevertToSelf();
-        return Result;
+        Adapter = CreateAdapterViaRundll32(Pool, Name, RequestedGUID, RebootRequired);
+        LastError = Adapter ? ERROR_SUCCESS : GetLastError();
+        goto cleanupToken;
+    }
+    Adapter = CreateAdapter(Pool, Name, RequestedGUID, RebootRequired);
+    LastError = Adapter ? ERROR_SUCCESS : GetLastError();
+cleanupToken:
+    RevertToSelf();
+    return RET_ERROR(Adapter, LastError);
+}
+
+_Return_type_success_(return != FALSE) BOOL WINAPI WintunDeleteAdapter(
+    _In_ const WINTUN_ADAPTER *Adapter,
+    _In_ BOOL ForceCloseSessions,
+    _Out_opt_ BOOL *RebootRequired)
+{
+    if (!ElevateToSystem())
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user");
+        return FALSE;
+    }
+    BOOL DummyRebootRequired;
+    if (!RebootRequired)
+        RebootRequired = &DummyRebootRequired;
+    *RebootRequired = FALSE;
+    DWORD LastError;
+    if (MAYBE_WOW64 && NativeMachine != IMAGE_FILE_PROCESS)
+    {
+        LastError =
+            DeleteAdapterViaRundll32(Adapter, ForceCloseSessions, RebootRequired) ? ERROR_SUCCESS : GetLastError();
+        goto cleanupToken;
     }
 
     HDEVINFO DevInfo;
     SP_DEVINFO_DATA DevInfoData;
-    Result = GetDevInfoData(&Adapter->CfgInstanceID, &DevInfo, &DevInfoData);
-    if (Result == ERROR_FILE_NOT_FOUND)
+    if (!GetDevInfoData(&Adapter->CfgInstanceID, &DevInfo, &DevInfoData))
     {
-        Result = ERROR_SUCCESS;
-        goto cleanupToken;
-    }
-    else if (Result != ERROR_SUCCESS)
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to get adapter info data");
+        if ((LastError = GetLastError()) == ERROR_FILE_NOT_FOUND)
+            LastError = ERROR_SUCCESS;
+        else
+            LOG(WINTUN_LOG_ERR, L"Failed to get adapter info data");
         goto cleanupToken;
     }
 
-    if (ForceCloseSessions && ForceCloseWintunAdapterHandle(DevInfo, &DevInfoData) != ERROR_SUCCESS)
+    if (ForceCloseSessions && !ForceCloseWintunAdapterHandle(DevInfo, &DevInfoData))
         LOG(WINTUN_LOG_WARN, L"Failed to force close adapter handles");
 
     SetQuietInstall(DevInfo, &DevInfoData);
-    SP_REMOVEDEVICE_PARAMS RemoveDeviceParams = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
-                                                                          .InstallFunction = DIF_REMOVE },
-                                                  .Scope = DI_REMOVEDEVICE_GLOBAL };
-    if (SetupDiSetClassInstallParamsW(
-            DevInfo, &DevInfoData, &RemoveDeviceParams.ClassInstallHeader, sizeof(RemoveDeviceParams)) &&
-        SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
-        *RebootRequired = *RebootRequired || CheckReboot(DevInfo, &DevInfoData);
-    else
-        Result = LOG_LAST_ERROR(L"Failed to remove existing adapter");
+    SP_REMOVEDEVICE_PARAMS Params = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
+                                                              .InstallFunction = DIF_REMOVE },
+                                      .Scope = DI_REMOVEDEVICE_GLOBAL };
+    if (!SetupDiSetClassInstallParamsW(DevInfo, &DevInfoData, &Params.ClassInstallHeader, sizeof(Params)) ||
+        !SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
+    {
+        LastError = LOG_LAST_ERROR(L"Failed to remove existing adapter");
+        goto cleanupDevInfo;
+    }
+    LastError = ERROR_SUCCESS;
+cleanupDevInfo:
+    *RebootRequired = *RebootRequired || CheckReboot(DevInfo, &DevInfoData);
     SetupDiDestroyDeviceInfoList(DevInfo);
 cleanupToken:
     RevertToSelf();
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }
 
-static WINTUN_STATUS
-DeleteAllOurAdapters(_In_ const WCHAR Pool[WINTUN_MAX_POOL], _Inout_ BOOL *RebootRequired)
+static _Return_type_success_(return != FALSE) BOOL
+    DeleteAllOurAdapters(_In_ const WCHAR Pool[WINTUN_MAX_POOL], _Inout_ BOOL *RebootRequired)
 {
     HANDLE Mutex = NamespaceTakePoolMutex(Pool);
     if (!Mutex)
-        return ERROR_INVALID_HANDLE;
-    DWORD Result = ERROR_SUCCESS;
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to take pool mutex");
+        return FALSE;
+    }
+    DWORD LastError = ERROR_SUCCESS;
     HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
     {
-        NamespaceReleaseMutex(Mutex);
-        return LOG_LAST_ERROR(L"Failed to get present adapters");
+        LastError = LOG_LAST_ERROR(L"Failed to get present adapters");
+        goto cleanupMutex;
     }
     SP_REMOVEDEVICE_PARAMS Params = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
                                                               .InstallFunction = DIF_REMOVE },
@@ -1651,76 +1769,70 @@ DeleteAllOurAdapters(_In_ const WCHAR Pool[WINTUN_MAX_POOL], _Inout_ BOOL *Reboo
             continue;
         }
 
-        BOOL IsOurs;
-        if (IsOurAdapter(DevInfo, &DevInfoData, &IsOurs) != ERROR_SUCCESS || !IsOurs)
-            continue;
-        BOOL IsMember;
-        Result = IsPoolMember(Pool, DevInfo, &DevInfoData, &IsMember);
-        if (Result != ERROR_SUCCESS)
-        {
-            LOG(WINTUN_LOG_ERR, L"Failed to get pool membership");
-            break;
-        }
-        if (!IsMember)
+        if (!IsOurAdapter(DevInfo, &DevInfoData) || !IsPoolMember(Pool, DevInfo, &DevInfoData))
             continue;
 
         LOG(WINTUN_LOG_INFO, L"Force closing all open handles for existing adapter");
-        if (ForceCloseWintunAdapterHandle(DevInfo, &DevInfoData) != ERROR_SUCCESS)
+        if (!ForceCloseWintunAdapterHandle(DevInfo, &DevInfoData))
             LOG(WINTUN_LOG_WARN, L"Failed to force close adapter handles");
 
         LOG(WINTUN_LOG_INFO, L"Removing existing adapter");
-        if (SetupDiSetClassInstallParamsW(DevInfo, &DevInfoData, &Params.ClassInstallHeader, sizeof(Params)) &&
-            SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
-            *RebootRequired = *RebootRequired || CheckReboot(DevInfo, &DevInfoData);
-        else
+        if (!SetupDiSetClassInstallParamsW(DevInfo, &DevInfoData, &Params.ClassInstallHeader, sizeof(Params)) ||
+            !SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
         {
             LOG_LAST_ERROR(L"Failed to remove existing adapter");
-            Result = Result != ERROR_SUCCESS ? Result : GetLastError();
+            LastError = LastError != ERROR_SUCCESS ? LastError : GetLastError();
         }
+        *RebootRequired = *RebootRequired || CheckReboot(DevInfo, &DevInfoData);
     }
     SetupDiDestroyDeviceInfoList(DevInfo);
+cleanupMutex:
     NamespaceReleaseMutex(Mutex);
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }
 
-WINTUN_STATUS WINAPI
-WintunDeletePoolDriver(_In_z_ const WCHAR Pool[WINTUN_MAX_POOL], _Out_opt_ BOOL *RebootRequired)
+_Return_type_success_(return != FALSE) BOOL WINAPI
+    WintunDeletePoolDriver(_In_z_ const WCHAR *Pool, _Out_opt_ BOOL *RebootRequired)
 {
     if (!ElevateToSystem())
-        return LOG_LAST_ERROR(L"Failed to impersonate SYSTEM user");
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user");
+        return FALSE;
+    }
 
     BOOL DummyRebootRequired;
     if (!RebootRequired)
         RebootRequired = &DummyRebootRequired;
     *RebootRequired = FALSE;
 
-    DWORD Result;
+    DWORD LastError = ERROR_SUCCESS;
     if (MAYBE_WOW64 && NativeMachine != IMAGE_FILE_PROCESS)
     {
-        Result = DeletePoolDriverViaRundll32(Pool, RebootRequired);
-        RevertToSelf();
-        return Result;
+        LastError = DeletePoolDriverViaRundll32(Pool, RebootRequired) ? ERROR_SUCCESS : GetLastError();
+        goto cleanupToken;
     }
 
-    Result = DeleteAllOurAdapters(Pool, RebootRequired);
-    if (Result != ERROR_SUCCESS)
+    if (!DeleteAllOurAdapters(Pool, RebootRequired))
+    {
+        LastError = GetLastError();
         goto cleanupToken;
+    }
 
     HANDLE DriverInstallationLock = NamespaceTakeDriverInstallationMutex();
     if (!DriverInstallationLock)
     {
-        Result = LOG_LAST_ERROR(L"Failed to take driver installation mutex");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to take driver installation mutex");
         goto cleanupToken;
     }
     HDEVINFO DeviceInfoSet = SetupDiGetClassDevsW(&GUID_DEVCLASS_NET, NULL, NULL, 0);
     if (!DeviceInfoSet)
     {
-        Result = LOG_LAST_ERROR(L"Failed to get adapter information");
+        LastError = LOG_LAST_ERROR(L"Failed to get adapter information");
         goto cleanupDriverInstallationLock;
     }
     if (!SetupDiBuildDriverInfoList(DeviceInfoSet, NULL, SPDIT_CLASSDRIVER))
     {
-        Result = LOG_LAST_ERROR(L"Failed building driver info list");
+        LastError = LOG_LAST_ERROR(L"Failed building driver info list");
         goto cleanupDeviceInfoSet;
     }
     for (DWORD EnumIndex = 0;; ++EnumIndex)
@@ -1732,16 +1844,16 @@ WintunDeletePoolDriver(_In_z_ const WCHAR Pool[WINTUN_MAX_POOL], _Out_opt_ BOOL 
                 break;
             continue;
         }
-        SP_DRVINFO_DETAIL_DATA_W *DriverDetail;
-        if (GetAdapterDrvInfoDetail(DeviceInfoSet, NULL, &DriverInfo, &DriverDetail) != ERROR_SUCCESS)
+        SP_DRVINFO_DETAIL_DATA_W *DriverDetail = GetAdapterDrvInfoDetail(DeviceInfoSet, NULL, &DriverInfo);
+        if (!DriverDetail)
             continue;
         if (!_wcsicmp(DriverDetail->HardwareID, WINTUN_HWID))
         {
-            LOG(WINTUN_LOG_INFO, TEXT("Removing existing driver"));
+            LOG(WINTUN_LOG_INFO, L"Removing existing driver");
             if (!SetupUninstallOEMInfW(PathFindFileNameW(DriverDetail->InfFileName), 0, NULL))
             {
-                LOG_LAST_ERROR(TEXT("Unable to remove existing driver"));
-                Result = Result != ERROR_SUCCESS ? Result : GetLastError();
+                LOG_LAST_ERROR(L"Unable to remove existing driver");
+                LastError = LastError != ERROR_SUCCESS ? LastError : GetLastError();
             }
         }
         HeapFree(ModuleHeap, 0, DriverDetail);
@@ -1753,20 +1865,23 @@ cleanupDriverInstallationLock:
     NamespaceReleaseMutex(DriverInstallationLock);
 cleanupToken:
     RevertToSelf();
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }
 
-WINTUN_STATUS WINAPI
-WintunEnumAdapters(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK_FUNC Func, _In_ LPARAM Param)
+_Return_type_success_(return != FALSE) BOOL WINAPI
+    WintunEnumAdapters(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK_FUNC Func, _In_ LPARAM Param)
 {
     HANDLE Mutex = NamespaceTakePoolMutex(Pool);
     if (!Mutex)
-        return ERROR_INVALID_HANDLE;
-    DWORD Result = ERROR_SUCCESS;
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to take pool mutex");
+        return FALSE;
+    }
+    DWORD LastError = ERROR_SUCCESS;
     HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
     {
-        Result = LOG_LAST_ERROR(L"Failed to get present adapters");
+        LastError = LOG_LAST_ERROR(L"Failed to get present adapters");
         goto cleanupMutex;
     }
     BOOL Continue = TRUE;
@@ -1780,25 +1895,13 @@ WintunEnumAdapters(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK_FUNC Func
             continue;
         }
 
-        BOOL IsOurs;
-        if (IsOurAdapter(DevInfo, &DevInfoData, &IsOurs) != ERROR_SUCCESS || !IsOurs)
+        if (!IsOurAdapter(DevInfo, &DevInfoData) || !IsPoolMember(Pool, DevInfo, &DevInfoData))
             continue;
 
-        BOOL IsMember;
-        Result = IsPoolMember(Pool, DevInfo, &DevInfoData, &IsMember);
-        if (Result != ERROR_SUCCESS)
+        WINTUN_ADAPTER *Adapter = CreateAdapterData(Pool, DevInfo, &DevInfoData);
+        if (!Adapter)
         {
-            LOG(WINTUN_LOG_ERR, L"Failed to get pool membership");
-            break;
-        }
-        if (!IsMember)
-            continue;
-
-        WINTUN_ADAPTER *Adapter;
-        Result = CreateAdapterData(Pool, DevInfo, &DevInfoData, &Adapter);
-        if (Result != ERROR_SUCCESS)
-        {
-            LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
+            LastError = LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
             break;
         }
         Continue = Func(Adapter, Param);
@@ -1807,5 +1910,5 @@ WintunEnumAdapters(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK_FUNC Func
     SetupDiDestroyDeviceInfoList(DevInfo);
 cleanupMutex:
     NamespaceReleaseMutex(Mutex);
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }

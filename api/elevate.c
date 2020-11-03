@@ -4,12 +4,12 @@
  */
 
 #include "elevate.h"
+#include "logger.h"
 
 #include <Windows.h>
 #include <TlHelp32.h>
 
-BOOL
-ElevateToSystem(void)
+_Return_type_success_(return != FALSE) BOOL ElevateToSystem(void)
 {
     HANDLE CurrentProcessToken, ThreadToken, ProcessSnapshot, WinlogonProcess, WinlogonToken, DuplicatedToken;
     PROCESSENTRY32W ProcessEntry = { .dwSize = sizeof(PROCESSENTRY32W) };
@@ -25,29 +25,40 @@ ElevateToSystem(void)
     } TokenUserBuffer;
 
     Ret = CreateWellKnownSid(WinLocalSystemSid, NULL, &LocalSystemSid, &RequiredBytes);
-    LastError = GetLastError();
     if (!Ret)
+    {
+        LastError = LOG_LAST_ERROR(L"Failed to create SID");
         goto cleanup;
+    }
     Ret = OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &CurrentProcessToken);
-    LastError = GetLastError();
     if (!Ret)
+    {
+        LastError = LOG_LAST_ERROR(L"Failed to open process token");
         goto cleanup;
+    }
     Ret =
         GetTokenInformation(CurrentProcessToken, TokenUser, &TokenUserBuffer, sizeof(TokenUserBuffer), &RequiredBytes);
     LastError = GetLastError();
     CloseHandle(CurrentProcessToken);
     if (!Ret)
+    {
+        LOG_ERROR(L"Failed to get token information", LastError);
         goto cleanup;
+    }
     if (EqualSid(TokenUserBuffer.MaybeLocalSystem.User.Sid, LocalSystemSid))
         return TRUE;
     Ret = LookupPrivilegeValueW(NULL, SE_DEBUG_NAME, &Privileges.Privileges[0].Luid);
-    LastError = GetLastError();
     if (!Ret)
+    {
+        LastError = LOG_LAST_ERROR(L"Failed to lookup privilege value");
         goto cleanup;
+    }
     ProcessSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    LastError = GetLastError();
     if (ProcessSnapshot == INVALID_HANDLE_VALUE)
+    {
+        LastError = LOG_LAST_ERROR(L"Failed to create toolhelp snapshot");
         goto cleanup;
+    }
     for (Ret = Process32FirstW(ProcessSnapshot, &ProcessEntry); Ret;
          Ret = Process32NextW(ProcessSnapshot, &ProcessEntry))
     {
@@ -55,13 +66,17 @@ ElevateToSystem(void)
             continue;
         RevertToSelf();
         Ret = ImpersonateSelf(SecurityImpersonation);
-        LastError = GetLastError();
         if (!Ret)
+        {
+            LastError = GetLastError();
             continue;
+        }
         Ret = OpenThreadToken(GetCurrentThread(), TOKEN_ADJUST_PRIVILEGES, FALSE, &ThreadToken);
-        LastError = GetLastError();
         if (!Ret)
+        {
+            LastError = GetLastError();
             continue;
+        }
         Ret = AdjustTokenPrivileges(ThreadToken, FALSE, &Privileges, sizeof(Privileges), NULL, NULL);
         LastError = GetLastError();
         CloseHandle(ThreadToken);
@@ -69,9 +84,11 @@ ElevateToSystem(void)
             continue;
 
         WinlogonProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, ProcessEntry.th32ProcessID);
-        LastError = GetLastError();
         if (!WinlogonProcess)
+        {
+            LastError = GetLastError();
             continue;
+        }
         Ret = OpenProcessToken(WinlogonProcess, TOKEN_IMPERSONATE | TOKEN_DUPLICATE, &WinlogonToken);
         LastError = GetLastError();
         CloseHandle(WinlogonProcess);
@@ -84,13 +101,15 @@ ElevateToSystem(void)
             continue;
         if (!GetTokenInformation(DuplicatedToken, TokenUser, &TokenUserBuffer, sizeof(TokenUserBuffer), &RequiredBytes))
             goto next;
-        if (SetLastError(ERROR_ACCESS_DENIED), !EqualSid(TokenUserBuffer.MaybeLocalSystem.User.Sid, LocalSystemSid))
+        if (!EqualSid(TokenUserBuffer.MaybeLocalSystem.User.Sid, LocalSystemSid))
+        {
+            SetLastError(ERROR_ACCESS_DENIED);
             goto next;
+        }
         if (!SetThreadToken(NULL, DuplicatedToken))
             goto next;
         CloseHandle(DuplicatedToken);
         CloseHandle(ProcessSnapshot);
-        SetLastError(ERROR_SUCCESS);
         return TRUE;
     next:
         LastError = GetLastError();
@@ -103,8 +122,7 @@ cleanup:
     return FALSE;
 }
 
-HANDLE
-GetPrimarySystemTokenFromThread(void)
+_Return_type_success_(return != NULL) HANDLE GetPrimarySystemTokenFromThread(void)
 {
     HANDLE CurrentThreadToken, DuplicatedToken;
     BOOL Ret;
@@ -120,26 +138,41 @@ GetPrimarySystemTokenFromThread(void)
 
     Ret = CreateWellKnownSid(WinLocalSystemSid, NULL, &LocalSystemSid, &RequiredBytes);
     if (!Ret)
+    {
+        LastError = LOG_LAST_ERROR(L"Failed to create SID");
         return NULL;
+    }
     Ret = OpenThreadToken(
         GetCurrentThread(), TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES | TOKEN_DUPLICATE, FALSE, &CurrentThreadToken);
     if (!Ret)
+    {
+        LastError = LOG_LAST_ERROR(L"Failed to open thread token");
         return NULL;
+    }
     Ret = GetTokenInformation(CurrentThreadToken, TokenUser, &TokenUserBuffer, sizeof(TokenUserBuffer), &RequiredBytes);
-    LastError = GetLastError();
     if (!Ret)
+    {
+        LastError = LOG_LAST_ERROR(L"Failed to get token information");
         goto cleanup;
-    LastError = ERROR_ACCESS_DENIED;
+    }
     if (!EqualSid(TokenUserBuffer.MaybeLocalSystem.User.Sid, LocalSystemSid))
+    {
+        LOG(WINTUN_LOG_ERR, L"Not SYSTEM");
+        LastError = ERROR_ACCESS_DENIED;
         goto cleanup;
+    }
     Ret = LookupPrivilegeValueW(NULL, SE_ASSIGNPRIMARYTOKEN_NAME, &Privileges.Privileges[0].Luid);
-    LastError = GetLastError();
     if (!Ret)
+    {
+        LastError = LOG_LAST_ERROR(L"Failed to lookup privilege value");
         goto cleanup;
+    }
     Ret = AdjustTokenPrivileges(CurrentThreadToken, FALSE, &Privileges, sizeof(Privileges), NULL, NULL);
-    LastError = GetLastError();
     if (!Ret)
+    {
+        LastError = LOG_LAST_ERROR(L"Failed to adjust token privileges");
         goto cleanup;
+    }
     Ret = DuplicateTokenEx(
         CurrentThreadToken,
         TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
@@ -147,14 +180,16 @@ GetPrimarySystemTokenFromThread(void)
         SecurityImpersonation,
         TokenPrimary,
         &DuplicatedToken);
-    LastError = GetLastError();
     if (!Ret)
+    {
+        LastError = LOG_LAST_ERROR(L"Failed to duplicate token");
         goto cleanup;
+    }
     CloseHandle(CurrentThreadToken);
     return DuplicatedToken;
 
 cleanup:
     CloseHandle(CurrentThreadToken);
     SetLastError(LastError);
-    return FALSE;
+    return NULL;
 }

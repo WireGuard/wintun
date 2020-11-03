@@ -7,8 +7,6 @@
 
 #include <Windows.h>
 
-BOOL
-ElevateToSystem(void);
+_Return_type_success_(return != FALSE) BOOL ElevateToSystem(void);
 
-HANDLE
-GetPrimarySystemTokenFromThread(void);
+_Return_type_success_(return != NULL) HANDLE GetPrimarySystemTokenFromThread(void);

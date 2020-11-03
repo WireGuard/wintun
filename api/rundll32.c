@@ -7,16 +7,16 @@
 
 #if ACCEPT_WOW64 == 1
 
-#include "adapter.h"
-#include "logger.h"
-#include "wintun.h"
+#    include "adapter.h"
+#    include "logger.h"
+#    include "wintun.h"
 
-#include <Windows.h>
-#include <cfgmgr32.h>
-#include <objbase.h>
-#include <assert.h>
+#    include <Windows.h>
+#    include <cfgmgr32.h>
+#    include <objbase.h>
+#    include <assert.h>
 
-#define EXPORT comment(linker, "/EXPORT:" __FUNCTION__ "=" __FUNCDNAME__)
+#    define EXPORT comment(linker, "/EXPORT:" __FUNCTION__ "=" __FUNCDNAME__)
 
 static DWORD
 WriteFormatted(_In_ DWORD StdHandle, _In_z_ const WCHAR *Template, ...)
@@ -77,7 +77,7 @@ Done(void)
     LocalFree(Argv);
 }
 
-#pragma warning(disable: 4100) /* unreferenced formal parameter */
+#    pragma warning(disable : 4100) /* unreferenced formal parameter */
 
 VOID __stdcall CreateAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
 {
@@ -94,18 +94,19 @@ VOID __stdcall CreateAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int 
     if (Argc > 4 && FAILED(CLSIDFromString(Argv[4], &RequestedGUID)))
         goto cleanup;
 
-    WINTUN_ADAPTER *Adapter;
     BOOL RebootRequired;
-    DWORD Result = WintunCreateAdapter(Argv[2], Argv[3], Argc > 4 ? &RequestedGUID : NULL, &Adapter, &RebootRequired);
+    WINTUN_ADAPTER *Adapter = WintunCreateAdapter(Argv[2], Argv[3], Argc > 4 ? &RequestedGUID : NULL, &RebootRequired);
+    DWORD LastError = Adapter ? ERROR_SUCCESS : GetLastError();
     WCHAR GuidStr[MAX_GUID_STRING_LEN];
     WriteFormatted(
         STD_OUTPUT_HANDLE,
         L"%1!X! %2!.*s! %3!X!",
-        Result,
-        StringFromGUID2(Result == ERROR_SUCCESS ? &Adapter->CfgInstanceID : &GUID_NULL, GuidStr, _countof(GuidStr)),
+        LastError,
+        StringFromGUID2(Adapter ? &Adapter->CfgInstanceID : &GUID_NULL, GuidStr, _countof(GuidStr)),
         GuidStr,
         RebootRequired);
-    WintunFreeAdapter(Adapter);
+    if (Adapter)
+        WintunFreeAdapter(Adapter);
 
 cleanup:
     Done();
@@ -124,8 +125,9 @@ VOID __stdcall DeleteAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int 
     if (FAILED(CLSIDFromString(Argv[3], &Adapter.CfgInstanceID)))
         goto cleanup;
     BOOL RebootRequired;
-    WINTUN_STATUS Ret = WintunDeleteAdapter(&Adapter, ForceCloseSessions, &RebootRequired);
-    WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X! %2!X!", Ret, RebootRequired);
+    DWORD LastError =
+        WintunDeleteAdapter(&Adapter, ForceCloseSessions, &RebootRequired) ? ERROR_SUCCESS : GetLastError();
+    WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X! %2!X!", LastError, RebootRequired);
 
 cleanup:
     Done();
@@ -140,8 +142,8 @@ VOID __stdcall DeletePoolDriver(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, i
         goto cleanup;
 
     BOOL RebootRequired;
-    WINTUN_STATUS Ret = WintunDeletePoolDriver(Argv[2], &RebootRequired);
-    WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X! %2!X!", Ret, RebootRequired);
+    DWORD LastError = WintunDeletePoolDriver(Argv[2], &RebootRequired) ? ERROR_SUCCESS : GetLastError();
+    WriteFormatted(STD_OUTPUT_HANDLE, L"%1!X! %2!X!", LastError, RebootRequired);
 
 cleanup:
     Done();

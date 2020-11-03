@@ -23,12 +23,11 @@
  *
  * @param Timeout       Timeout to wait for the value in milliseconds.
  *
- * @param KeyOut        Pointer to a variable to receive the key handle.
- *
- * @return ERROR_SUCCESS on success; WAIT_TIMEOUT on timeout; Win32 error code otherwise.
+ * @return Key handle on success. If the function fails, the return value is zero. To get extended error information,
+ *         call GetLastError.
  */
-WINTUN_STATUS
-RegistryOpenKeyWait(_In_ HKEY Key, _In_z_ const WCHAR *Path, _In_ DWORD Access, _In_ DWORD Timeout, _Out_ HKEY *KeyOut);
+_Return_type_success_(return != NULL) HKEY
+    RegistryOpenKeyWait(_In_ HKEY Key, _In_z_ const WCHAR *Path, _In_ DWORD Access, _In_ DWORD Timeout);
 
 /**
  * Validates and/or sanitizes string value read from registry.
@@ -42,10 +41,11 @@ RegistryOpenKeyWait(_In_ HKEY Key, _In_z_ const WCHAR *Path, _In_ DWORD Access, 
  * @param ValueType     Type of data. Must be either REG_SZ or REG_EXPAND_SZ. REG_MULTI_SZ is treated like REG_SZ; only
  *                      the first string of a multi-string is to be used.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
+ *         get extended error information, call GetLastError.
  */
-WINTUN_STATUS
-RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType);
+_Return_type_success_(return != FALSE) BOOL
+    RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType);
 
 /**
  * Validates and/or sanitizes multi-string value read from registry.
@@ -58,10 +58,11 @@ RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType);
  *
  * @param ValueType     Type of data. Must be one of REG_MULTI_SZ, REG_SZ or REG_EXPAND_SZ.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
+ *         get extended error information, call GetLastError.
  */
-WINTUN_STATUS
-RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType);
+_Return_type_success_(return != FALSE) BOOL
+    RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType);
 
 /**
  * Reads string value from registry key.
@@ -79,11 +80,11 @@ RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType
  *                      errors reduces log clutter when we are using RegistryQueryString() from
  *                      RegistryQueryStringWait() and some errors are expected to occur.
  *
- * @return ERROR_SUCCESS on success; ERROR_INVALID_DATATYPE when the registry value is not a string; Win32 error code
- * otherwise.
+ * @return String with registry value on success; If the function fails, the return value is zero. To get extended error
+ *         information, call GetLastError.
  */
-WINTUN_STATUS
-RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ WCHAR **Value, _In_ BOOL Log);
+_Return_type_success_(
+    return != NULL) WCHAR *RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ BOOL Log);
 
 /**
  * Reads string value from registry key. It waits for the registry value to become available.
@@ -94,16 +95,14 @@ RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ WCHAR **V
  *
  * @param Timeout       Timeout to wait for the value in milliseconds.
  *
- * @param Value         Pointer to string to retrieve registry value. If the value type is REG_EXPAND_SZ the value is
- *                      expanded using ExpandEnvironmentStrings(). If the value type is REG_MULTI_SZ, only the first
- *                      string from the multi-string is returned. The string must be released with
- *                      HeapFree(ModuleHeap, 0, Value) after use.
- *
- * @return ERROR_SUCCESS on success; WAIT_TIMEOUT on timeout; ERROR_INVALID_DATATYPE when the registry value is not a
- * string; Win32 error code otherwise.
+ * @return Registry value. If the value type is REG_EXPAND_SZ the value is expanded using ExpandEnvironmentStrings(). If
+ *         the value type is REG_MULTI_SZ, only the first string from the multi-string is returned. The string must be
+ *         released with HeapFree(ModuleHeap, 0, Value) after use. If the function fails, the return value is zero. To
+ *         get extended error information, call GetLastError. Possible errors include the following:
+ *         ERROR_INVALID_DATATYPE when the registry value is not a string
  */
-WINTUN_STATUS
-RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout, _Out_ WCHAR **Value);
+_Return_type_success_(
+    return != NULL) WCHAR *RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout);
 
 /**
  * Reads a 32-bit DWORD value from registry key.
@@ -118,11 +117,11 @@ RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD 
  *                      errors reduces log clutter when we are using RegistryQueryDWORD() from
  *                      RegistryQueryDWORDWait() and some errors are expected to occur.
  *
- * @return ERROR_SUCCESS on success; ERROR_INVALID_DATATYPE when registry value exist but not REG_DWORD type;
- * ERROR_INVALID_DATA when registry value size is not 4 bytes; Win32 error code otherwise.
+ * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
+ *         get extended error information, call GetLastError.
  */
-WINTUN_STATUS
-RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ DWORD *Value, _In_ BOOL Log);
+_Return_type_success_(return != FALSE) BOOL
+    RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ DWORD *Value, _In_ BOOL Log);
 
 /**
  * Reads a 32-bit DWORD value from registry key. It waits for the registry value to become available.
@@ -135,8 +134,10 @@ RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ DWORD *Val
  *
  * @param Value         Pointer to DWORD to retrieve registry value.
  *
- * @return ERROR_SUCCESS on success; WAIT_TIMEOUT on timeout; ERROR_INVALID_DATATYPE when registry value exist but not
- * REG_DWORD type; ERROR_INVALID_DATA when registry value size is not 4 bytes; Win32 error code otherwise.
+ * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
+ *         get extended error information, call GetLastError. Possible errors include the following:
+ *         ERROR_INVALID_DATATYPE when registry value exist but not REG_DWORD type;
+ *         ERROR_INVALID_DATA when registry value size is not 4 bytes
  */
-WINTUN_STATUS
-RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout, _Out_ DWORD *Value);
+_Return_type_success_(return != FALSE) BOOL
+    RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout, _Out_ DWORD *Value);

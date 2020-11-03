@@ -72,7 +72,7 @@ ProcessStderr(_In_ HANDLE Stderr)
             else if (State == OnMsg && c == L'\n')
             {
                 Msg[Count] = 0;
-                Logger(Level, Msg);
+                LoggerLog(Level, Msg);
                 State = OnNone;
                 Count = 0;
             }
@@ -80,27 +80,35 @@ ProcessStderr(_In_ HANDLE Stderr)
     }
 }
 
-static WINTUN_STATUS
-ExecuteRunDll32(
+static _Return_type_success_(return != FALSE) BOOL ExecuteRunDll32(
     _In_z_ const WCHAR *Arguments,
     _Out_z_cap_c_(ResponseCapacity) WCHAR *Response,
     _In_ DWORD ResponseCapacity)
 {
     WCHAR WindowsDirectory[MAX_PATH];
     if (!GetWindowsDirectoryW(WindowsDirectory, _countof(WindowsDirectory)))
-        return LOG_LAST_ERROR(L"Failed to get Windows folder");
+    {
+        LOG_LAST_ERROR(L"Failed to get Windows folder");
+        return FALSE;
+    }
     WCHAR RunDll32Path[MAX_PATH];
     if (!PathCombineW(RunDll32Path, WindowsDirectory, L"Sysnative\\rundll32.exe"))
-        return ERROR_BUFFER_OVERFLOW;
+    {
+        SetLastError(ERROR_BUFFER_OVERFLOW);
+        return FALSE;
+    }
 
-    DWORD Result;
+    DWORD LastError;
     WCHAR RandomTempSubDirectory[MAX_PATH];
-    if ((Result = CreateTemporaryDirectory(RandomTempSubDirectory)) != ERROR_SUCCESS)
-        return LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder"), Result;
+    if (!CreateTemporaryDirectory(RandomTempSubDirectory))
+    {
+        LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder");
+        return FALSE;
+    }
     WCHAR DllPath[MAX_PATH] = { 0 };
     if (!PathCombineW(DllPath, RandomTempSubDirectory, L"wintun.dll"))
     {
-        Result = ERROR_BUFFER_OVERFLOW;
+        LastError = ERROR_BUFFER_OVERFLOW;
         goto cleanupDirectory;
     }
     const WCHAR *WintunDllResourceName;
@@ -114,12 +122,12 @@ ExecuteRunDll32(
         break;
     default:
         LOG(WINTUN_LOG_ERR, L"Unsupported platform");
-        Result = ERROR_NOT_SUPPORTED;
+        LastError = ERROR_NOT_SUPPORTED;
         goto cleanupDirectory;
     }
-    if ((Result = ResourceCopyToFile(DllPath, WintunDllResourceName)) != ERROR_SUCCESS)
+    if (!ResourceCopyToFile(DllPath, WintunDllResourceName))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to copy resource");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to copy resource");
         goto cleanupDelete;
     }
     size_t CommandLineLen = 10 + MAX_PATH + 2 + wcslen(Arguments) + 1;
@@ -127,14 +135,14 @@ ExecuteRunDll32(
     if (!CommandLine)
     {
         LOG(WINTUN_LOG_ERR, L"Out of memory");
-        Result = ERROR_OUTOFMEMORY;
+        LastError = ERROR_OUTOFMEMORY;
         goto cleanupDelete;
     }
     if (_snwprintf_s(CommandLine, CommandLineLen, _TRUNCATE, L"rundll32 \"%.*s\",%s", MAX_PATH, DllPath, Arguments) ==
         -1)
     {
         LOG(WINTUN_LOG_ERR, L"Command line too long");
-        Result = ERROR_INVALID_PARAMETER;
+        LastError = ERROR_INVALID_PARAMETER;
         goto cleanupDelete;
     }
     HANDLE StreamRStdout = INVALID_HANDLE_VALUE, StreamRStderr = INVALID_HANDLE_VALUE,
@@ -142,13 +150,13 @@ ExecuteRunDll32(
     if (!CreatePipe(&StreamRStdout, &StreamWStdout, &SecurityAttributes, 0) ||
         !CreatePipe(&StreamRStderr, &StreamWStderr, &SecurityAttributes, 0))
     {
-        Result = LOG_LAST_ERROR(L"Failed to create pipes");
+        LastError = LOG_LAST_ERROR(L"Failed to create pipes");
         goto cleanupPipes;
     }
     if (!SetHandleInformation(StreamWStdout, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) ||
         !SetHandleInformation(StreamWStderr, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT))
     {
-        Result = LOG_LAST_ERROR(L"Failed to set handle info");
+        LastError = LOG_LAST_ERROR(L"Failed to set handle info");
         goto cleanupPipes;
     }
     if (ResponseCapacity)
@@ -160,7 +168,7 @@ ExecuteRunDll32(
     if ((ThreadStdout = CreateThread(NULL, 0, ProcessStdout, &ProcessStdoutState, 0, NULL)) == NULL ||
         (ThreadStderr = CreateThread(NULL, 0, ProcessStderr, StreamRStderr, 0, NULL)) == NULL)
     {
-        Result = LOG_LAST_ERROR(L"Failed to spawn readers");
+        LastError = LOG_LAST_ERROR(L"Failed to spawn readers");
         goto cleanupThreads;
     }
     STARTUPINFOW si = { .cb = sizeof(STARTUPINFO),
@@ -172,14 +180,15 @@ ExecuteRunDll32(
     HANDLE ProcessToken = GetPrimarySystemTokenFromThread();
     if (!ProcessToken)
     {
-        Result = LOG_LAST_ERROR(L"Failed to get primary system token from thread");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get primary system token from thread");
         goto cleanupThreads;
     }
     if (!CreateProcessAsUserW(ProcessToken, RunDll32Path, CommandLine, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
     {
-        Result = LOG_LAST_ERROR(L"Failed to create process");
+        LastError = LOG_LAST_ERROR(L"Failed to create process");
         goto cleanupToken;
     }
+    LastError = ERROR_SUCCESS;
     WaitForSingleObject(pi.hProcess, INFINITE);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
@@ -198,10 +207,10 @@ cleanupThreads:
         CloseHandle(StreamWStdout);
         StreamWStdout = INVALID_HANDLE_VALUE;
         WaitForSingleObject(ThreadStdout, INFINITE);
-        if (!GetExitCodeThread(ThreadStdout, &Result))
-            Result = LOG_LAST_ERROR(L"Failed to retrieve stdout reader result");
-        else if (Result != ERROR_SUCCESS)
-            LOG_ERROR(L"Failed to read process output", Result);
+        if (!GetExitCodeThread(ThreadStdout, &LastError))
+            LastError = LOG_LAST_ERROR(L"Failed to retrieve stdout reader result");
+        else if (LastError != ERROR_SUCCESS)
+            LOG_ERROR(L"Failed to read process output", LastError);
         CloseHandle(ThreadStdout);
     }
 cleanupPipes:
@@ -214,15 +223,13 @@ cleanupDelete:
     DeleteFileW(DllPath);
 cleanupDirectory:
     RemoveDirectoryW(RandomTempSubDirectory);
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }
 
-static WINTUN_STATUS
-CreateAdapterViaRundll32(
+static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapterViaRundll32(
     _In_z_ const WCHAR *Pool,
     _In_z_ const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
-    _Out_ WINTUN_ADAPTER **Adapter,
     _Inout_ BOOL *RebootRequired)
 {
     LOG(WINTUN_LOG_INFO, L"Spawning native process");
@@ -237,38 +244,46 @@ CreateAdapterViaRundll32(
             Name,
             RequestedGUID ? StringFromGUID2(RequestedGUID, RequestedGUIDStr, _countof(RequestedGUIDStr)) : 0,
             RequestedGUIDStr) == -1)
-        return LOG(WINTUN_LOG_ERR, L"Command line too long"), ERROR_INVALID_PARAMETER;
+    {
+        LOG(WINTUN_LOG_ERR, L"Command line too long");
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return NULL;
+    }
     WCHAR Response[8 + 1 + MAX_GUID_STRING_LEN + 1 + 8 + 1];
-    DWORD Result = ExecuteRunDll32(Arguments, Response, _countof(Response));
-    if (Result != ERROR_SUCCESS)
+    if (!ExecuteRunDll32(Arguments, Response, _countof(Response)))
     {
         LOG(WINTUN_LOG_ERR, L"Error executing worker process");
-        return Result;
+        return NULL;
     }
+    DWORD LastError;
+    WINTUN_ADAPTER *Adapter = NULL;
     int Argc;
     WCHAR **Argv = CommandLineToArgvW(Response, &Argc);
     GUID CfgInstanceID;
     if (Argc < 3 || FAILED(CLSIDFromString(Argv[1], &CfgInstanceID)))
     {
         LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response");
-        Result = ERROR_INVALID_PARAMETER;
+        LastError = ERROR_INVALID_PARAMETER;
         goto cleanupArgv;
     }
-    Result = wcstoul(Argv[0], NULL, 16);
-    if (Result == ERROR_SUCCESS && GetAdapter(Pool, &CfgInstanceID, Adapter) != ERROR_SUCCESS)
+    LastError = wcstoul(Argv[0], NULL, 16);
+    if (LastError == ERROR_SUCCESS && (Adapter = GetAdapter(Pool, &CfgInstanceID)) == NULL)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to get adapter");
-        Result = ERROR_FILE_NOT_FOUND;
+        LastError = ERROR_FILE_NOT_FOUND;
     }
     if (wcstoul(Argv[2], NULL, 16))
         *RebootRequired = TRUE;
 cleanupArgv:
     LocalFree(Argv);
-    return Result;
+    SetLastError(LastError);
+    return Adapter;
 }
 
-static WINTUN_STATUS
-DeleteAdapterViaRundll32(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceCloseSessions, _Inout_ BOOL *RebootRequired)
+static _Return_type_success_(return != FALSE) BOOL DeleteAdapterViaRundll32(
+    _In_ const WINTUN_ADAPTER *Adapter,
+    _In_ BOOL ForceCloseSessions,
+    _Inout_ BOOL *RebootRequired)
 {
     LOG(WINTUN_LOG_INFO, L"Spawning native process");
     WCHAR GuidStr[MAX_GUID_STRING_LEN];
@@ -281,57 +296,65 @@ DeleteAdapterViaRundll32(_In_ const WINTUN_ADAPTER *Adapter, _In_ BOOL ForceClos
             ForceCloseSessions ? 1 : 0,
             StringFromGUID2(&Adapter->CfgInstanceID, GuidStr, _countof(GuidStr)),
             GuidStr) == -1)
-        return LOG(WINTUN_LOG_ERR, L"Command line too long"), ERROR_INVALID_PARAMETER;
+    {
+        LOG(WINTUN_LOG_ERR, L"Command line too long");
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
     WCHAR Response[8 + 1 + 8 + 1];
-    DWORD Result = ExecuteRunDll32(Arguments, Response, _countof(Response));
-    if (Result != ERROR_SUCCESS)
+    DWORD LastError;
+    if (!ExecuteRunDll32(Arguments, Response, _countof(Response)))
     {
         LOG(WINTUN_LOG_ERR, L"Error executing worker process");
-        return Result;
+        return FALSE;
     }
     int Argc;
     WCHAR **Argv = CommandLineToArgvW(Response, &Argc);
     if (Argc < 2)
     {
         LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response");
-        Result = ERROR_INVALID_PARAMETER;
+        LastError = ERROR_INVALID_PARAMETER;
         goto cleanupArgv;
     }
-    Result = wcstoul(Argv[0], NULL, 16);
+    LastError = wcstoul(Argv[0], NULL, 16);
     if (wcstoul(Argv[1], NULL, 16))
         *RebootRequired = TRUE;
 cleanupArgv:
     LocalFree(Argv);
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }
 
-static WINTUN_STATUS
-DeletePoolDriverViaRundll32(_In_z_ const WCHAR Pool[WINTUN_MAX_POOL], _Inout_ BOOL *RebootRequired)
+static _Return_type_success_(return != FALSE) BOOL
+    DeletePoolDriverViaRundll32(_In_z_ const WCHAR Pool[WINTUN_MAX_POOL], _Inout_ BOOL *RebootRequired)
 {
     LOG(WINTUN_LOG_INFO, L"Spawning native process");
 
     WCHAR Arguments[17 + WINTUN_MAX_POOL + 1];
     if (_snwprintf_s(Arguments, _countof(Arguments), _TRUNCATE, L"DeletePoolDriver %s", Pool) == -1)
-        return LOG(WINTUN_LOG_ERR, L"Command line too long"), ERROR_INVALID_PARAMETER;
+    {
+        LOG(WINTUN_LOG_ERR, L"Command line too long");
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
     WCHAR Response[8 + 1 + 8 + 1];
-    DWORD Result = ExecuteRunDll32(Arguments, Response, _countof(Response));
-    if (Result != ERROR_SUCCESS)
+    DWORD LastError;
+    if (!ExecuteRunDll32(Arguments, Response, _countof(Response)))
     {
         LOG(WINTUN_LOG_ERR, L"Error executing worker process");
-        return Result;
+        return FALSE;
     }
     int Argc;
     WCHAR **Argv = CommandLineToArgvW(Response, &Argc);
     if (Argc < 2)
     {
         LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response");
-        Result = ERROR_INVALID_PARAMETER;
+        LastError = ERROR_INVALID_PARAMETER;
         goto cleanupArgv;
     }
-    Result = wcstoul(Argv[0], NULL, 16);
+    LastError = wcstoul(Argv[0], NULL, 16);
     if (wcstoul(Argv[1], NULL, 16))
         *RebootRequired = TRUE;
 cleanupArgv:
     LocalFree(Argv);
-    return Result;
+    return RET_ERROR(TRUE, LastError);
 }

@@ -8,12 +8,10 @@
 #include <Windows.h>
 
 _Check_return_
-HANDLE
-NamespaceTakePoolMutex(_In_z_ const WCHAR *Pool);
+_Return_type_success_(return != NULL) HANDLE NamespaceTakePoolMutex(_In_z_ const WCHAR *Pool);
 
 _Check_return_
-HANDLE
-NamespaceTakeDriverInstallationMutex(void);
+_Return_type_success_(return != NULL) HANDLE NamespaceTakeDriverInstallationMutex(void);
 
 void
 NamespaceReleaseMutex(_In_ HANDLE Mutex);
@@ -22,4 +20,4 @@ void
 NamespaceInit(void);
 
 void
-NamespaceCleanup(void);
+NamespaceDone(void);

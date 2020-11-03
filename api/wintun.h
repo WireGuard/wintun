@@ -13,8 +13,6 @@
 extern "C" {
 #endif
 
-typedef _Return_type_success_(return == ERROR_SUCCESS) DWORD WINTUN_STATUS;
-
 /**
  * A handle representing Wintun adapter
  */
@@ -33,24 +31,20 @@ typedef void *WINTUN_ADAPTER_HANDLE;
  * @param Name          The requested name of the adapter. Zero-terminated string of up to MAX_ADAPTER_NAME-1
  *                      characters.
  *
- * @param RequestedGUID The GUID of the created network adapter, which then influences NLA generation
- *                      deterministically. If it is set to NULL, the GUID is chosen by the system at random, and hence
- *                      a new NLA entry is created for each new adapter. It is called "requested" GUID because the API
- *                      it uses is completely undocumented, and so there could be minor interesting complications with
- *                      its usage.
- *
- * @param Adapter       Pointer to a handle to receive the adapter handle. Must be released with
- *                      WintunFreeAdapter.
+ * @param RequestedGUID The GUID of the created network adapter, which then influences NLA generation deterministically.
+ *                      If it is set to NULL, the GUID is chosen by the system at random, and hence a new NLA entry is
+ *                      created for each new adapter. It is called "requested" GUID because the API it uses is
+ *                      completely undocumented, and so there could be minor interesting complications with its usage.
  *
  * @param RebootRequired  Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ * @return If the function succeeds, the return value is the adapter handle. Must be released with WintunFreeAdapter. If
+ *         the function fails, the return value is NULL. To get extended error information, call GetLastError.
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_CREATE_ADAPTER_FUNC)(
+typedef _Return_type_success_(return != NULL) WINTUN_ADAPTER_HANDLE *(WINAPI *WINTUN_CREATE_ADAPTER_FUNC)(
     _In_z_ const WCHAR *Pool,
     _In_z_ const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
-    _Out_ WINTUN_ADAPTER_HANDLE *Adapter,
     _Out_opt_ BOOL *RebootRequired);
 
 /**
@@ -64,9 +58,10 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_CREATE_ADAPTER_FUNC)(
  *
  * @param RebootRequired     Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
  *
- * @return ERROR_SUCCESS on success or the adapter was not found; Win32 error code otherwise.
+ * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
+ *         get extended error information, call GetLastError.
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_DELETE_ADAPTER_FUNC)(
+typedef _Return_type_success_(return != FALSE) BOOL(WINAPI *WINTUN_DELETE_ADAPTER_FUNC)(
     _In_ WINTUN_ADAPTER_HANDLE Adapter,
     _In_ BOOL ForceCloseSessions,
     _Out_opt_ BOOL *RebootRequired);
@@ -79,11 +74,11 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_DELETE_ADAPTER_FUNC)(
  *
  * @param RebootRequired   Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
+ *         get extended error information, call GetLastError.
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_DELETE_POOL_DRIVER_FUNC)(
-    _In_z_ const WCHAR Pool[WINTUN_MAX_POOL],
-    _Out_opt_ BOOL *RebootRequired);
+typedef _Return_type_success_(return != FALSE)
+    BOOL(WINAPI *WINTUN_DELETE_POOL_DRIVER_FUNC)(_In_z_ const WCHAR *Pool, _Out_opt_ BOOL *RebootRequired);
 
 /**
  * Called by WintunEnumAdapters for each adapter in the pool.
@@ -106,9 +101,10 @@ typedef BOOL(CALLBACK *WINTUN_ENUM_CALLBACK_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Ada
  *
  * @param Param         An application-defined value to be passed to the callback function.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
+ *         get extended error information, call GetLastError.
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_ENUM_ADAPTERS_FUNC)(
+typedef _Return_type_success_(return != FALSE) BOOL(WINAPI *WINTUN_ENUM_ADAPTERS_FUNC)(
     _In_z_ const WCHAR *Pool,
     _In_ WINTUN_ENUM_CALLBACK_FUNC Callback,
     _In_ LPARAM Param);
@@ -127,27 +123,26 @@ typedef void(WINAPI *WINTUN_FREE_ADAPTER_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapte
  *
  * @param Name          Adapter name. Zero-terminated string of up to MAX_ADAPTER_NAME-1 characters.
  *
- * @param Adapter       Pointer to a handle to receive the adapter handle. Must be released with WintunFreeAdapter.
- *
- * @return ERROR_SUCCESS on success; ERROR_FILE_NOT_FOUND if adapter with given name is not found; ERROR_ALREADY_EXISTS
- * if adapter is found but not a Wintun-class or not a member of the pool; Win32 error code otherwise
+ * @return If the function succeeds, the return value is adapter handle. Must be released with WintunFreeAdapter. If the
+ *         function fails, the return value is NULL. To get extended error information, call GetLastError. Possible
+ *         errors include the following:
+ *         ERROR_FILE_NOT_FOUND if adapter with given name is not found;
+ *         ERROR_ALREADY_EXISTS if adapter is found but not a Wintun-class or not a member of the pool
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_GET_ADAPTER_FUNC)(
-    _In_z_ const WCHAR *Pool,
-    _In_z_ const WCHAR *Name,
-    _Out_ WINTUN_ADAPTER_HANDLE *Adapter);
+typedef _Return_type_success_(return != NULL)
+    WINTUN_ADAPTER_HANDLE(WINAPI *WINTUN_GET_ADAPTER_FUNC)(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name);
 
 /**
  * Returns a handle to the adapter device object.
  *
  * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
  *
- * @param Handle        Pointer to receive the adapter device object handle. Must be released with CloseHandle.
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ * @return If the function succeeds, the return value is adapter device object handle. Must be released with
+ *         CloseHandle. If the function fails, the return value is INVALID_HANDLE_VALUE. To get extended error
+ *         information, call GetLastError.
  */
-typedef WINTUN_STATUS(
-    WINAPI *WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _Out_ HANDLE *Handle);
+typedef _Return_type_success_(return != INVALID_HANDLE_VALUE)
+    HANDLE(WINAPI *WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter);
 
 /**
  * Returns the LUID of the adapter.
@@ -165,9 +160,10 @@ typedef void(WINAPI *WINTUN_GET_ADAPTER_LUID_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Ad
  *
  * @param Name          Pointer to a string to receive adapter name
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
+ *         get extended error information, call GetLastError.
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_GET_ADAPTER_NAME_FUNC)(
+typedef _Return_type_success_(return != FALSE) BOOL(WINAPI *WINTUN_GET_ADAPTER_NAME_FUNC)(
     _In_ WINTUN_ADAPTER_HANDLE Adapter,
     _Out_cap_c_(MAX_ADAPTER_NAME) WCHAR *Name);
 
@@ -178,15 +174,19 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_GET_ADAPTER_NAME_FUNC)(
  *
  * @param Name          Adapter name. Zero-terminated string of up to MAX_ADAPTER_NAME-1 characters.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
+ *         get extended error information, call GetLastError.
  */
-typedef WINTUN_STATUS(
-    WINAPI *WINTUN_SET_ADAPTER_NAME_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In_z_ const WCHAR *Name);
+typedef _Return_type_success_(return != FALSE)
+    BOOL(WINAPI *WINTUN_SET_ADAPTER_NAME_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In_z_ const WCHAR *Name);
 
 /**
  * Determines the version of the Wintun driver currently loaded.
  *
- * @return The version number on success, or 0 if failure or Wintun not loaded.
+ * @return If the function succeeds, the return value is the version number. If the function fails, the return value is
+ *         zero. To get extended error information, call GetLastError. Possible errors include the following:
+ *         ERROR_FILE_NOT_FOUND  Wintun not loaded;
+ *         ERROR_GEN_FAILURE     Enumerating drivers failed
  */
 typedef DWORD(WINAPI *WINTUN_GET_VERSION_FUNC)(void);
 
@@ -240,14 +240,11 @@ typedef void *WINTUN_SESSION_HANDLE;
  * @param Capacity      Rings capacity. Must be between WINTUN_MIN_RING_CAPACITY and WINTUN_MAX_RING_CAPACITY (incl.)
  *                      Must be a power of two.
  *
- * @param Session       Pointer to a variable to receive Wintun session handle
- *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ * @return Wintun session handle. Must be released with WintunEndSession. If the function fails, the return value is
+ *         NULL. To get extended error information, call GetLastError.
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_START_SESSION_FUNC)(
-    _In_ WINTUN_ADAPTER_HANDLE Adapter,
-    _In_ DWORD Capacity,
-    _Out_ WINTUN_SESSION_HANDLE *Session);
+typedef _Return_type_success_(return != NULL)
+    WINTUN_SESSION_HANDLE(WINAPI *WINTUN_START_SESSION_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In_ DWORD Capacity);
 
 /**
  * Ends Wintun session.
@@ -279,22 +276,17 @@ typedef HANDLE(WINAPI *WINTUN_GET_READ_WAIT_EVENT_FUNC)(_In_ WINTUN_SESSION_HAND
  *
  * @param Session       Wintun session handle obtained with WintunStartSession
  *
- * @param Packet        Pointer to receive pointer to layer 3 IPv4 or IPv6 packet. Client may modify its content at
- *                      will.
+ * @param PacketSize    Pointer to receive packet size.
  *
- * @param PacketSize    Pointer to receive Packet size.
- *
- * @return Returns one of the following values:
- * ERROR_HANDLE_EOF     Wintun adapter is terminating;
- * ERROR_NO_MORE_ITEMS  Wintun buffer is exhausted;
- * ERROR_INVALID_DATA   Wintun buffer is corrupt;
- * ERROR_SUCCESS        on success.
- * Regardless, if the error was returned, some packets might have been read nevertheless.
+ * @return Pointer to layer 3 IPv4 or IPv6 packet. Client may modify its content at will. If the function fails, the
+ *         return value is NULL. To get extended error information, call GetLastError. Possible errors include the
+ *         following:
+ *         ERROR_HANDLE_EOF     Wintun adapter is terminating;
+ *         ERROR_NO_MORE_ITEMS  Wintun buffer is exhausted;
+ *         ERROR_INVALID_DATA   Wintun buffer is corrupt
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_RECEIVE_PACKET_FUNC)(
-    _In_ WINTUN_SESSION_HANDLE *Session,
-    _Out_bytecapcount_(*PacketSize) BYTE **Packet,
-    _Out_ DWORD *PacketSize);
+typedef _Return_type_success_(return != NULL) _Ret_bytecount_(*PacketSize) BYTE *(
+    WINAPI *WINTUN_RECEIVE_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE *Session, _Out_ DWORD *PacketSize);
 
 /**
  * Releases internal buffer after the received packet has been processed by the client. This function is thread-safe.
@@ -314,17 +306,14 @@ typedef void(WINAPI *WINTUN_RECEIVE_RELEASE_FUNC)(_In_ WINTUN_SESSION_HANDLE *Se
  *
  * @param PacketSize    Exact packet size. Must be less or equal to WINTUN_MAX_IP_PACKET_SIZE.
  *
- * @param Packet        Pointer to receive pointer to memory where to prepare layer 3 IPv4 or IPv6 packet for sending.
- *
- * @return Returns one of the following values:
- * ERROR_HANDLE_EOF     Wintun adapter is terminating;
- * ERROR_BUFFER_OVERFLOW  Wintun buffer is full;
- * ERROR_SUCCESS        on success.
+ * @return Returns pointer to memory where to prepare layer 3 IPv4 or IPv6 packet for sending. If the function fails,
+ *         the return value is NULL. To get extended error information, call GetLastError. Possible errors include the
+ *         following:
+ *         ERROR_HANDLE_EOF       Wintun adapter is terminating;
+ *         ERROR_BUFFER_OVERFLOW  Wintun buffer is full;
  */
-typedef WINTUN_STATUS(WINAPI *WINTUN_ALLOCATE_SEND_PACKET_FUNC)(
-    _In_ WINTUN_SESSION_HANDLE *Session,
-    _In_ DWORD PacketSize,
-    _Out_bytecapcount_(PacketSize) BYTE **Packet);
+typedef _Return_type_success_(return != NULL) _Ret_bytecount_(PacketSize) BYTE *(
+    WINAPI *WINTUN_ALLOCATE_SEND_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE *Session, _In_ DWORD PacketSize);
 
 /**
  * Sends the packet and releases internal buffer. WintunSendPacket is thread-safe, but the WintunAllocateSendPacket

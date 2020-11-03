@@ -22,7 +22,8 @@ HINSTANCE ResourceModule;
 HANDLE ModuleHeap;
 SECURITY_ATTRIBUTES SecurityAttributes = { .nLength = sizeof(SECURITY_ATTRIBUTES) };
 
-static FARPROC WINAPI DelayedLoadLibraryHook(unsigned dliNotify, PDelayLoadInfo pdli)
+static FARPROC WINAPI
+DelayedLoadLibraryHook(unsigned dliNotify, PDelayLoadInfo pdli)
 {
     if (dliNotify != dliNotePreLoadLibrary)
         return NULL;
@@ -53,7 +54,7 @@ DllMain(_In_ HINSTANCE hinstDLL, _In_ DWORD fdwReason, _In_ LPVOID lpvReserved)
         break;
 
     case DLL_PROCESS_DETACH:
-        NamespaceCleanup();
+        NamespaceDone();
         LocalFree(SecurityAttributes.lpSecurityDescriptor);
         HeapDestroy(ModuleHeap);
         break;

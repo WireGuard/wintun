@@ -69,86 +69,87 @@ typedef struct _TUN_SESSION
     HANDLE Handle;
 } TUN_SESSION;
 
-WINTUN_STATUS WINAPI
-WintunStartSession(
-    _In_ const WINTUN_ADAPTER *Adapter,
-    _In_ DWORD Capacity,
-    _Out_ TUN_SESSION **Session)
+_Return_type_success_(return != NULL) TUN_SESSION *WINAPI
+    WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity)
 {
-    TUN_SESSION *s = HeapAlloc(ModuleHeap, HEAP_ZERO_MEMORY, sizeof(TUN_SESSION));
-    if (!s)
-        return LOG(WINTUN_LOG_ERR, L"Out of memory"), ERROR_OUTOFMEMORY;
+    DWORD LastError;
+    TUN_SESSION *Session = HeapAlloc(ModuleHeap, HEAP_ZERO_MEMORY, sizeof(TUN_SESSION));
+    if (!Session)
+    {
+        LOG(WINTUN_LOG_ERR, L"Out of memory");
+        LastError = ERROR_OUTOFMEMORY;
+        goto out;
+    }
     const ULONG RingSize = TUN_RING_SIZE(Capacity);
-    DWORD Result;
     BYTE *AllocatedRegion = VirtualAlloc(0, (size_t)RingSize * 2, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!AllocatedRegion)
     {
-        Result = LOG_LAST_ERROR(L"Failed to allocate ring memory");
+        LastError = LOG_LAST_ERROR(L"Failed to allocate ring memory");
         goto cleanupRings;
     }
     if (!ElevateToSystem())
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user");
-        Result = ERROR_ACCESS_DENIED;
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user");
         goto cleanupAllocatedRegion;
     }
-    s->Descriptor.Send.RingSize = RingSize;
-    s->Descriptor.Send.Ring = (TUN_RING *)AllocatedRegion;
-    s->Descriptor.Send.TailMoved = CreateEventW(&SecurityAttributes, FALSE, FALSE, NULL);
-    if (!s->Descriptor.Send.TailMoved)
+    Session->Descriptor.Send.RingSize = RingSize;
+    Session->Descriptor.Send.Ring = (TUN_RING *)AllocatedRegion;
+    Session->Descriptor.Send.TailMoved = CreateEventW(&SecurityAttributes, FALSE, FALSE, NULL);
+    if (!Session->Descriptor.Send.TailMoved)
     {
-        Result = LOG_LAST_ERROR(L"Failed to create send event");
+        LastError = LOG_LAST_ERROR(L"Failed to create send event");
         goto cleanupToken;
     }
 
-    s->Descriptor.Receive.RingSize = RingSize;
-    s->Descriptor.Receive.Ring = (TUN_RING *)(AllocatedRegion + RingSize);
-    s->Descriptor.Receive.TailMoved = CreateEventW(&SecurityAttributes, FALSE, FALSE, NULL);
-    if (!s->Descriptor.Receive.TailMoved)
+    Session->Descriptor.Receive.RingSize = RingSize;
+    Session->Descriptor.Receive.Ring = (TUN_RING *)(AllocatedRegion + RingSize);
+    Session->Descriptor.Receive.TailMoved = CreateEventW(&SecurityAttributes, FALSE, FALSE, NULL);
+    if (!Session->Descriptor.Receive.TailMoved)
     {
-        Result = LOG_LAST_ERROR(L"Failed to create receive event");
+        LastError = LOG_LAST_ERROR(L"Failed to create receive event");
         goto cleanupSendTailMoved;
     }
 
-    Result = WintunOpenAdapterDeviceObject(Adapter, &s->Handle);
-    if (Result != ERROR_SUCCESS)
+    Session->Handle = WintunOpenAdapterDeviceObject(Adapter);
+    if (Session->Handle == INVALID_HANDLE_VALUE)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to open adapter device object");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to open adapter device object");
         goto cleanupReceiveTailMoved;
     }
     DWORD BytesReturned;
     if (!DeviceIoControl(
-            s->Handle,
+            Session->Handle,
             TUN_IOCTL_REGISTER_RINGS,
-            &s->Descriptor,
+            &Session->Descriptor,
             sizeof(TUN_REGISTER_RINGS),
             NULL,
             0,
             &BytesReturned,
             NULL))
     {
-        Result = LOG_LAST_ERROR(L"Failed to register rings");
+        LastError = LOG_LAST_ERROR(L"Failed to register rings");
         goto cleanupHandle;
     }
     RevertToSelf();
-    s->Capacity = Capacity;
-    (void)InitializeCriticalSectionAndSpinCount(&s->Receive.Lock, LOCK_SPIN_COUNT);
-    (void)InitializeCriticalSectionAndSpinCount(&s->Send.Lock, LOCK_SPIN_COUNT);
-    *Session = s;
-    return ERROR_SUCCESS;
+    Session->Capacity = Capacity;
+    (void)InitializeCriticalSectionAndSpinCount(&Session->Receive.Lock, LOCK_SPIN_COUNT);
+    (void)InitializeCriticalSectionAndSpinCount(&Session->Send.Lock, LOCK_SPIN_COUNT);
+    return Session;
 cleanupHandle:
-    CloseHandle(s->Handle);
+    CloseHandle(Session->Handle);
 cleanupReceiveTailMoved:
-    CloseHandle(s->Descriptor.Receive.TailMoved);
+    CloseHandle(Session->Descriptor.Receive.TailMoved);
 cleanupSendTailMoved:
-    CloseHandle(s->Descriptor.Send.TailMoved);
+    CloseHandle(Session->Descriptor.Send.TailMoved);
 cleanupToken:
     RevertToSelf();
 cleanupAllocatedRegion:
     VirtualFree(AllocatedRegion, 0, MEM_RELEASE);
 cleanupRings:
-    HeapFree(ModuleHeap, 0, s);
-    return Result;
+    HeapFree(ModuleHeap, 0, Session);
+out:
+    SetLastError(LastError);
+    return NULL;
 }
 
 void WINAPI
@@ -170,53 +171,55 @@ WintunGetReadWaitEvent(_In_ TUN_SESSION *Session)
     return Session->Descriptor.Send.TailMoved;
 }
 
-WINTUN_STATUS WINAPI
-WintunReceivePacket(_In_ TUN_SESSION *Session, _Out_bytecapcount_(*PacketSize) BYTE **Packet, _Out_ DWORD *PacketSize)
+_Return_type_success_(return != NULL) _Ret_bytecount_(*PacketSize) BYTE *WINAPI
+    WintunReceivePacket(_In_ TUN_SESSION *Session, _Out_ DWORD *PacketSize)
 {
-    DWORD Result;
+    DWORD LastError;
     EnterCriticalSection(&Session->Send.Lock);
     if (Session->Send.Head >= Session->Capacity)
     {
-        Result = ERROR_HANDLE_EOF;
+        LastError = ERROR_HANDLE_EOF;
         goto cleanup;
     }
     const ULONG BuffTail = ReadULongAcquire(&Session->Descriptor.Send.Ring->Tail);
     if (BuffTail >= Session->Capacity)
     {
-        Result = ERROR_HANDLE_EOF;
+        LastError = ERROR_HANDLE_EOF;
         goto cleanup;
     }
     if (Session->Send.Head == BuffTail)
     {
-        Result = ERROR_NO_MORE_ITEMS;
+        LastError = ERROR_NO_MORE_ITEMS;
         goto cleanup;
     }
     const ULONG BuffContent = TUN_RING_WRAP(BuffTail - Session->Send.Head, Session->Capacity);
     if (BuffContent < sizeof(TUN_PACKET))
     {
-        Result = ERROR_INVALID_DATA;
+        LastError = ERROR_INVALID_DATA;
         goto cleanup;
     }
     TUN_PACKET *BuffPacket = (TUN_PACKET *)&Session->Descriptor.Send.Ring->Data[Session->Send.Head];
     if (BuffPacket->Size > WINTUN_MAX_IP_PACKET_SIZE)
     {
-        Result = ERROR_INVALID_DATA;
+        LastError = ERROR_INVALID_DATA;
         goto cleanup;
     }
     const ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + BuffPacket->Size);
     if (AlignedPacketSize > BuffContent)
     {
-        Result = ERROR_INVALID_DATA;
+        LastError = ERROR_INVALID_DATA;
         goto cleanup;
     }
     *PacketSize = BuffPacket->Size;
-    *Packet = BuffPacket->Data;
+    BYTE *Packet = BuffPacket->Data;
     Session->Send.Head = TUN_RING_WRAP(Session->Send.Head + AlignedPacketSize, Session->Capacity);
     Session->Send.PacketsToRelease++;
-    Result = ERROR_SUCCESS;
+    LeaveCriticalSection(&Session->Send.Lock);
+    return Packet;
 cleanup:
     LeaveCriticalSection(&Session->Send.Lock);
-    return Result;
+    SetLastError(LastError);
+    return NULL;
 }
 
 void WINAPI
@@ -238,38 +241,40 @@ WintunReceiveRelease(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
     LeaveCriticalSection(&Session->Send.Lock);
 }
 
-WINTUN_STATUS WINAPI
-WintunAllocateSendPacket(_In_ TUN_SESSION *Session, _In_ DWORD PacketSize, _Out_bytecapcount_(PacketSize) BYTE **Packet)
+_Return_type_success_(return != NULL) _Ret_bytecount_(PacketSize) BYTE *WINAPI
+    WintunAllocateSendPacket(_In_ TUN_SESSION *Session, _In_ DWORD PacketSize)
 {
-    DWORD Result;
+    DWORD LastError;
     EnterCriticalSection(&Session->Receive.Lock);
     if (Session->Receive.Tail >= Session->Capacity)
     {
-        Result = ERROR_HANDLE_EOF;
+        LastError = ERROR_HANDLE_EOF;
         goto cleanup;
     }
     const ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize);
     const ULONG BuffHead = ReadULongAcquire(&Session->Descriptor.Receive.Ring->Head);
     if (BuffHead >= Session->Capacity)
     {
-        Result = ERROR_HANDLE_EOF;
+        LastError = ERROR_HANDLE_EOF;
         goto cleanup;
     }
     const ULONG BuffSpace = TUN_RING_WRAP(BuffHead - Session->Receive.Tail - TUN_ALIGNMENT, Session->Capacity);
     if (AlignedPacketSize > BuffSpace)
     {
-        Result = ERROR_BUFFER_OVERFLOW;
+        LastError = ERROR_BUFFER_OVERFLOW;
         goto cleanup;
     }
     TUN_PACKET *BuffPacket = (TUN_PACKET *)&Session->Descriptor.Receive.Ring->Data[Session->Receive.Tail];
     BuffPacket->Size = PacketSize | TUN_PACKET_RELEASE;
-    *Packet = BuffPacket->Data;
+    BYTE *Packet = BuffPacket->Data;
     Session->Receive.Tail = TUN_RING_WRAP(Session->Receive.Tail + AlignedPacketSize, Session->Capacity);
     Session->Receive.PacketsToRelease++;
-    Result = ERROR_SUCCESS;
+    LeaveCriticalSection(&Session->Receive.Lock);
+    return Packet;
 cleanup:
     LeaveCriticalSection(&Session->Receive.Lock);
-    return Result;
+    SetLastError(LastError);
+    return NULL;
 }
 
 void WINAPI

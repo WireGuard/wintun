@@ -13,14 +13,13 @@
  *
  * ResourceName         Name of the RT_RCDATA resource. Use MAKEINTRESOURCEW to locate resource by ID.
  *
- * Address              Pointer to a pointer variable to receive resource address.
- *
  * Size                 Pointer to a variable to receive resource size.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ * @return Resource address on success. If the function fails, the return value is NULL. To get extended error
+ *         information, call GetLastError.
  */
-WINTUN_STATUS
-ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const void **Address, _Out_ DWORD *Size);
+_Return_type_success_(return != NULL) _Ret_bytecount_(*Size) const
+    void *ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ DWORD *Size);
 
 /**
  * Copies resource to a file.
@@ -29,7 +28,8 @@ ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ const void **Address,
  *
  * ResourceName         Name of the RT_RCDATA resource. Use MAKEINTRESOURCEW to locate resource by ID.
  *
- * @return ERROR_SUCCESS on success; Win32 error code otherwise.
+ * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
+ *         get extended error information, call GetLastError.
  */
-WINTUN_STATUS
-ResourceCopyToFile(_In_z_ const WCHAR *DestinationPath, _In_z_ const WCHAR *ResourceName);
+_Return_type_success_(return != FALSE) BOOL
+    ResourceCopyToFile(_In_z_ const WCHAR *DestinationPath, _In_z_ const WCHAR *ResourceName);
