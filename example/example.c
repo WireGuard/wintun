@@ -171,7 +171,7 @@ PrintPacket(_In_ const BYTE *Packet, _In_ DWORD PacketSize)
 }
 
 static USHORT
-IPChecksum(BYTE *Buffer, DWORD Len)
+IPChecksum(_In_reads_bytes_(Len) BYTE *Buffer, _In_ DWORD Len)
 {
     ULONG Sum = 0;
     for (; Len > 1; Len -= 2, Buffer += 2)
@@ -184,7 +184,7 @@ IPChecksum(BYTE *Buffer, DWORD Len)
 }
 
 static void
-MakeICMP(_Inout_ BYTE Packet[28])
+MakeICMP(_Out_writes_bytes_all_(28) BYTE Packet[28])
 {
     memset(Packet, 0, 28);
     Packet[0] = 0x45;
