@@ -28,6 +28,8 @@ LoggerLastError(_In_z_ const WCHAR *Prefix)
     return Error;
 }
 
+#define __L(x) L##x
+#define _L(x) __L(x)
 #define LOG(lvl, msg) (Logger((lvl), _L(__FUNCTION__) L": " msg))
 #define LOG_ERROR(msg, err) (LoggerError(_L(__FUNCTION__) L": " msg, (err)))
 #define LOG_LAST_ERROR(msg) (LoggerLastError(_L(__FUNCTION__) L": " msg))

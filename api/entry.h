@@ -7,13 +7,6 @@
 
 #include <Windows.h>
 
-#ifndef __L
-#    define __L(x) L##x
-#endif
-#ifndef _L
-#    define _L(x) __L(x)
-#endif
-
 /* TODO: Replace with is_defined. MSVC has issues with the linux kernel varadic macro trick for this. */
 #if defined(_M_IX86) || defined(_M_ARM)
 #    define MAYBE_WOW64 1
