@@ -767,12 +767,6 @@ cleanupDeviceRegKey:
 }
 
 void WINAPI
-WintunGetAdapterGUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ GUID *Guid)
-{
-    memcpy(Guid, &Adapter->CfgInstanceID, sizeof(GUID));
-}
-
-void WINAPI
 WintunGetAdapterLUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ NET_LUID *Luid)
 {
     Luid->Info.Reserved = 0;

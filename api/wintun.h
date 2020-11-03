@@ -150,15 +150,6 @@ typedef WINTUN_STATUS(
     WINAPI *WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _Out_ HANDLE *Handle);
 
 /**
- * Returns the GUID of the adapter.
- *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
- *
- * @param Guid          Pointer to GUID to receive adapter ID.
- */
-typedef void(WINAPI *WINTUN_GET_ADAPTER_GUID_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _Out_ GUID *Guid);
-
-/**
  * Returns the LUID of the adapter.
  *
  * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter

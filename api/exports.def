@@ -9,7 +9,6 @@ EXPORTS
 	WintunFreeAdapter
 	WintunGetAdapter
 	WintunOpenAdapterDeviceObject
-	WintunGetAdapterGUID
 	WintunGetAdapterLUID
 	WintunGetAdapterName
 	WintunGetReadWaitEvent
