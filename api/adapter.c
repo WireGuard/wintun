@@ -1744,7 +1744,7 @@ cleanupToken:
 }
 
 static WINTUN_STATUS
-DeleteAllOurAdapters(_In_ WCHAR Pool[WINTUN_MAX_POOL], _Inout_ BOOL *RebootRequired)
+DeleteAllOurAdapters(_In_ const WCHAR Pool[WINTUN_MAX_POOL], _Inout_ BOOL *RebootRequired)
 {
     HANDLE Mutex = NamespaceTakePoolMutex(Pool);
     if (!Mutex)
@@ -1802,7 +1802,7 @@ DeleteAllOurAdapters(_In_ WCHAR Pool[WINTUN_MAX_POOL], _Inout_ BOOL *RebootRequi
 }
 
 WINTUN_STATUS WINAPI
-WintunDeletePoolDriver(_In_z_ WCHAR Pool[WINTUN_MAX_POOL], _Out_opt_ BOOL *RebootRequired)
+WintunDeletePoolDriver(_In_z_ const WCHAR Pool[WINTUN_MAX_POOL], _Out_opt_ BOOL *RebootRequired)
 {
     if (!ElevateToSystem())
         return LOG_LAST_ERROR(L"Failed to impersonate SYSTEM user");

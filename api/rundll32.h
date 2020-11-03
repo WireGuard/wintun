@@ -306,7 +306,7 @@ cleanupArgv:
 }
 
 static WINTUN_STATUS
-DeletePoolDriverViaRundll32(_In_z_ WCHAR Pool[WINTUN_MAX_POOL], _Inout_ BOOL *RebootRequired)
+DeletePoolDriverViaRundll32(_In_z_ const WCHAR Pool[WINTUN_MAX_POOL], _Inout_ BOOL *RebootRequired)
 {
     LOG(WINTUN_LOG_INFO, L"Spawning native process");
 

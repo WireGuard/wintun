@@ -82,7 +82,7 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_DELETE_ADAPTER_FUNC)(
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 typedef WINTUN_STATUS(WINAPI *WINTUN_DELETE_POOL_DRIVER_FUNC)(
-    _In_z_ WCHAR Pool[WINTUN_MAX_POOL],
+    _In_z_ const WCHAR Pool[WINTUN_MAX_POOL],
     _Out_opt_ BOOL *RebootRequired);
 
 /**
