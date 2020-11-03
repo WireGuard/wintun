@@ -31,11 +31,16 @@ typedef struct _SYSTEM_HANDLE_INFORMATION_EX
     SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX Handles[ANYSIZE_ARRAY];
 } SYSTEM_HANDLE_INFORMATION_EX, *PSYSTEM_HANDLE_INFORMATION_EX;
 
-extern NTSTATUS
+NTSYSAPI
+NTSTATUS
+NTAPI
 ZwQuerySystemInformation(
     SYSTEM_INFORMATION_CLASS SystemInformationClass,
     PVOID SystemInformation,
     ULONG SystemInformationLength,
     ULONG *ReturnLength);
 
-extern NTSTATUS ZwYieldExecution(VOID);
+NTSYSAPI
+NTSTATUS
+NTAPI
+ZwYieldExecution(VOID);
