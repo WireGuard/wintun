@@ -322,7 +322,7 @@ main(void)
     AddressRow.Address.Ipv4.sin_addr.S_un.S_addr = htonl((10 << 24) | (6 << 16) | (7 << 8) | (7 << 0)); /* 10.6.7.7 */
     AddressRow.OnLinkPrefixLength = 24; /* This is a /24 network */
     Result = CreateUnicastIpAddressEntry(&AddressRow);
-    if (Result != ERROR_SUCCESS)
+    if (Result != ERROR_SUCCESS && Result != ERROR_OBJECT_ALREADY_EXISTS)
     {
         LogError(L"Failed to set IP address", Result);
         goto cleanupAdapter;
