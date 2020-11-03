@@ -110,7 +110,7 @@ WintunStartSession(
         goto cleanupSendTailMoved;
     }
 
-    Result = WintunGetAdapterDeviceObject(Adapter, &s->Handle);
+    Result = WintunOpenAdapterDeviceObject(Adapter, &s->Handle);
     if (Result != ERROR_SUCCESS)
     {
         LOG(WINTUN_LOG_ERR, L"Failed to open adapter device object");

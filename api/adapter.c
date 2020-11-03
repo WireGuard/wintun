@@ -781,7 +781,7 @@ WintunGetAdapterLUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ NET_LUID *Luid)
 }
 
 WINTUN_STATUS WINAPI
-WintunGetAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *Handle)
+WintunOpenAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter, _Out_ HANDLE *Handle)
 {
     return GetDeviceObject(Adapter->DevInstanceID, Handle);
 }

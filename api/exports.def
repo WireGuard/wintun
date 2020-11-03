@@ -8,7 +8,7 @@ EXPORTS
 	WintunEnumAdapters
 	WintunFreeAdapter
 	WintunGetAdapter
-	WintunGetAdapterDeviceObject
+	WintunOpenAdapterDeviceObject
 	WintunGetAdapterGUID
 	WintunGetAdapterLUID
 	WintunGetAdapterName

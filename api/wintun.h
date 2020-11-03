@@ -147,7 +147,7 @@ typedef WINTUN_STATUS(WINAPI *WINTUN_GET_ADAPTER_FUNC)(
  * @return ERROR_SUCCESS on success; Win32 error code otherwise.
  */
 typedef WINTUN_STATUS(
-    WINAPI *WINTUN_GET_ADAPTER_DEVICE_OBJECT_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _Out_ HANDLE *Handle);
+    WINAPI *WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _Out_ HANDLE *Handle);
 
 /**
  * Returns the GUID of the adapter.

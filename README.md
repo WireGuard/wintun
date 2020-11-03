@@ -34,7 +34,7 @@ Manage the network adapters using following functions:
 - `WintunEnumAdapters()` enumerates all existing adapters.
 - `WintunGetAdapter()` gets existing adapter handle.
 - `WintunFreeAdapter()` frees adapter handle.
-- `WintunGetAdapterDeviceObject()` opens adapter device object.
+- `WintunOpenAdapterDeviceObject()` opens adapter device object.
 - `WintunGetAdapterGUID()` gets adapter GUID.
 - `WintunGetAdapterLUID()` gets adapter LUID.
 - `WintunGetAdapterName()` gets adapter name.
