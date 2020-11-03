@@ -115,7 +115,7 @@
       <PreprocessorDefinitions Condition="'$(Platform)'=='ARM'">_M_ARM=7;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='ARM64'">_M_ARM64=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
-    <PreLinkEvent>
+    <PreLinkEvent Condition="!exists('$(IntDir)nci.lib')">
       <Command>cl.exe /nologo /DGENERATE_LIB /Ob0 /c /Fo"$(IntDir)nci.obj" /Tc nci.h
 lib.exe /def:nci.def /out:"$(IntDir)nci.lib" /machine:$(PlatformTarget) /nologo "$(IntDir)nci.obj"</Command>
     </PreLinkEvent>
