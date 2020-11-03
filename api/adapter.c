@@ -881,9 +881,12 @@ cleanupQueriedStore:
 static BOOL
 IsOurDrvInfoDetail(_In_ const SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData)
 {
-    return DrvInfoDetailData->CompatIDsOffset > 1 && !_wcsicmp(DrvInfoDetailData->HardwareID, WINTUN_HWID) ||
-           DrvInfoDetailData->CompatIDsLength &&
-               IsOurHardwareID(DrvInfoDetailData->HardwareID + DrvInfoDetailData->CompatIDsOffset);
+    if (DrvInfoDetailData->CompatIDsOffset > 1 && !_wcsicmp(DrvInfoDetailData->HardwareID, WINTUN_HWID))
+        return TRUE;
+    if (DrvInfoDetailData->CompatIDsLength &&
+        IsOurHardwareID(DrvInfoDetailData->HardwareID + DrvInfoDetailData->CompatIDsOffset))
+        return TRUE;
+    return FALSE;
 }
 
 static BOOL
