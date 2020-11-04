@@ -61,18 +61,14 @@ static _Return_type_success_(return != NULL) SP_DRVINFO_DETAIL_DATA_W *GetAdapte
     DWORD Size = sizeof(SP_DRVINFO_DETAIL_DATA_W) + 0x100;
     for (;;)
     {
-        SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData = HeapAlloc(ModuleHeap, 0, Size);
+        SP_DRVINFO_DETAIL_DATA_W *DrvInfoDetailData = Alloc(Size);
         if (!DrvInfoDetailData)
-        {
-            LOG(WINTUN_LOG_ERR, L"Out of memory");
-            SetLastError(ERROR_OUTOFMEMORY);
             return NULL;
-        }
         DrvInfoDetailData->cbSize = sizeof(SP_DRVINFO_DETAIL_DATA_W);
         if (SetupDiGetDriverInfoDetailW(DevInfo, DevInfoData, DrvInfoData, DrvInfoDetailData, Size, &Size))
             return DrvInfoDetailData;
         DWORD LastError = GetLastError();
-        HeapFree(ModuleHeap, 0, DrvInfoDetailData);
+        Free(DrvInfoDetailData);
         if (LastError != ERROR_INSUFFICIENT_BUFFER)
         {
             SetLastError(LOG_ERROR(L"Failed", LastError));
@@ -90,17 +86,13 @@ static _Return_type_success_(return != NULL) void *GetDeviceRegistryProperty(
 {
     for (;;)
     {
-        BYTE *Data = HeapAlloc(ModuleHeap, 0, *BufLen);
+        BYTE *Data = Alloc(*BufLen);
         if (!Data)
-        {
-            LOG(WINTUN_LOG_ERR, L"Out of memory");
-            SetLastError(ERROR_OUTOFMEMORY);
             return NULL;
-        }
         if (SetupDiGetDeviceRegistryPropertyW(DevInfo, DevInfoData, Property, ValueType, Data, *BufLen, BufLen))
             return Data;
         DWORD LastError = GetLastError();
-        HeapFree(ModuleHeap, 0, Data);
+        Free(Data);
         if (LastError != ERROR_INSUFFICIENT_BUFFER)
         {
             SetLastError(LOG_ERROR(L"Querying property failed", LastError));
@@ -129,7 +121,7 @@ static _Return_type_success_(return != NULL)
         LOG(WINTUN_LOG_ERR, L"Property is not a string");
         LastError = ERROR_INVALID_DATATYPE;
     }
-    HeapFree(ModuleHeap, 0, Buf);
+    Free(Buf);
     SetLastError(LastError);
     return NULL;
 }
@@ -154,7 +146,7 @@ static _Return_type_success_(return != NULL)
         LOG(WINTUN_LOG_ERR, L"Property is not a string");
         LastError = ERROR_INVALID_DATATYPE;
     }
-    HeapFree(ModuleHeap, 0, Buf);
+    Free(Buf);
     SetLastError(LastError);
     return NULL;
 }
@@ -178,7 +170,7 @@ IsOurAdapter(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
         return FALSE;
     }
     BOOL IsOurs = IsOurHardwareID(Hwids);
-    HeapFree(ModuleHeap, 0, Hwids);
+    Free(Hwids);
     return IsOurs;
 }
 
@@ -197,13 +189,9 @@ static _Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE OpenDeviceOb
         SetLastError(LOG_ERROR(L"Failed to query associated instances size", LastError));
         return INVALID_HANDLE_VALUE;
     }
-    WCHAR *Interfaces = HeapAlloc(ModuleHeap, 0, InterfacesLen * sizeof(WCHAR));
+    WCHAR *Interfaces = Alloc(InterfacesLen * sizeof(WCHAR));
     if (!Interfaces)
-    {
-        LOG(WINTUN_LOG_ERR, L"Out of memory");
-        SetLastError(ERROR_OUTOFMEMORY);
         return INVALID_HANDLE_VALUE;
-    }
     HANDLE Handle = INVALID_HANDLE_VALUE;
     LastError = CM_MapCrToWin32Err(
         CM_Get_Device_Interface_ListW(
@@ -228,7 +216,7 @@ static _Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE OpenDeviceOb
         NULL);
     LastError = Handle != INVALID_HANDLE_VALUE ? ERROR_SUCCESS : LOG_LAST_ERROR(L"Failed to connect to adapter");
 cleanupBuf:
-    HeapFree(ModuleHeap, 0, Interfaces);
+    Free(Interfaces);
     if (LastError != ERROR_SUCCESS)
         SetLastError(LastError);
     return Handle;
@@ -247,13 +235,9 @@ static _Return_type_success_(return != FALSE) BOOL
         LOG_ERROR(L"Failed to query instance ID size", LastError);
         return FALSE;
     }
-    WCHAR *InstanceId = HeapAlloc(ModuleHeap, HEAP_ZERO_MEMORY, sizeof(*InstanceId) * RequiredBytes);
+    WCHAR *InstanceId = Zalloc(sizeof(*InstanceId) * RequiredBytes);
     if (!InstanceId)
-    {
-        LOG(WINTUN_LOG_ERR, L"Out of memory");
-        SetLastError(ERROR_OUTOFMEMORY);
         return FALSE;
-    }
     if (!SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, InstanceId, RequiredBytes, &RequiredBytes))
     {
         LastError = LOG_LAST_ERROR(L"Failed to get instance ID");
@@ -276,7 +260,7 @@ static _Return_type_success_(return != FALSE) BOOL
         LastError = LOG_LAST_ERROR(L"Failed to perform ioctl");
     CloseHandle(NdisHandle);
 cleanupInstanceId:
-    HeapFree(ModuleHeap, 0, InstanceId);
+    Free(InstanceId);
     return RET_ERROR(TRUE, LastError);
 }
 
@@ -290,19 +274,15 @@ static _Return_type_success_(return != FALSE) BOOL
     DWORD LastError = ERROR_SUCCESS;
     for (DWORD EnumIndex = 0;; ++EnumIndex)
     {
-        SP_DEVINFO_DATA_LIST *DeviceNode = HeapAlloc(ModuleHeap, 0, sizeof(SP_DEVINFO_DATA_LIST));
+        SP_DEVINFO_DATA_LIST *DeviceNode = Alloc(sizeof(SP_DEVINFO_DATA_LIST));
         if (!DeviceNode)
-        {
-            LOG(WINTUN_LOG_ERR, L"Out of memory");
-            SetLastError(ERROR_OUTOFMEMORY);
             return FALSE;
-        }
         DeviceNode->Data.cbSize = sizeof(SP_DEVINFO_DATA);
         if (!SetupDiEnumDeviceInfo(DevInfo, EnumIndex, &DeviceNode->Data))
         {
             if (GetLastError() == ERROR_NO_MORE_ITEMS)
             {
-                HeapFree(ModuleHeap, 0, DeviceNode);
+                Free(DeviceNode);
                 break;
             }
             goto cleanupDeviceNode;
@@ -333,7 +313,7 @@ static _Return_type_success_(return != FALSE) BOOL
         continue;
 
     cleanupDeviceNode:
-        HeapFree(ModuleHeap, 0, DeviceNode);
+        Free(DeviceNode);
     }
     return RET_ERROR(TRUE, LastError);
 }
@@ -431,7 +411,7 @@ static _Return_type_success_(return != FALSE) BOOL
         LOG(WINTUN_LOG_ERR, L"NetCfgInstanceId is not a GUID");
         LastError = ERROR_INVALID_DATA;
     }
-    HeapFree(ModuleHeap, 0, ValueStr);
+    Free(ValueStr);
 cleanupKey:
     RegCloseKey(Key);
     return RET_ERROR(TRUE, LastError);
@@ -524,9 +504,9 @@ IsPoolMember(_In_z_ const WCHAR *Pool, _In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DA
         goto cleanupFriendlyName;
     }
 cleanupFriendlyName:
-    HeapFree(ModuleHeap, 0, FriendlyName);
+    Free(FriendlyName);
 cleanupDeviceDesc:
-    HeapFree(ModuleHeap, 0, DeviceDesc);
+    Free(DeviceDesc);
     SetLastError(LastError);
     return Ret;
 }
@@ -543,11 +523,10 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER
     }
 
     DWORD LastError;
-    WINTUN_ADAPTER *Adapter = HeapAlloc(ModuleHeap, 0, sizeof(WINTUN_ADAPTER));
+    WINTUN_ADAPTER *Adapter = Alloc(sizeof(WINTUN_ADAPTER));
     if (!Adapter)
     {
-        LOG(WINTUN_LOG_ERR, L"Out of memory");
-        LastError = ERROR_OUTOFMEMORY;
+        LastError = GetLastError();
         goto cleanupKey;
     }
 
@@ -560,11 +539,11 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER
     if (FAILED(CLSIDFromString(ValueStr, &Adapter->CfgInstanceID)))
     {
         LOG(WINTUN_LOG_ERR, L"NetCfgInstanceId is not Adapter GUID");
-        HeapFree(ModuleHeap, 0, ValueStr);
+        Free(ValueStr);
         LastError = ERROR_INVALID_DATA;
         goto cleanupAdapter;
     }
-    HeapFree(ModuleHeap, 0, ValueStr);
+    Free(ValueStr);
 
     if (!RegistryQueryDWORD(Key, L"NetLuidIndex", &Adapter->LuidIndex, TRUE))
     {
@@ -596,7 +575,7 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER
     return Adapter;
 
 cleanupAdapter:
-    HeapFree(ModuleHeap, 0, Adapter);
+    Free(Adapter);
 cleanupKey:
     RegCloseKey(Key);
     SetLastError(LastError);
@@ -624,7 +603,7 @@ static _Return_type_success_(return != FALSE) BOOL
 void WINAPI
 WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
 {
-    HeapFree(ModuleHeap, 0, Adapter);
+    Free(Adapter);
 }
 
 _Return_type_success_(return != NULL) WINTUN_ADAPTER *WINAPI
@@ -1022,7 +1001,7 @@ static _Return_type_success_(return != FALSE) BOOL
         goto cleanupPaths;
     }
 cleanupPaths:
-    HeapFree(ModuleHeap, 0, Paths);
+    Free(Paths);
 cleanupTcpipAdapterRegKey:
     RegCloseKey(TcpipAdapterRegKey);
     return RET_ERROR(TRUE, LastError);
@@ -1037,13 +1016,9 @@ static _Return_type_success_(return != 0) DWORD VersionOfFile(_In_z_ const WCHAR
         LOG_LAST_ERROR(L"Failed to query version info size");
         return 0;
     }
-    VOID *VersionInfo = HeapAlloc(ModuleHeap, 0, Len);
+    VOID *VersionInfo = Alloc(Len);
     if (!VersionInfo)
-    {
-        LOG(WINTUN_LOG_ERR, L"Out of memory");
-        SetLastError(ERROR_OUTOFMEMORY);
         return 0;
-    }
     DWORD LastError = ERROR_SUCCESS, Version = 0;
     VS_FIXEDFILEINFO *FixedInfo;
     UINT FixedInfoLen = sizeof(*FixedInfo);
@@ -1064,7 +1039,7 @@ static _Return_type_success_(return != 0) DWORD VersionOfFile(_In_z_ const WCHAR
         LastError = ERROR_VERSION_PARSE_ERROR;
     }
 out:
-    HeapFree(ModuleHeap, 0, VersionInfo);
+    Free(VersionInfo);
     return RET_ERROR(Version, LastError);
 }
 
@@ -1114,17 +1089,13 @@ WintunGetVersion(void)
     ULONG BufferSize = 128 * 1024;
     for (;;)
     {
-        Modules = HeapAlloc(ModuleHeap, 0, BufferSize);
+        Modules = Alloc(BufferSize);
         if (!Modules)
-        {
-            LOG(WINTUN_LOG_ERR, L"Out of memory");
-            SetLastError(ERROR_OUTOFMEMORY);
             return 0;
-        }
         NTSTATUS Status = NtQuerySystemInformation(SystemModuleInformation, Modules, BufferSize, &BufferSize);
         if (NT_SUCCESS(Status))
             break;
-        HeapFree(ModuleHeap, 0, Modules);
+        Free(Modules);
         if (Status == STATUS_INFO_LENGTH_MISMATCH)
             continue;
         LOG(WINTUN_LOG_ERR, L"Failed to enumerate drivers");
@@ -1148,7 +1119,7 @@ WintunGetVersion(void)
     }
     LastError = ERROR_FILE_NOT_FOUND;
 cleanupModules:
-    HeapFree(ModuleHeap, 0, Modules);
+    Free(Modules);
     return RET_ERROR(Version, LastError);
 }
 
@@ -1212,7 +1183,7 @@ static _Return_type_success_(return != FALSE) BOOL SelectDriver(
                 if (DevInfoExistingAdapters == INVALID_HANDLE_VALUE)
                 {
                     LastError = LOG_LAST_ERROR(L"Failed to get present adapters");
-                    HeapFree(ModuleHeap, 0, DrvInfoDetailData);
+                    Free(DrvInfoDetailData);
                     goto cleanupExistingAdapters;
                 }
                 _Analysis_assume_(DevInfoExistingAdapters != NULL);
@@ -1237,7 +1208,7 @@ static _Return_type_success_(return != FALSE) BOOL SelectDriver(
         DriverDate = DrvInfoData.DriverDate;
         DriverVersion = DrvInfoData.DriverVersion;
     next:
-        HeapFree(ModuleHeap, 0, DrvInfoDetailData);
+        Free(DrvInfoDetailData);
     }
 
     if (DriverVersion)
@@ -1340,7 +1311,7 @@ cleanupExistingAdapters:
         while (ExistingAdapters)
         {
             SP_DEVINFO_DATA_LIST *Next = ExistingAdapters->Next;
-            HeapFree(ModuleHeap, 0, ExistingAdapters);
+            Free(ExistingAdapters);
             ExistingAdapters = Next;
         }
     }
@@ -1494,7 +1465,7 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
         LastError = LOG(WINTUN_LOG_ERR, L"Failed to get NetCfgInstanceId");
         goto cleanupNetDevRegKey;
     }
-    HeapFree(ModuleHeap, 0, DummyStr);
+    Free(DummyStr);
     DWORD DummyDWORD;
     if (!RegistryQueryDWORDWait(NetDevRegKey, L"NetLuidIndex", WAIT_FOR_REGISTRY_TIMEOUT, &DummyDWORD))
     {
@@ -1534,7 +1505,7 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
         LastError = LOG(WINTUN_LOG_ERR, L"Failed to get IpConfig");
         goto cleanupTcpipAdapterRegKey;
     }
-    HeapFree(ModuleHeap, 0, DummyStr);
+    Free(DummyStr);
 
     HKEY TcpipInterfaceRegKey;
     WCHAR TcpipInterfaceRegPath[MAX_REG_PATH];
@@ -1602,7 +1573,7 @@ cleanupTcpipAdapterRegKey:
 cleanupAdapter:
     if (LastError != ERROR_SUCCESS)
     {
-        HeapFree(ModuleHeap, 0, Adapter);
+        Free(Adapter);
         Adapter = NULL;
     }
 cleanupNetDevRegKey:
@@ -1856,7 +1827,7 @@ _Return_type_success_(return != FALSE) BOOL WINAPI
                 LastError = LastError != ERROR_SUCCESS ? LastError : GetLastError();
             }
         }
-        HeapFree(ModuleHeap, 0, DriverDetail);
+        Free(DriverDetail);
     }
     SetupDiDestroyDriverInfoList(DeviceInfoSet, NULL, SPDIT_CLASSDRIVER);
 cleanupDeviceInfoSet:
@@ -1905,7 +1876,7 @@ _Return_type_success_(return != FALSE) BOOL WINAPI
             break;
         }
         Continue = Func(Adapter, Param);
-        HeapFree(ModuleHeap, 0, Adapter);
+        Free(Adapter);
     }
     SetupDiDestroyDeviceInfoList(DevInfo);
 cleanupMutex:

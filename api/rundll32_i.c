@@ -131,11 +131,10 @@ static _Return_type_success_(return != FALSE) BOOL ExecuteRunDll32(
         goto cleanupDelete;
     }
     size_t CommandLineLen = 10 + MAX_PATH + 2 + wcslen(Arguments) + 1;
-    WCHAR *CommandLine = HeapAlloc(ModuleHeap, 0, CommandLineLen * sizeof(WCHAR));
+    WCHAR *CommandLine = Alloc(CommandLineLen * sizeof(WCHAR));
     if (!CommandLine)
     {
-        LOG(WINTUN_LOG_ERR, L"Out of memory");
-        LastError = ERROR_OUTOFMEMORY;
+        LastError = GetLastError();
         goto cleanupDelete;
     }
     if (_snwprintf_s(CommandLine, CommandLineLen, _TRUNCATE, L"rundll32 \"%.*s\",%s", MAX_PATH, DllPath, Arguments) ==
@@ -218,7 +217,7 @@ cleanupPipes:
     CloseHandle(StreamWStderr);
     CloseHandle(StreamRStdout);
     CloseHandle(StreamWStdout);
-    HeapFree(ModuleHeap, 0, CommandLine);
+    Free(CommandLine);
 cleanupDelete:
     DeleteFileW(DllPath);
 cleanupDirectory:

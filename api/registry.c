@@ -92,16 +92,12 @@ _Return_type_success_(return != FALSE) BOOL RegistryGetString(_Inout_ WCHAR **Bu
     if (wcsnlen(*Buf, Len) >= Len)
     {
         /* String is missing zero-terminator. */
-        WCHAR *BufZ = HeapAlloc(ModuleHeap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
+        WCHAR *BufZ = Alloc(((size_t)Len + 1) * sizeof(WCHAR));
         if (!BufZ)
-        {
-            LOG(WINTUN_LOG_ERR, L"Out of memory");
-            SetLastError(ERROR_OUTOFMEMORY);
             return FALSE;
-        }
         wmemcpy(BufZ, *Buf, Len);
         BufZ[Len] = 0;
-        HeapFree(ModuleHeap, 0, *Buf);
+        Free(*Buf);
         *Buf = BufZ;
     }
 
@@ -116,28 +112,23 @@ _Return_type_success_(return != FALSE) BOOL RegistryGetString(_Inout_ WCHAR **Bu
     Len = Len * 2 + 64;
     for (;;)
     {
-        WCHAR *Expanded = HeapAlloc(ModuleHeap, 0, Len * sizeof(WCHAR));
+        WCHAR *Expanded = Alloc(Len * sizeof(WCHAR));
         if (!Expanded)
-        {
-            LOG(WINTUN_LOG_ERR, L"Out of memory");
-            SetLastError(ERROR_OUTOFMEMORY);
             return FALSE;
-        }
         DWORD Result = ExpandEnvironmentStringsW(*Buf, Expanded, Len);
         if (!Result)
         {
-            DWORD LastError = LOG_LAST_ERROR(L"Failed to expand environment variables");
-            HeapFree(ModuleHeap, 0, Expanded);
-            SetLastError(LastError);
+            LOG_LAST_ERROR(L"Failed to expand environment variables");
+            Free(Expanded);
             return FALSE;
         }
         if (Result > Len)
         {
-            HeapFree(ModuleHeap, 0, Expanded);
+            Free(Expanded);
             Len = Result;
             continue;
         }
-        HeapFree(ModuleHeap, 0, *Buf);
+        Free(*Buf);
         *Buf = Expanded;
         return TRUE;
     }
@@ -153,33 +144,25 @@ _Return_type_success_(return != FALSE) BOOL
             if (i > Len)
             {
                 /* Missing string and list terminators. */
-                WCHAR *BufZ = HeapAlloc(ModuleHeap, 0, ((size_t)Len + 2) * sizeof(WCHAR));
+                WCHAR *BufZ = Alloc(((size_t)Len + 2) * sizeof(WCHAR));
                 if (!BufZ)
-                {
-                    LOG(WINTUN_LOG_ERR, L"Out of memory");
-                    SetLastError(ERROR_OUTOFMEMORY);
                     return FALSE;
-                }
                 wmemcpy(BufZ, *Buf, Len);
                 BufZ[Len] = 0;
                 BufZ[Len + 1] = 0;
-                HeapFree(ModuleHeap, 0, *Buf);
+                Free(*Buf);
                 *Buf = BufZ;
                 return TRUE;
             }
             if (i == Len)
             {
                 /* Missing list terminator. */
-                WCHAR *BufZ = HeapAlloc(ModuleHeap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
+                WCHAR *BufZ = Alloc(((size_t)Len + 1) * sizeof(WCHAR));
                 if (!BufZ)
-                {
-                    LOG(WINTUN_LOG_ERR, L"Out of memory");
-                    SetLastError(ERROR_OUTOFMEMORY);
                     return FALSE;
-                }
                 wmemcpy(BufZ, *Buf, Len);
                 BufZ[Len] = 0;
-                HeapFree(ModuleHeap, 0, *Buf);
+                Free(*Buf);
                 *Buf = BufZ;
                 return TRUE;
             }
@@ -192,16 +175,12 @@ _Return_type_success_(return != FALSE) BOOL
     if (!RegistryGetString(Buf, Len, ValueType))
         return FALSE;
     Len = (DWORD)wcslen(*Buf) + 1;
-    WCHAR *BufZ = HeapAlloc(ModuleHeap, 0, ((size_t)Len + 1) * sizeof(WCHAR));
+    WCHAR *BufZ = Alloc(((size_t)Len + 1) * sizeof(WCHAR));
     if (!BufZ)
-    {
-        LOG(WINTUN_LOG_ERR, L"Out of memory");
-        SetLastError(ERROR_OUTOFMEMORY);
         return FALSE;
-    }
     wmemcpy(BufZ, *Buf, Len);
     BufZ[Len] = 0;
-    HeapFree(ModuleHeap, 0, *Buf);
+    Free(*Buf);
     *Buf = BufZ;
     return TRUE;
 }
@@ -215,17 +194,13 @@ static _Return_type_success_(return != NULL) void *RegistryQuery(
 {
     for (;;)
     {
-        BYTE *p = HeapAlloc(ModuleHeap, 0, *BufLen);
+        BYTE *p = Alloc(*BufLen);
         if (!p)
-        {
-            LOG(WINTUN_LOG_ERR, L"Out of memory");
-            SetLastError(ERROR_OUTOFMEMORY);
             return NULL;
-        }
         LSTATUS LastError = RegQueryValueExW(Key, Name, NULL, ValueType, p, BufLen);
         if (LastError == ERROR_SUCCESS)
             return p;
-        HeapFree(ModuleHeap, 0, p);
+        Free(p);
         if (LastError != ERROR_MORE_DATA)
         {
             if (Log)
@@ -256,7 +231,7 @@ _Return_type_success_(
         LOG(WINTUN_LOG_ERR, L"Value is not a string");
         LastError = ERROR_INVALID_DATATYPE;
     }
-    HeapFree(ModuleHeap, 0, Value);
+    Free(Value);
     SetLastError(LastError);
     return NULL;
 }

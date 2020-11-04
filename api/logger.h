@@ -6,6 +6,7 @@
 #pragma once
 
 #include "wintun.h"
+#include "entry.h"
 #include <Windows.h>
 
 extern WINTUN_LOGGER_CALLBACK_FUNC Logger;
@@ -36,3 +37,28 @@ LoggerLastError(_In_z_ const WCHAR *Function, _In_z_ const WCHAR *Prefix)
 #define LOG(lvl, msg) (LoggerLog((lvl), _L(__FUNCTION__), msg))
 #define LOG_ERROR(msg, err) (LoggerError(_L(__FUNCTION__), msg, (err)))
 #define LOG_LAST_ERROR(msg) (LoggerLastError(_L(__FUNCTION__), msg))
+
+#define RET_ERROR(Ret, Error) ((Error) == ERROR_SUCCESS ? (Ret) : (SetLastError(Error), 0))
+
+static inline _Return_type_success_(return != NULL) _Ret_maybenull_
+    _Post_writable_byte_size_(Size) void *LoggerAlloc(_In_z_ const WCHAR *Function, _In_ DWORD Flags, _In_ SIZE_T Size)
+{
+    void *Data = HeapAlloc(ModuleHeap, Flags, Size);
+    if (!Data)
+    {
+        LoggerLog(WINTUN_LOG_ERR, Function, L"Out of memory");
+        SetLastError(ERROR_OUTOFMEMORY);
+    }
+    return Data;
+}
+#define Alloc(Size) LoggerAlloc(_L(__FUNCTION__), 0, Size)
+#define Zalloc(Size) LoggerAlloc(_L(__FUNCTION__), HEAP_ZERO_MEMORY, Size)
+static inline void
+Free(void *Ptr)
+{
+    if (!Ptr)
+        return;
+    DWORD LastError = GetLastError();
+    HeapFree(ModuleHeap, 0, Ptr);
+    SetLastError(LastError);
+}

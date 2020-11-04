@@ -26,8 +26,6 @@
 #endif
 #pragma warning(disable : 4127) /* conditional expression is constant */
 
-#define RET_ERROR(Ret, Error) ((Error) == ERROR_SUCCESS ? (Ret) : (SetLastError(Error), 0))
-
 extern HINSTANCE ResourceModule;
 extern HANDLE ModuleHeap;
 extern SECURITY_ATTRIBUTES SecurityAttributes;

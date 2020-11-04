@@ -22,21 +22,16 @@ static _Return_type_success_(
     int Len = NormalizeString(NormForm, Source, -1, NULL, 0);
     for (;;)
     {
-        WCHAR *Str = HeapAlloc(ModuleHeap, 0, sizeof(WCHAR) * Len);
+        WCHAR *Str = Alloc(sizeof(WCHAR) * Len);
         if (!Str)
-        {
-            LOG(WINTUN_LOG_ERR, L"Out of memory");
-            SetLastError(ERROR_OUTOFMEMORY);
             return NULL;
-        }
         Len = NormalizeString(NormForm, Source, -1, Str, Len);
         if (Len > 0)
             return Str;
-        DWORD LastError = GetLastError();
-        HeapFree(ModuleHeap, 0, Str);
-        if (LastError != ERROR_INSUFFICIENT_BUFFER)
+        Free(Str);
+        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
         {
-            SetLastError(LOG_ERROR(L"Failed", LastError));
+            LOG_LAST_ERROR(L"Failed");
             return NULL;
         }
         Len = -Len;
@@ -169,7 +164,7 @@ _Return_type_success_(return != NULL) HANDLE NamespaceTakePoolMutex(_In_z_ const
     {
     case WAIT_OBJECT_0:
     case WAIT_ABANDONED:
-        HeapFree(ModuleHeap, 0, PoolNorm);
+        Free(PoolNorm);
         BCryptDestroyHash(Sha256);
         return Mutex;
     }
@@ -177,7 +172,7 @@ _Return_type_success_(return != NULL) HANDLE NamespaceTakePoolMutex(_In_z_ const
     LastError = ERROR_GEN_FAILURE;
     CloseHandle(Mutex);
 cleanupPoolNorm:
-    HeapFree(ModuleHeap, 0, PoolNorm);
+    Free(PoolNorm);
 cleanupSha256:
     BCryptDestroyHash(Sha256);
     SetLastError(LastError);

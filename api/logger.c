@@ -5,6 +5,7 @@
 
 #include "logger.h"
 #include <Windows.h>
+#include <wchar.h>
 
 static BOOL CALLBACK
 NopLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
@@ -32,8 +33,9 @@ LoggerLog(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Function, _In_z_ c
     {
         WCHAR Combined[0x400];
         if (_snwprintf_s(Combined, _countof(Combined), _TRUNCATE, L"%s: %s", Function, LogLine) == -1)
-            return LastError;
-        Logger(Level, Combined);
+            Logger(Level, LogLine);
+        else
+            Logger(Level, Combined);
     }
     else
         Logger(Level, LogLine);
