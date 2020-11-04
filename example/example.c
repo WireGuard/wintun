@@ -247,10 +247,13 @@ SendPackets(_Inout_ DWORD_PTR SessionPtr)
     while (!HaveQuit)
     {
         BYTE *Packet = WintunAllocateSendPacket(Session, 28);
-        if (!Packet)
+        if (Packet)
+        {
+            MakeICMP(Packet);
+            WintunSendPacket(Session, Packet);
+        }
+        else if (GetLastError() != ERROR_BUFFER_OVERFLOW)
             return LogLastError(L"Packet write failed");
-        MakeICMP(Packet);
-        WintunSendPacket(Session, Packet);
 
         switch (WaitForSingleObject(QuitEvent, 1000 /* 1 second */))
         {
