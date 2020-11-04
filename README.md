@@ -103,7 +103,7 @@ WintunSendPacket(Session, Packet);
 
 Other `wintun.dll` functions are:
 
-- `WintunGetVersion()` returns driver and NDIS major and minor versions.
+- `WintunGetRunningDriverVersion()` returns driver and NDIS major and minor versions.
 - `WintunSetLogger()` sets global logging callback function.
 
 Example:

@@ -1083,7 +1083,7 @@ static _Return_type_success_(return != FALSE) BOOL
 }
 
 DWORD WINAPI
-WintunGetVersion(void)
+WintunGetRunningDriverVersion(void)
 {
     PRTL_PROCESS_MODULES Modules;
     ULONG BufferSize = 128 * 1024;
@@ -1127,7 +1127,7 @@ static BOOL
 EnsureWintunUnloaded(void)
 {
     BOOL Loaded;
-    for (int i = 0; (Loaded = WintunGetVersion() != 0) != FALSE && i < 300; ++i)
+    for (int i = 0; (Loaded = WintunGetRunningDriverVersion() != 0) != FALSE && i < 300; ++i)
         Sleep(50);
     return !Loaded;
 }

@@ -22,7 +22,7 @@ static WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC WintunOpenAdapterDeviceObject;
 static WINTUN_GET_ADAPTER_LUID_FUNC WintunGetAdapterLUID;
 static WINTUN_GET_ADAPTER_NAME_FUNC WintunGetAdapterName;
 static WINTUN_SET_ADAPTER_NAME_FUNC WintunSetAdapterName;
-static WINTUN_GET_VERSION_FUNC WintunGetVersion;
+static WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC WintunGetRunningDriverVersion;
 static WINTUN_SET_LOGGER_FUNC WintunSetLogger;
 static WINTUN_START_SESSION_FUNC WintunStartSession;
 static WINTUN_END_SESSION_FUNC WintunEndSession;
@@ -279,7 +279,8 @@ InitializeWintun(void)
         X(WintunOpenAdapterDeviceObject, WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC) ||
         X(WintunGetAdapterLUID, WINTUN_GET_ADAPTER_LUID_FUNC) ||
         X(WintunGetAdapterName, WINTUN_GET_ADAPTER_NAME_FUNC) ||
-        X(WintunSetAdapterName, WINTUN_SET_ADAPTER_NAME_FUNC) || X(WintunGetVersion, WINTUN_GET_VERSION_FUNC) ||
+        X(WintunSetAdapterName, WINTUN_SET_ADAPTER_NAME_FUNC) ||
+        X(WintunGetRunningDriverVersion, WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC) ||
         X(WintunSetLogger, WINTUN_SET_LOGGER_FUNC) || X(WintunStartSession, WINTUN_START_SESSION_FUNC) ||
         X(WintunEndSession, WINTUN_END_SESSION_FUNC) || X(WintunGetReadWaitEvent, WINTUN_GET_READ_WAIT_EVENT_FUNC) ||
         X(WintunReceivePacket, WINTUN_RECEIVE_PACKET_FUNC) || X(WintunReceiveRelease, WINTUN_RECEIVE_RELEASE_FUNC) ||
@@ -331,7 +332,7 @@ main(void)
         }
     }
 
-    DWORD Version = WintunGetVersion();
+    DWORD Version = WintunGetRunningDriverVersion();
     Log(WINTUN_LOG_INFO, L"Wintun v%u.%u loaded", (Version >> 16) & 0xff, (Version >> 0) & 0xff);
 
     MIB_UNICASTIPADDRESS_ROW AddressRow;

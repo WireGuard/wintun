@@ -187,7 +187,7 @@ typedef _Return_type_success_(return != FALSE)
  *         zero. To get extended error information, call GetLastError. Possible errors include the following:
  *         ERROR_FILE_NOT_FOUND  Wintun not loaded
  */
-typedef DWORD(WINAPI *WINTUN_GET_VERSION_FUNC)(void);
+typedef DWORD(WINAPI *WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC)(void);
 
 typedef enum _WINTUN_LOGGER_LEVEL
 {
