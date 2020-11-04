@@ -1653,7 +1653,7 @@ cleanupMutex:
     return RET_ERROR(Adapter, LastError);
 }
 
-#include "rundll32.h"
+#include "rundll32_i.c"
 
 _Return_type_success_(return != NULL) WINTUN_ADAPTER *WINAPI WintunCreateAdapter(
     _In_z_ const WCHAR *Pool,

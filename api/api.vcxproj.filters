@@ -55,11 +55,11 @@
     <ClInclude Include="entry.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="rundll32.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="ntdll.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="rundll32_i.c">
+      <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
