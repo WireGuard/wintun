@@ -189,7 +189,7 @@ typedef _Return_type_success_(return != FALSE)
  */
 typedef DWORD(WINAPI *WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC)(void);
 
-typedef enum _WINTUN_LOGGER_LEVEL
+typedef enum
 {
     WINTUN_LOG_INFO = 0,
     WINTUN_LOG_WARN,
