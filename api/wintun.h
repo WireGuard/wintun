@@ -96,7 +96,7 @@ typedef BOOL(CALLBACK *WINTUN_ENUM_CALLBACK)(_In_ WINTUN_ADAPTER_HANDLE Adapter,
  *
  * @param Pool          Name of the adapter pool. Zero-terminated string of up to WINTUN_MAX_POOL-1 characters.
  *
- * @param Func          Callback function. To continue enumeration, the callback function must return TRUE; to stop
+ * @param Callback      Callback function. To continue enumeration, the callback function must return TRUE; to stop
  *                      enumeration, it must return FALSE.
  *
  * @param Param         An application-defined value to be passed to the callback function.
