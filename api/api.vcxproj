@@ -106,7 +106,7 @@
       <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="Exists('$(OutDir)whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:iso %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>..\$(Configuration)\$(WintunPlatform);..\$(Configuration);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ResourceCompile>
       <AdditionalIncludeDirectories>..\$(Configuration)\$(WintunPlatform);..\$(Configuration);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -116,12 +116,6 @@
       <PreprocessorDefinitions Condition="'$(Platform)'=='ARM'">_M_ARM=7;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='ARM64'">_M_ARM64=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
-    <CustomBuildStep>
-      <Command>cl.exe /nologo /DGENERATE_LIB /Ob0 /c /Fo"$(IntDir)nci.obj" /Tc "$(ProjectDir)nci.h"
-lib.exe /def:"$(ProjectDir)nci.def" /out:"$(IntDir)nci.lib" /machine:$(PlatformTarget) /nologo "$(IntDir)nci.obj"</Command>
-      <Outputs>$(IntDir)nci.lib</Outputs>
-      <Inputs>$(ProjectDir)nci.def;$(ProjectDir)nci.h</Inputs>
-    </CustomBuildStep>
     <Link>
       <DelayLoadDLLs>bcrypt.dll;iphlpapi.dll;nci.dll;newdev.dll;version.dll</DelayLoadDLLs>
       <AdditionalDependencies>Bcrypt.lib;Crypt32.lib;Cfgmgr32.lib;Iphlpapi.lib;$(IntDir)nci.lib;newdev.lib;ntdll.lib;Setupapi.lib;shlwapi.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -191,11 +185,23 @@ lib.exe /def:"$(ProjectDir)nci.def" /out:"$(IntDir)nci.lib" /machine:$(PlatformT
   <Import Project="..\wintun.vcxproj.user" Condition="exists('..\wintun.vcxproj.user')" />
   <PropertyGroup>
     <BuildDependsOn>$(BuildDependsOn);SignTarget</BuildDependsOn>
-    <CleanDependsOn>CleanSignTarget;$(CleanDependsOn)</CleanDependsOn>
+    <CleanDependsOn>CleanInfVersion;CleanNci;CleanSignTarget;$(CleanDependsOn)</CleanDependsOn>
     <SignTargetCommandLine Condition="$(SignMode)=='TestSign'">"$(SignToolPath)" sign /sha1 "$(TestCertificate)" /fd sha256 "$(TargetPath)"</SignTargetCommandLine>
     <SignTargetCommandLine Condition="$(SignMode)=='ProductionSign'">"$(SignToolPath)" sign /sha1 "$(ProductionCertificate)" /fd sha256 /tr "$(TimeStampServer)" /td sha256 "$(TargetPath)"</SignTargetCommandLine>
-    <CustomBuildBeforeTargets>Link</CustomBuildBeforeTargets>
   </PropertyGroup>
+  <Target Name="BuildInfVersion" BeforeTargets="ClCompile" Inputs="$(OutDir)wintun\wintun.inf" Outputs="$(IntDir)wintun-inf.h">
+    <Exec Command="cscript.exe /nologo &quot;extract-driverver.js&quot; &lt; &quot;$(OutDir)wintun\wintun.inf&quot; &gt; &quot;$(IntDir)wintun-inf.h&quot;" />
+  </Target>
+  <Target Name="CleanInfVersion">
+    <Delete Files="$(IntDir)wintun-inf.h" />
+  </Target>
+  <Target Name="BuildNci" BeforeTargets="Link" Inputs="$(ProjectDir)nci.def;$(ProjectDir)nci.h" Outputs="$(IntDir)nci.lib">
+    <Exec Command="cl.exe /nologo /DGENERATE_LIB /Ob0 /c /Fo&quot;$(IntDir)nci.obj&quot; /Tc &quot;nci.h&quot;" />
+    <Exec Command="lib.exe /def:&quot;$(ProjectDir)nci.def&quot; /out:&quot;$(IntDir)nci.lib&quot; /machine:$(PlatformTarget) /nologo &quot;$(IntDir)nci.obj&quot;" />
+  </Target>
+  <Target Name="CleanNci">
+    <Delete Files="$(IntDir)nci.obj;$(IntDir)nci.lib" />
+  </Target>
   <Target Name="SignTarget" Condition="'$(SignTargetCommandLine)'!=''" Inputs="$(TargetPath)" Outputs="$(IntermediateOutputPath)$(TargetName).sign">
     <Exec Command="$(SignTargetCommandLine)" />
     <Touch Files="$(IntermediateOutputPath)$(TargetName).sign" AlwaysCreate="true" />

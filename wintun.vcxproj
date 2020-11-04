@@ -139,7 +139,6 @@
     <IntDir>$(ConfigurationName)\$(WintunPlatform)\</IntDir>
     <OutDir>$(ConfigurationName)\$(WintunPlatform)\</OutDir>
     <RunCodeAnalysis>true</RunCodeAnalysis>
-    <CustomBuildAfterTargets>StampInf</CustomBuildAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <CodeAnalysisRuleSet>$(WDKContentRoot)CodeAnalysis\DriverMustFixRules.ruleset</CodeAnalysisRuleSet>
@@ -169,11 +168,6 @@
     <DriverSign>
       <FileDigestAlgorithm>sha256</FileDigestAlgorithm>
     </DriverSign>
-    <CustomBuildStep>
-      <Command>cscript.exe /nologo "$(ProjectDir)\extract-driverver.js" &lt; "$(IntDir)wintun.inf" &gt; "$(IntDir)wintun-inf.h"</Command>
-      <Outputs>$(IntDir)wintun-inf.h</Outputs>
-      <Inputs>$(IntDir)wintun.inf</Inputs>
-    </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
     <Inf>
