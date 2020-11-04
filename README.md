@@ -5,138 +5,385 @@ This is a layer 3 TUN driver for Windows 7, 8, 8.1, and 10. Originally created f
 
 ## Installation
 
-Wintun is deployed as a platform-specific `wintun.dll` file. Install the `wintun.dll` file side-by-side with your application.
+Wintun is deployed as a platform-specific `wintun.dll` file. Install the `wintun.dll` file side-by-side with your application. Download the dll from [wintun.net](https://www.wintun.net/), alongside the header file for your application described below.
 
 ## Usage
 
-Include `wintun.h` file in your project and dynamically load the `wintun.dll` using [`LoadLibraryEx()`](https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexa) and [`GetProcAddress()`](https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getprocaddress).
+Include the [`wintun.h` file](https://git.zx2c4.com/wintun/tree/api/wintun.h) in your project simply by copying it there and dynamically load the `wintun.dll` using [`LoadLibraryEx()`](https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexa) and [`GetProcAddress()`](https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getprocaddress) to resolve each function, using the typedefs provided in the header file. The [`InitializeWintun` function in the example.c code](https://git.zx2c4.com/wintun/tree/example/example.c#n268) provides this in a function that you can simply copy and paste.
 
-Each function has its function typedef in `wintun.h` with additional usage documentation.
-
-```C
-#include "wintun.h"
-⋮
-HMODULE Wintun = LoadLibraryExW(L"wintun.dll", NULL, LOAD_LIBRARY_SEARCH_APPLICATION_DIR);
-if (!Wintun)
-    return GetLastError();
-WINTUN_CREATE_ADAPTER_FUNC WintunCreateAdapter = (WINTUN_CREATE_ADAPTER_FUNC)GetProcAddress(Wintun, "WintunCreateAdapter");
-WINTUN_DELETE_ADAPTER_FUNC WintunDeleteAdapter = (WINTUN_DELETE_ADAPTER_FUNC)GetProcAddress(Wintun, "WintunDeleteAdapter");
-```
-
-### Adapter management
-
-Adapters are grouped together in pools to allow various clients on the same machine. Each client vendor should pick own unique pool name.
-
-Manage the network adapters using following functions:
-
-- `WintunCreateAdapter()` creates a new adapter.
-- `WintunDeleteAdapter()` deletes the adapter.
-- `WintunEnumAdapters()` enumerates all existing adapters.
-- `WintunGetAdapter()` gets existing adapter handle.
-- `WintunFreeAdapter()` frees adapter handle.
-- `WintunOpenAdapterDeviceObject()` opens adapter device object.
-- `WintunGetAdapterGUID()` gets adapter GUID.
-- `WintunGetAdapterLUID()` gets adapter LUID.
-- `WintunGetAdapterName()` gets adapter name.
-- `WintunSetAdapterName()` sets adapter name.
-
-Example:
+With the library setup, Wintun can then be used by first creating an adapter, and then starting a tunnel session on that adapter. Adapters have names (e.g. "OfficeNet"), and each one belongs to a _pool_ (e.g. "WireGuard"). So, for example, the WireGuard application app creates multiple tunnels all inside of its "WireGuard" _pool_:
 
 ```C
-DWORD Result;
-WINTUN_ADAPTER_HANDLE Adapter;
-BOOL RebootRequired;
-Result = WintunCreateAdapter(L"com.contoso.myapp", "My VPN adapter", NULL, &Adapter, &RebootRequired);
-if (Result != ERROR_SUCCESS)
-    return Result;
+WINTUN_ADAPTER_HANDLE Adapter1 = WintunCreateAdapter(L"WireGuard", L"OfficeNet", &SomeFixedGUID1, NULL);
+WINTUN_ADAPTER_HANDLE Adapter2 = WintunCreateAdapter(L"WireGuard", L"HomeNet", &SomeFixedGUID2, NULL);
+WINTUN_ADAPTER_HANDLE Adapter3 = WintunCreateAdapter(L"WireGuard", L"Data Center", &SomeFixedGUID3, NULL);
 ```
 
-### Session management
-
-Once adapter is created, use the following functions to start a session and transfer packets:
-
-- `WintunStartSession()` starts a session. One adapter may have only one session.
-- `WintunEndSession()` ends and frees the session.
-- `WintunIsPacketAvailable()` checks if there is a receive packet available.
-- `WintunReceivePacket()` receives one packet.
-- `WintunReceiveRelease()` releases internal buffer after client processed the receive packet.
-- `WintunAllocateSendPacket()` allocates memory for send packet.
-- `WintunSendPacket()` sends the packet.
-
-#### Writing to and from rings
-
-Reading packets from the adapter may be done as:
+After creating an adapter, we can use it by starting a session:
 
 ```C
-for (;;) {
-    BYTE *Packet;
-    DWORD PacketSize;
-    DWORD Result = WintunReceivePacket(Session, &Packet, &PacketSize);
-    switch (Result) {
-    case ERROR_SUCCESS:
-        // TODO: Process packet.
-        WintunReceiveRelease(Session, Packet);
-        break;
-    case ERROR_NO_MORE_ITEMS:
-        WintunWaitForPacket(Session, INFINITE);
-        continue;
-    }
-    return Result;
-}
+WINTUN_SESSION_HANDLE Session = WintunStartSession(Adapter2, 0x40000);
 ```
 
-It may be desirable to spin on `WintunReceivePacket()` while it returns `ERROR_NO_MORE_ITEMS` for some time under heavy use before waiting with `WintunWaitForPacket()`, in order to reduce latency.
+Then, the `WintunAllocateSendPacket` and `WintunSendPacket` functions can be used for sending packets ([used by `SendPackets` in the example.c code](https://git.zx2c4.com/wintun/tree/example/example.c#n243)), and the `WintunReceivePacket` and `WintunReceivePacket` functions can be used for receiving packets ([used by `ReceivePackets` in the example.c code](https://git.zx2c4.com/wintun/tree/example/example.c#n210)).
 
-Writing packets to the adapter may be done as:
+You are **highly encouraged** to read the [**example.c short example**](https://git.zx2c4.com/wintun/tree/example/example.c) to see how to put together a simple userspace network tunnel.
 
-```C
-// TODO: Calculate packet size.
-BYTE *Packet;
-DWORD Result = WintunAllocateSendPacket(Session, PacketSize, &Packet);
-if (Result != ERROR_SUCCESS)
-    return Result;
-// TODO: Fill the packet.
-WintunSendPacket(Session, Packet);
-```
+The various functions and definitions are [documented in the reference below](#Reference).
 
-### Misc functions
+## Reference
 
-Other `wintun.dll` functions are:
+### Macro Definitions
 
-- `WintunGetRunningDriverVersion()` returns driver and NDIS major and minor versions.
-- `WintunSetLogger()` sets global logging callback function.
+#### WINTUN\_MAX\_POOL
 
-Example:
+`#define WINTUN_MAX_POOL   256`
 
-```C
-static BOOL CALLBACK
-ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
-{
-    const WCHAR *Template;
-    switch (Level)
-    {
-    case WINTUN_LOG_INFO: Template = L"[+] %s\n"; break;
-    case WINTUN_LOG_WARN: Template = L"[-] %s\n"; break;
-    case WINTUN_LOG_ERR:  Template = L"[!] %s\n"; break;
-    default: return FALSE;
-    }
-    fwprintf(stderr, Template, LogLine);
-    return TRUE;
-}
-⋮
-WintunSetLogger(ConsoleLogger);
-```
+Maximum pool name length including zero terminator
+
+#### WINTUN\_MIN\_RING\_CAPACITY
+
+`#define WINTUN_MIN_RING_CAPACITY   0x20000 /* 128kiB */`
+
+Minimum ring capacity.
+
+#### WINTUN\_MAX\_RING\_CAPACITY
+
+`#define WINTUN_MAX_RING_CAPACITY   0x4000000 /* 64MiB */`
+
+Maximum ring capacity.
+
+#### WINTUN\_MAX\_IP\_PACKET\_SIZE
+
+`#define WINTUN_MAX_IP_PACKET_SIZE   0xFFFF`
+
+Maximum IP packet size
+
+### Typedefs
+
+#### WINTUN\_ADAPTER\_HANDLE
+
+`typedef void* WINTUN_ADAPTER_HANDLE`
+
+A handle representing Wintun adapter
+
+#### WINTUN\_ENUM\_CALLBACK
+
+`typedef BOOL(* WINTUN_ENUM_CALLBACK) (WINTUN_ADAPTER_HANDLE Adapter, LPARAM Param)`
+
+Called by WintunEnumAdapters for each adapter in the pool.
+
+**Parameters**
+
+- *Adapter*: Adapter handle.
+- *Param*: An application-defined value passed to the WintunEnumAdapters.
+
+**Returns**
+
+Non-zero to continue iterating adapters; zero to stop.
+
+#### WINTUN\_LOGGER\_CALLBACK
+
+`typedef BOOL(* WINTUN_LOGGER_CALLBACK) (WINTUN_LOGGER_LEVEL Level, const WCHAR *Message)`
+
+Called by internal logger to report diagnostic messages
+
+**Parameters**
+
+- *Level*: Message level.
+- *Message*: Message text.
+
+**Returns**
+
+Anything - return value is ignored.
+
+#### WINTUN\_SESSION\_HANDLE
+
+`typedef void* WINTUN_SESSION_HANDLE`
+
+A handle representing Wintun session
+
+### Enumeration Types
+
+#### WINTUN\_LOGGER\_LEVEL
+
+`enum WINTUN_LOGGER_LEVEL`
+
+Determines the level of logging, passed to WINTUN\_LOGGER\_CALLBACK.
+
+- *WINTUN\_LOG\_INFO*: Informational
+- *WINTUN\_LOG\_WARN*: Warning
+- *WINTUN\_LOG\_ERR*: Error
+
+Enumerator
+
+### Functions
+
+#### WintunCreateAdapter()
+
+`WINTUN_ADAPTER_HANDLE WintunCreateAdapter (const WCHAR * Pool, const WCHAR * Name, const GUID * RequestedGUID, BOOL * RebootRequired)`
+
+Creates a Wintun adapter.
+
+**Parameters**
+
+- *Pool*: Name of the adapter pool. Zero-terminated string of up to WINTUN\_MAX\_POOL-1 characters.
+- *Name*: The requested name of the adapter. Zero-terminated string of up to MAX\_ADAPTER\_NAME-1 characters.
+- *RequestedGUID*: The GUID of the created network adapter, which then influences NLA generation deterministically. If it is set to NULL, the GUID is chosen by the system at random, and hence a new NLA entry is created for each new adapter. It is called "requested" GUID because the API it uses is completely undocumented, and so there could be minor interesting complications with its usage.
+- *RebootRequired*: Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
+
+**Returns**
+
+If the function succeeds, the return value is the adapter handle. Must be released with WintunFreeAdapter. If the function fails, the return value is NULL. To get extended error information, call GetLastError.
+
+#### WintunDeleteAdapter()
+
+`BOOL WintunDeleteAdapter (WINTUN_ADAPTER_HANDLE Adapter, BOOL ForceCloseSessions, BOOL * RebootRequired)`
+
+Deletes a Wintun adapter.
+
+**Parameters**
+
+- *Adapter*: Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
+- *ForceCloseSessions*: Force close adapter handles that may be in use by other processes. Only set this to TRUE with extreme care, as this is resource intensive and may put processes into an undefined or unpredictable state. Most users should set this to FALSE.
+- *RebootRequired*: Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
+
+**Returns**
+
+If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To get extended error information, call GetLastError.
+
+#### WintunDeletePoolDriver()
+
+`BOOL WintunDeletePoolDriver (const WCHAR * Pool, BOOL * RebootRequired)`
+
+Deletes all Wintun adapters in a pool and if there are no more adapters in any other pools, also removes Wintun from the driver store, usually called by uninstallers.
+
+**Parameters**
+
+- *Pool*: Name of the adapter pool. Zero-terminated string of up to WINTUN\_MAX\_POOL-1 characters.
+- *RebootRequired*: Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
+
+**Returns**
+
+If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To get extended error information, call GetLastError.
+
+#### WintunEnumAdapters()
+
+`BOOL WintunEnumAdapters (const WCHAR * Pool, WINTUN_ENUM_CALLBACK Callback, LPARAM Param)`
+
+Enumerates all Wintun adapters.
+
+**Parameters**
+
+- *Pool*: Name of the adapter pool. Zero-terminated string of up to WINTUN\_MAX\_POOL-1 characters.
+- *Callback*: Callback function. To continue enumeration, the callback function must return TRUE; to stop enumeration, it must return FALSE.
+- *Param*: An application-defined value to be passed to the callback function.
+
+**Returns**
+
+If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To get extended error information, call GetLastError.
+
+#### WintunFreeAdapter()
+
+`void WintunFreeAdapter (WINTUN_ADAPTER_HANDLE Adapter)`
+
+Releases Wintun adapter resources.
+
+**Parameters**
+
+- *Adapter*: Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
+
+#### WintunGetAdapter()
+
+`WINTUN_ADAPTER_HANDLE WintunGetAdapter (const WCHAR * Pool, const WCHAR * Name)`
+
+Finds a Wintun adapter by its name.
+
+**Parameters**
+
+- *Pool*: Name of the adapter pool. Zero-terminated string of up to WINTUN\_MAX\_POOL-1 characters.
+- *Name*: Adapter name. Zero-terminated string of up to MAX\_ADAPTER\_NAME-1 characters.
+
+**Returns**
+
+If the function succeeds, the return value is adapter handle. Must be released with WintunFreeAdapter. If the function fails, the return value is NULL. To get extended error information, call GetLastError. Possible errors include the following: ERROR\_FILE\_NOT\_FOUND if adapter with given name is not found; ERROR\_ALREADY\_EXISTS if adapter is found but not a Wintun-class or not a member of the pool
+
+#### WintunOpenAdapterDeviceObject()
+
+`HANDLE WintunOpenAdapterDeviceObject (WINTUN_ADAPTER_HANDLE Adapter)`
+
+Returns a handle to the adapter device object.
+
+**Parameters**
+
+- *Adapter*: Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
+
+**Returns**
+
+If the function succeeds, the return value is adapter device object handle. Must be released with CloseHandle. If the function fails, the return value is INVALID\_HANDLE\_VALUE. To get extended error information, call GetLastError.
+
+#### WintunGetAdapterLuid()
+
+`void WintunGetAdapterLuid (WINTUN_ADAPTER_HANDLE Adapter, NET_LUID * Luid)`
+
+Returns the LUID of the adapter.
+
+**Parameters**
+
+- *Adapter*: Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+- *Luid*: Pointer to LUID to receive adapter LUID.
+
+#### WintunGetAdapterName()
+
+`BOOL WintunGetAdapterName (WINTUN_ADAPTER_HANDLE Adapter, WCHAR * Name)`
+
+Returns the name of the Wintun adapter.
+
+**Parameters**
+
+- *Adapter*: Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+- *Name*: Pointer to a string to receive adapter name
+
+**Returns**
+
+If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To get extended error information, call GetLastError.
+
+#### WintunSetAdapterName()
+
+`BOOL WintunSetAdapterName (WINTUN_ADAPTER_HANDLE Adapter, const WCHAR * Name)`
+
+Sets name of the Wintun adapter.
+
+**Parameters**
+
+- *Adapter*: Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+- *Name*: Adapter name. Zero-terminated string of up to MAX\_ADAPTER\_NAME-1 characters.
+
+**Returns**
+
+If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To get extended error information, call GetLastError.
+
+#### WintunGetRunningDriverVersion()
+
+`DWORD WintunGetRunningDriverVersion (void )`
+
+Determines the version of the Wintun driver currently loaded.
+
+**Returns**
+
+If the function succeeds, the return value is the version number. If the function fails, the return value is zero. To get extended error information, call GetLastError. Possible errors include the following: ERROR\_FILE\_NOT\_FOUND Wintun not loaded
+
+#### WintunSetLogger()
+
+`void WintunSetLogger (WINTUN_LOGGER_CALLBACK NewLogger)`
+
+Sets logger callback function.
+
+**Parameters**
+
+- *NewLogger*: Pointer to callback function to use as a new global logger. NewLogger may be called from various threads concurrently. Should the logging require serialization, you must handle serialization in NewLogger. Set to NULL to disable.
+
+#### WintunStartSession()
+
+`WINTUN_SESSION_HANDLE WintunStartSession (WINTUN_ADAPTER_HANDLE Adapter, DWORD Capacity)`
+
+Starts Wintun session.
+
+**Parameters**
+
+- *Adapter*: Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+- *Capacity*: Rings capacity. Must be between WINTUN\_MIN\_RING\_CAPACITY and WINTUN\_MAX\_RING\_CAPACITY (incl.) Must be a power of two.
+
+**Returns**
+
+Wintun session handle. Must be released with WintunEndSession. If the function fails, the return value is NULL. To get extended error information, call GetLastError.
+
+#### WintunEndSession()
+
+`void WintunEndSession (WINTUN_SESSION_HANDLE Session)`
+
+Ends Wintun session.
+
+**Parameters**
+
+- *Session*: Wintun session handle obtained with WintunStartSession
+
+#### WintunGetReadWaitEvent()
+
+`HANDLE WintunGetReadWaitEvent (WINTUN_SESSION_HANDLE * Session)`
+
+Gets Wintun session's read-wait event handle.
+
+**Parameters**
+
+- *Session*: Wintun session handle obtained with WintunStartSession
+
+**Returns**
+
+Pointer to receive event handle to wait for available data when reading. Should WintunReceivePackets return ERROR\_NO\_MORE\_ITEMS (after spinning on it for a while under heavy load), wait for this event to become signaled before retrying WintunReceivePackets. Do not call CloseHandle on this event - it is managed by the session.
+
+#### WintunReceivePacket()
+
+`BYTE* WintunReceivePacket (WINTUN_SESSION_HANDLE * Session, DWORD * PacketSize)`
+
+Retrieves one or packet. After the packet content is consumed, call WintunReceiveRelease with Packet returned from this function to release internal buffer. This function is thread-safe.
+
+**Parameters**
+
+- *Session*: Wintun session handle obtained with WintunStartSession
+- *PacketSize*: Pointer to receive packet size.
+
+**Returns**
+
+Pointer to layer 3 IPv4 or IPv6 packet. Client may modify its content at will. If the function fails, the return value is NULL. To get extended error information, call GetLastError. Possible errors include the following: ERROR\_HANDLE\_EOF Wintun adapter is terminating; ERROR\_NO\_MORE\_ITEMS Wintun buffer is exhausted; ERROR\_INVALID\_DATA Wintun buffer is corrupt
+
+#### WintunReceiveRelease()
+
+`void WintunReceiveRelease (WINTUN_SESSION_HANDLE * Session, const BYTE * Packet)`
+
+Releases internal buffer after the received packet has been processed by the client. This function is thread-safe.
+
+**Parameters**
+
+- *Session*: Wintun session handle obtained with WintunStartSession
+- *Packet*: Packet obtained with WintunReceivePacket
+
+#### WintunAllocateSendPacket()
+
+`BYTE* WintunAllocateSendPacket (WINTUN_SESSION_HANDLE * Session, DWORD PacketSize)`
+
+Allocates memory for a packet to send. After the memory is filled with packet data, call WintunSendPacket to send and release internal buffer. WintunAllocateSendPacket is thread-safe and the WintunAllocateSendPacket order of calls define the packet sending order.
+
+**Parameters**
+
+- *Session*: Wintun session handle obtained with WintunStartSession
+- *PacketSize*: Exact packet size. Must be less or equal to WINTUN\_MAX\_IP\_PACKET\_SIZE.
+
+**Returns**
+
+Returns pointer to memory where to prepare layer 3 IPv4 or IPv6 packet for sending. If the function fails, the return value is NULL. To get extended error information, call GetLastError. Possible errors include the following: ERROR\_HANDLE\_EOF Wintun adapter is terminating; ERROR\_BUFFER\_OVERFLOW Wintun buffer is full;
+
+#### WintunSendPacket()
+
+`void WintunSendPacket (WINTUN_SESSION_HANDLE * Session, const BYTE * Packet)`
+
+Sends the packet and releases internal buffer. WintunSendPacket is thread-safe, but the WintunAllocateSendPacket order of calls define the packet sending order. This means the packet is not guaranteed to be sent in the WintunSendPacket yet.
+
+**Parameters**
+
+- *Session*: Wintun session handle obtained with WintunStartSession
+- *Packet*: Packet obtained with WintunAllocateSendPacket
 
 ## Building
 
-**Do not distribute drivers named "Wintun", as they will most certainly clash with official deployments. Instead distribute `wintun.dll`.**
+**Do not distribute drivers or files named "Wintun", as they will most certainly clash with official deployments. Instead distribute [`wintun.dll` as downloaded from wintun.net](https://www.wintun.net).**
 
 General requirements:
 
 - [Visual Studio 2019](https://visualstudio.microsoft.com/downloads/)
 - [Windows Driver Kit for Windows 10, version 1903](https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk)
 
-`wintun.sln` may be opened in Visual Studio for development and building. Be sure to run `bcdedit /set testsigning on` before to enable unsigned driver loading. The default run sequence (F5) in Visual Studio will build and insert Wintun.
+`wintun.sln` may be opened in Visual Studio for development and building. Be sure to run `bcdedit /set testsigning on` before to enable unsigned driver loading. The default run sequence (F5) in Visual Studio will build the example project.
 
 ## License
 
