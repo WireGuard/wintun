@@ -1840,7 +1840,7 @@ cleanupToken:
 }
 
 _Return_type_success_(return != FALSE) BOOL WINAPI
-    WintunEnumAdapters(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK_FUNC Func, _In_ LPARAM Param)
+    WintunEnumAdapters(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK Func, _In_ LPARAM Param)
 {
     HANDLE Mutex = NamespaceTakePoolMutex(Pool);
     if (!Mutex)

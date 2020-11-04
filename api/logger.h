@@ -9,13 +9,13 @@
 #include "entry.h"
 #include <Windows.h>
 
-extern WINTUN_LOGGER_CALLBACK_FUNC Logger;
+extern WINTUN_LOGGER_CALLBACK Logger;
 
 /**
  * @copydoc WINTUN_SET_LOGGER_FUNC
  */
 void WINAPI
-WintunSetLogger(_In_ WINTUN_LOGGER_CALLBACK_FUNC NewLogger);
+WintunSetLogger(_In_ WINTUN_LOGGER_CALLBACK NewLogger);
 
 _Post_equals_last_error_ DWORD
 LoggerLog(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Function, _In_z_ const WCHAR *LogLine);

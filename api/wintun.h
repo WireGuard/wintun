@@ -89,7 +89,7 @@ typedef _Return_type_success_(return != FALSE)
  *
  * @return Non-zero to continue iterating adapters; zero to stop.
  */
-typedef BOOL(CALLBACK *WINTUN_ENUM_CALLBACK_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In_ LPARAM Param);
+typedef BOOL(CALLBACK *WINTUN_ENUM_CALLBACK)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In_ LPARAM Param);
 
 /**
  * Enumerates all Wintun adapters.
@@ -106,7 +106,7 @@ typedef BOOL(CALLBACK *WINTUN_ENUM_CALLBACK_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Ada
  */
 typedef _Return_type_success_(return != FALSE) BOOL(WINAPI *WINTUN_ENUM_ADAPTERS_FUNC)(
     _In_z_ const WCHAR *Pool,
-    _In_ WINTUN_ENUM_CALLBACK_FUNC Callback,
+    _In_ WINTUN_ENUM_CALLBACK Callback,
     _In_ LPARAM Param);
 
 /**
@@ -205,7 +205,7 @@ typedef enum _WINTUN_LOGGER_LEVEL
  *
  * @return Anything - return value is ignored.
  */
-typedef BOOL(CALLBACK *WINTUN_LOGGER_CALLBACK_FUNC)(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Message);
+typedef BOOL(CALLBACK *WINTUN_LOGGER_CALLBACK)(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Message);
 
 /**
  * Sets logger callback function.
@@ -214,7 +214,7 @@ typedef BOOL(CALLBACK *WINTUN_LOGGER_CALLBACK_FUNC)(_In_ WINTUN_LOGGER_LEVEL Lev
  *                      threads concurrently. Should the logging require serialization, you must handle serialization in
  *                      NewLogger. Set to NULL to disable.
  */
-typedef void(WINAPI *WINTUN_SET_LOGGER_FUNC)(_In_ WINTUN_LOGGER_CALLBACK_FUNC NewLogger);
+typedef void(WINAPI *WINTUN_SET_LOGGER_FUNC)(_In_ WINTUN_LOGGER_CALLBACK NewLogger);
 
 /**
  * Minimum ring capacity.
