@@ -72,7 +72,7 @@ ProcessStderr(_In_ HANDLE Stderr)
             else if (State == OnMsg && c == L'\n')
             {
                 Msg[Count] = 0;
-                LoggerLog(Level, Msg);
+                LoggerLog(Level, NULL, Msg);
                 State = OnNone;
                 Count = 0;
             }
