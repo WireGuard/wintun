@@ -1128,7 +1128,7 @@ WintunGetVersion(void)
         if (Status == STATUS_INFO_LENGTH_MISMATCH)
             continue;
         LOG(WINTUN_LOG_ERR, L"Failed to enumerate drivers");
-        SetLastError(ERROR_GEN_FAILURE);
+        SetLastError(RtlNtStatusToDosError(Status));
         return 0;
     }
     DWORD LastError = ERROR_SUCCESS, Version = 0;

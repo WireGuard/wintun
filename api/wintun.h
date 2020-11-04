@@ -185,8 +185,7 @@ typedef _Return_type_success_(return != FALSE)
  *
  * @return If the function succeeds, the return value is the version number. If the function fails, the return value is
  *         zero. To get extended error information, call GetLastError. Possible errors include the following:
- *         ERROR_FILE_NOT_FOUND  Wintun not loaded;
- *         ERROR_GEN_FAILURE     Enumerating drivers failed
+ *         ERROR_FILE_NOT_FOUND  Wintun not loaded
  */
 typedef DWORD(WINAPI *WINTUN_GET_VERSION_FUNC)(void);
 

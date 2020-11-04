@@ -8,6 +8,7 @@
 #include "namespace.h"
 
 #include <Windows.h>
+#include <winternl.h>
 #include <bcrypt.h>
 #include <wchar.h>
 
@@ -53,10 +54,11 @@ static _Return_type_success_(return != FALSE) BOOL NamespaceRuntimeInit(void)
         return TRUE;
     }
 
-    if (!BCRYPT_SUCCESS(BCryptOpenAlgorithmProvider(&AlgProvider, BCRYPT_SHA256_ALGORITHM, NULL, 0)))
+    NTSTATUS Status;
+    if (!BCRYPT_SUCCESS(Status = BCryptOpenAlgorithmProvider(&AlgProvider, BCRYPT_SHA256_ALGORITHM, NULL, 0)))
     {
         LOG(WINTUN_LOG_ERR, L"Failed to open algorithm provider");
-        LastError = ERROR_GEN_FAILURE;
+        LastError = RtlNtStatusToDosError(Status);
         goto cleanupLeaveCriticalSection;
     }
 
@@ -116,19 +118,20 @@ _Return_type_success_(return != NULL) HANDLE NamespaceTakePoolMutex(_In_z_ const
         return NULL;
 
     BCRYPT_HASH_HANDLE Sha256 = NULL;
-    if (!BCRYPT_SUCCESS(BCryptCreateHash(AlgProvider, &Sha256, NULL, 0, NULL, 0, 0)))
+    NTSTATUS Status;
+    if (!BCRYPT_SUCCESS(Status = BCryptCreateHash(AlgProvider, &Sha256, NULL, 0, NULL, 0, 0)))
     {
         LOG(WINTUN_LOG_ERR, L"Failed to create hash");
-        SetLastError(ERROR_GEN_FAILURE);
+        SetLastError(RtlNtStatusToDosError(Status));
         return NULL;
     }
     DWORD LastError;
     static const WCHAR mutex_label[] = L"Wintun Adapter Name Mutex Stable Suffix v1 jason@zx2c4.com";
     if (!BCRYPT_SUCCESS(
-            BCryptHashData(Sha256, (PUCHAR)mutex_label, sizeof(mutex_label) /* Including NULL 2 bytes */, 0)))
+            Status = BCryptHashData(Sha256, (PUCHAR)mutex_label, sizeof(mutex_label) /* Including NULL 2 bytes */, 0)))
     {
         LOG(WINTUN_LOG_ERR, L"Failed to hash data");
-        LastError = ERROR_GEN_FAILURE;
+        LastError = RtlNtStatusToDosError(Status);
         goto cleanupSha256;
     }
     WCHAR *PoolNorm = NormalizeStringAlloc(NormalizationC, Pool);
@@ -138,17 +141,17 @@ _Return_type_success_(return != NULL) HANDLE NamespaceTakePoolMutex(_In_z_ const
         goto cleanupSha256;
     }
     if (!BCRYPT_SUCCESS(
-            BCryptHashData(Sha256, (PUCHAR)PoolNorm, (int)wcslen(PoolNorm) + 2 /* Add in NULL 2 bytes */, 0)))
+            Status = BCryptHashData(Sha256, (PUCHAR)PoolNorm, (int)wcslen(PoolNorm) + 2 /* Add in NULL 2 bytes */, 0)))
     {
         LOG(WINTUN_LOG_ERR, L"Failed to hash data");
-        LastError = ERROR_GEN_FAILURE;
+        LastError = RtlNtStatusToDosError(Status);
         goto cleanupPoolNorm;
     }
     BYTE Hash[32];
-    if (!BCRYPT_SUCCESS(BCryptFinishHash(Sha256, Hash, sizeof(Hash), 0)))
+    if (!BCRYPT_SUCCESS(Status = BCryptFinishHash(Sha256, Hash, sizeof(Hash), 0)))
     {
         LOG(WINTUN_LOG_ERR, L"Failed to calculate hash");
-        LastError = ERROR_GEN_FAILURE;
+        LastError = RtlNtStatusToDosError(Status);
         goto cleanupPoolNorm;
     }
     static const WCHAR MutexNamePrefix[] = L"Wintun\\Wintun-Name-Mutex-";
