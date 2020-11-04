@@ -41,7 +41,7 @@ typedef void *WINTUN_ADAPTER_HANDLE;
  * @return If the function succeeds, the return value is the adapter handle. Must be released with WintunFreeAdapter. If
  *         the function fails, the return value is NULL. To get extended error information, call GetLastError.
  */
-typedef _Return_type_success_(return != NULL) WINTUN_ADAPTER_HANDLE *(WINAPI *WINTUN_CREATE_ADAPTER_FUNC)(
+typedef _Return_type_success_(return != NULL) WINTUN_ADAPTER_HANDLE (WINAPI *WINTUN_CREATE_ADAPTER_FUNC)(
     _In_z_ const WCHAR *Pool,
     _In_z_ const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
