@@ -9,7 +9,7 @@ Wintun is deployed as a platform-specific `wintun.dll` file. Install the `wintun
 
 ## Usage
 
-Include the [`wintun.h` file](https://git.zx2c4.com/wintun/tree/api/wintun.h) in your project simply by copying it there and dynamically load the `wintun.dll` using [`LoadLibraryEx()`](https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexa) and [`GetProcAddress()`](https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getprocaddress) to resolve each function, using the typedefs provided in the header file. The [`InitializeWintun` function in the example.c code](https://git.zx2c4.com/wintun/tree/example/example.c#n268) provides this in a function that you can simply copy and paste.
+Include the [`wintun.h` file](https://git.zx2c4.com/wintun/tree/api/wintun.h) in your project simply by copying it there and dynamically load the `wintun.dll` using [`LoadLibraryEx()`](https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexa) and [`GetProcAddress()`](https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getprocaddress) to resolve each function, using the typedefs provided in the header file. The [`InitializeWintun` function in the example.c code](https://git.zx2c4.com/wintun/tree/example/example.c) provides this in a function that you can simply copy and paste.
 
 With the library setup, Wintun can then be used by first creating an adapter, and then starting a tunnel session on that adapter. Adapters have names (e.g. "OfficeNet"), and each one belongs to a _pool_ (e.g. "WireGuard"). So, for example, the WireGuard application app creates multiple tunnels all inside of its "WireGuard" _pool_:
 
@@ -25,7 +25,42 @@ After creating an adapter, we can use it by starting a session:
 WINTUN_SESSION_HANDLE Session = WintunStartSession(Adapter2, 0x40000);
 ```
 
-Then, the `WintunAllocateSendPacket` and `WintunSendPacket` functions can be used for sending packets ([used by `SendPackets` in the example.c code](https://git.zx2c4.com/wintun/tree/example/example.c#n243)), and the `WintunReceivePacket` and `WintunReceivePacket` functions can be used for receiving packets ([used by `ReceivePackets` in the example.c code](https://git.zx2c4.com/wintun/tree/example/example.c#n210)).
+Then, the `WintunAllocateSendPacket` and `WintunSendPacket` functions can be used for sending packets ([used by `SendPackets` in the example.c code](https://git.zx2c4.com/wintun/tree/example/example.c)):
+
+```C
+BYTE *OutgoingPacket = WintunAllocateSendPacket(Session, PacketDataSize);
+if (OutgoingPacket)
+{
+    memcpy(OutgoingPacket, PacketData, PacketDataSize);
+    WintunSendPacket(Session, OutgoingPacket);
+}
+else if (GetLastError() != ERROR_BUFFER_OVERFLOW) // Silently drop packets if the ring is full
+    Log(L"Packet write failed");
+```
+
+And the `WintunReceivePacket` and `WintunReceiveRelease` functions can be used for receiving packets ([used by `ReceivePackets` in the example.c code](https://git.zx2c4.com/wintun/tree/example/example.c)):
+
+```C
+for (;;)
+{
+    DWORD IncomingPacketSize;
+    BYTE *IncomingPacket = WintunReceivePacket(Session, &IncomingPacketSize);
+    if (IncomingPacket)
+    {
+        DoSomethingWithPacket(IncomingPacket, IncomingPacketSize);
+        WintunReceiveRelease(Session, IncomingPacket);
+    }
+    else if (GetLastError() == ERROR_NO_MORE_ITEMS)
+        WaitForSingleObject(WintunGetReadWaitEvent(Session), INFINITE);
+    else
+    {
+        Log(L"Packet read failed");
+        break;
+    }
+}
+```
+
+Some high performance use cases may want to spin on `WintunReceivePackets` for a number of cycles before falling back to waiting on the read-wait event.
 
 You are **highly encouraged** to read the [**example.c short example**](https://git.zx2c4.com/wintun/tree/example/example.c) to see how to put together a simple userspace network tunnel.
 
