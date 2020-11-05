@@ -222,7 +222,7 @@ cleanup:
 }
 
 void WINAPI
-WintunReceiveRelease(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
+WintunReleaseReceivePacket(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
 {
     EnterCriticalSection(&Session->Send.Lock);
     TUN_PACKET *ReleasedBuffPacket = (TUN_PACKET *)(Packet - offsetof(TUN_PACKET, Data));

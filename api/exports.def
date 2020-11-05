@@ -14,7 +14,7 @@ EXPORTS
 	WintunGetReadWaitEvent
 	WintunGetRunningDriverVersion
 	WintunReceivePacket
-	WintunReceiveRelease
+	WintunReleaseReceivePacket
 	WintunSendPacket
 	WintunSetAdapterName
 	WintunSetLogger

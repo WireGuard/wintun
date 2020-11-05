@@ -28,7 +28,7 @@ static WINTUN_START_SESSION_FUNC WintunStartSession;
 static WINTUN_END_SESSION_FUNC WintunEndSession;
 static WINTUN_GET_READ_WAIT_EVENT_FUNC WintunGetReadWaitEvent;
 static WINTUN_RECEIVE_PACKET_FUNC WintunReceivePacket;
-static WINTUN_RECEIVE_RELEASE_FUNC WintunReceiveRelease;
+static WINTUN_RELEASE_RECEIVE_PACKET_FUNC WintunReleaseReceivePacket;
 static WINTUN_ALLOCATE_SEND_PACKET_FUNC WintunAllocateSendPacket;
 static WINTUN_SEND_PACKET_FUNC WintunSendPacket;
 
@@ -50,7 +50,8 @@ InitializeWintun(void)
         X(WintunGetRunningDriverVersion, WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC) ||
         X(WintunSetLogger, WINTUN_SET_LOGGER_FUNC) || X(WintunStartSession, WINTUN_START_SESSION_FUNC) ||
         X(WintunEndSession, WINTUN_END_SESSION_FUNC) || X(WintunGetReadWaitEvent, WINTUN_GET_READ_WAIT_EVENT_FUNC) ||
-        X(WintunReceivePacket, WINTUN_RECEIVE_PACKET_FUNC) || X(WintunReceiveRelease, WINTUN_RECEIVE_RELEASE_FUNC) ||
+        X(WintunReceivePacket, WINTUN_RECEIVE_PACKET_FUNC) ||
+        X(WintunReleaseReceivePacket, WINTUN_RELEASE_RECEIVE_PACKET_FUNC) ||
         X(WintunAllocateSendPacket, WINTUN_ALLOCATE_SEND_PACKET_FUNC) || X(WintunSendPacket, WINTUN_SEND_PACKET_FUNC))
 #undef X
     {
@@ -250,7 +251,7 @@ ReceivePackets(_Inout_ DWORD_PTR SessionPtr)
         if (Packet)
         {
             PrintPacket(Packet, PacketSize);
-            WintunReceiveRelease(Session, Packet);
+            WintunReleaseReceivePacket(Session, Packet);
         }
         else
         {

@@ -38,7 +38,7 @@ else if (GetLastError() != ERROR_BUFFER_OVERFLOW) // Silently drop packets if th
     Log(L"Packet write failed");
 ```
 
-And the `WintunReceivePacket` and `WintunReceiveRelease` functions can be used for receiving packets ([used by `ReceivePackets` in the example.c code](https://git.zx2c4.com/wintun/tree/example/example.c)):
+And the `WintunReceivePacket` and `WintunReleaseReceivePacket` functions can be used for receiving packets ([used by `ReceivePackets` in the example.c code](https://git.zx2c4.com/wintun/tree/example/example.c)):
 
 ```C
 for (;;)
@@ -48,7 +48,7 @@ for (;;)
     if (IncomingPacket)
     {
         DoSomethingWithPacket(IncomingPacket, IncomingPacketSize);
-        WintunReceiveRelease(Session, IncomingPacket);
+        WintunReleaseReceivePacket(Session, IncomingPacket);
     }
     else if (GetLastError() == ERROR_NO_MORE_ITEMS)
         WaitForSingleObject(WintunGetReadWaitEvent(Session), INFINITE);
@@ -361,7 +361,7 @@ Pointer to receive event handle to wait for available data when reading. Should 
 
 `BYTE* WintunReceivePacket (WINTUN_SESSION_HANDLE Session, DWORD * PacketSize)`
 
-Retrieves one or packet. After the packet content is consumed, call WintunReceiveRelease with Packet returned from this function to release internal buffer. This function is thread-safe.
+Retrieves one or packet. After the packet content is consumed, call WintunReleaseReceivePacket with Packet returned from this function to release internal buffer. This function is thread-safe.
 
 **Parameters**
 
@@ -372,9 +372,9 @@ Retrieves one or packet. After the packet content is consumed, call WintunReceiv
 
 Pointer to layer 3 IPv4 or IPv6 packet. Client may modify its content at will. If the function fails, the return value is NULL. To get extended error information, call GetLastError. Possible errors include the following: ERROR\_HANDLE\_EOF Wintun adapter is terminating; ERROR\_NO\_MORE\_ITEMS Wintun buffer is exhausted; ERROR\_INVALID\_DATA Wintun buffer is corrupt
 
-#### WintunReceiveRelease()
+#### WintunReleaseReceivePacket()
 
-`void WintunReceiveRelease (WINTUN_SESSION_HANDLE Session, const BYTE * Packet)`
+`void WintunReleaseReceivePacket (WINTUN_SESSION_HANDLE Session, const BYTE * Packet)`
 
 Releases internal buffer after the received packet has been processed by the client. This function is thread-safe.
 

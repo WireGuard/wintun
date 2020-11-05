@@ -41,7 +41,7 @@ typedef void *WINTUN_ADAPTER_HANDLE;
  * @return If the function succeeds, the return value is the adapter handle. Must be released with WintunFreeAdapter. If
  *         the function fails, the return value is NULL. To get extended error information, call GetLastError.
  */
-typedef _Return_type_success_(return != NULL) WINTUN_ADAPTER_HANDLE (WINAPI *WINTUN_CREATE_ADAPTER_FUNC)(
+typedef _Return_type_success_(return != NULL) WINTUN_ADAPTER_HANDLE(WINAPI *WINTUN_CREATE_ADAPTER_FUNC)(
     _In_z_ const WCHAR *Pool,
     _In_z_ const WCHAR *Name,
     _In_opt_ const GUID *RequestedGUID,
@@ -104,10 +104,8 @@ typedef BOOL(CALLBACK *WINTUN_ENUM_CALLBACK)(_In_ WINTUN_ADAPTER_HANDLE Adapter,
  * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
  *         get extended error information, call GetLastError.
  */
-typedef _Return_type_success_(return != FALSE) BOOL(WINAPI *WINTUN_ENUM_ADAPTERS_FUNC)(
-    _In_z_ const WCHAR *Pool,
-    _In_ WINTUN_ENUM_CALLBACK Callback,
-    _In_ LPARAM Param);
+typedef _Return_type_success_(return != FALSE) BOOL(
+    WINAPI *WINTUN_ENUM_ADAPTERS_FUNC)(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK Callback, _In_ LPARAM Param);
 
 /**
  * Releases Wintun adapter resources.
@@ -273,7 +271,7 @@ typedef HANDLE(WINAPI *WINTUN_GET_READ_WAIT_EVENT_FUNC)(_In_ WINTUN_SESSION_HAND
 #define WINTUN_MAX_IP_PACKET_SIZE 0xFFFF
 
 /**
- * Retrieves one or packet. After the packet content is consumed, call WintunReceiveRelease with Packet returned
+ * Retrieves one or packet. After the packet content is consumed, call WintunReleaseReceivePacket with Packet returned
  * from this function to release internal buffer. This function is thread-safe.
  *
  * @param Session       Wintun session handle obtained with WintunStartSession
@@ -297,7 +295,7 @@ typedef _Return_type_success_(return != NULL) _Ret_bytecount_(*PacketSize) BYTE 
  *
  * @param Packet        Packet obtained with WintunReceivePacket
  */
-typedef void(WINAPI *WINTUN_RECEIVE_RELEASE_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _In_ const BYTE *Packet);
+typedef void(WINAPI *WINTUN_RELEASE_RECEIVE_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _In_ const BYTE *Packet);
 
 /**
  * Allocates memory for a packet to send. After the memory is filled with packet data, call WintunSendPacket to send
