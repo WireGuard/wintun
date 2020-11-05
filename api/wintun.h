@@ -265,7 +265,7 @@ typedef void(WINAPI *WINTUN_END_SESSION_FUNC)(_In_ WINTUN_SESSION_HANDLE Session
  *         load), wait for this event to become signaled before retrying WintunReceivePackets. Do not call
  *         CloseHandle on this event - it is managed by the session.
  */
-typedef HANDLE(WINAPI *WINTUN_GET_READ_WAIT_EVENT_FUNC)(_In_ WINTUN_SESSION_HANDLE *Session);
+typedef HANDLE(WINAPI *WINTUN_GET_READ_WAIT_EVENT_FUNC)(_In_ WINTUN_SESSION_HANDLE Session);
 
 /**
  * Maximum IP packet size
@@ -288,7 +288,7 @@ typedef HANDLE(WINAPI *WINTUN_GET_READ_WAIT_EVENT_FUNC)(_In_ WINTUN_SESSION_HAND
  *         ERROR_INVALID_DATA   Wintun buffer is corrupt
  */
 typedef _Return_type_success_(return != NULL) _Ret_bytecount_(*PacketSize) BYTE *(
-    WINAPI *WINTUN_RECEIVE_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE *Session, _Out_ DWORD *PacketSize);
+    WINAPI *WINTUN_RECEIVE_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _Out_ DWORD *PacketSize);
 
 /**
  * Releases internal buffer after the received packet has been processed by the client. This function is thread-safe.
@@ -297,7 +297,7 @@ typedef _Return_type_success_(return != NULL) _Ret_bytecount_(*PacketSize) BYTE 
  *
  * @param Packet        Packet obtained with WintunReceivePacket
  */
-typedef void(WINAPI *WINTUN_RECEIVE_RELEASE_FUNC)(_In_ WINTUN_SESSION_HANDLE *Session, _In_ const BYTE *Packet);
+typedef void(WINAPI *WINTUN_RECEIVE_RELEASE_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _In_ const BYTE *Packet);
 
 /**
  * Allocates memory for a packet to send. After the memory is filled with packet data, call WintunSendPacket to send
@@ -315,7 +315,7 @@ typedef void(WINAPI *WINTUN_RECEIVE_RELEASE_FUNC)(_In_ WINTUN_SESSION_HANDLE *Se
  *         ERROR_BUFFER_OVERFLOW  Wintun buffer is full;
  */
 typedef _Return_type_success_(return != NULL) _Ret_bytecount_(PacketSize) BYTE *(
-    WINAPI *WINTUN_ALLOCATE_SEND_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE *Session, _In_ DWORD PacketSize);
+    WINAPI *WINTUN_ALLOCATE_SEND_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _In_ DWORD PacketSize);
 
 /**
  * Sends the packet and releases internal buffer. WintunSendPacket is thread-safe, but the WintunAllocateSendPacket
@@ -326,7 +326,7 @@ typedef _Return_type_success_(return != NULL) _Ret_bytecount_(PacketSize) BYTE *
  *
  * @param Packet        Packet obtained with WintunAllocateSendPacket
  */
-typedef void(WINAPI *WINTUN_SEND_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE *Session, _In_ const BYTE *Packet);
+typedef void(WINAPI *WINTUN_SEND_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _In_ const BYTE *Packet);
 
 #ifdef __cplusplus
 }

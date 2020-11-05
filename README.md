@@ -310,7 +310,7 @@ Ends Wintun session.
 
 #### WintunGetReadWaitEvent()
 
-`HANDLE WintunGetReadWaitEvent (WINTUN_SESSION_HANDLE * Session)`
+`HANDLE WintunGetReadWaitEvent (WINTUN_SESSION_HANDLE Session)`
 
 Gets Wintun session's read-wait event handle.
 
@@ -324,7 +324,7 @@ Pointer to receive event handle to wait for available data when reading. Should 
 
 #### WintunReceivePacket()
 
-`BYTE* WintunReceivePacket (WINTUN_SESSION_HANDLE * Session, DWORD * PacketSize)`
+`BYTE* WintunReceivePacket (WINTUN_SESSION_HANDLE Session, DWORD * PacketSize)`
 
 Retrieves one or packet. After the packet content is consumed, call WintunReceiveRelease with Packet returned from this function to release internal buffer. This function is thread-safe.
 
@@ -339,7 +339,7 @@ Pointer to layer 3 IPv4 or IPv6 packet. Client may modify its content at will. I
 
 #### WintunReceiveRelease()
 
-`void WintunReceiveRelease (WINTUN_SESSION_HANDLE * Session, const BYTE * Packet)`
+`void WintunReceiveRelease (WINTUN_SESSION_HANDLE Session, const BYTE * Packet)`
 
 Releases internal buffer after the received packet has been processed by the client. This function is thread-safe.
 
@@ -350,7 +350,7 @@ Releases internal buffer after the received packet has been processed by the cli
 
 #### WintunAllocateSendPacket()
 
-`BYTE* WintunAllocateSendPacket (WINTUN_SESSION_HANDLE * Session, DWORD PacketSize)`
+`BYTE* WintunAllocateSendPacket (WINTUN_SESSION_HANDLE Session, DWORD PacketSize)`
 
 Allocates memory for a packet to send. After the memory is filled with packet data, call WintunSendPacket to send and release internal buffer. WintunAllocateSendPacket is thread-safe and the WintunAllocateSendPacket order of calls define the packet sending order.
 
@@ -365,7 +365,7 @@ Returns pointer to memory where to prepare layer 3 IPv4 or IPv6 packet for sendi
 
 #### WintunSendPacket()
 
-`void WintunSendPacket (WINTUN_SESSION_HANDLE * Session, const BYTE * Packet)`
+`void WintunSendPacket (WINTUN_SESSION_HANDLE Session, const BYTE * Packet)`
 
 Sends the packet and releases internal buffer. WintunSendPacket is thread-safe, but the WintunAllocateSendPacket order of calls define the packet sending order. This means the packet is not guaranteed to be sent in the WintunSendPacket yet.
 
