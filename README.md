@@ -110,7 +110,7 @@ Called by WintunEnumAdapters for each adapter in the pool.
 
 **Parameters**
 
-- *Adapter*: Adapter handle.
+- *Adapter*: Adapter handle, which will be freed when this function returns.
 - *Param*: An application-defined value passed to the WintunEnumAdapters.
 
 **Returns**
@@ -158,7 +158,7 @@ Enumerator
 
 `WINTUN_ADAPTER_HANDLE WintunCreateAdapter (const WCHAR * Pool, const WCHAR * Name, const GUID * RequestedGUID, BOOL * RebootRequired)`
 
-Creates a Wintun adapter.
+Creates a new Wintun adapter.
 
 **Parameters**
 
@@ -171,6 +171,21 @@ Creates a Wintun adapter.
 
 If the function succeeds, the return value is the adapter handle. Must be released with WintunFreeAdapter. If the function fails, the return value is NULL. To get extended error information, call GetLastError.
 
+#### WintunOpenAdapter()
+
+`WINTUN_ADAPTER_HANDLE WintunOpenAdapter (const WCHAR * Pool, const WCHAR * Name)`
+
+Opens an existing Wintun adapter.
+
+**Parameters**
+
+- *Pool*: Name of the adapter pool. Zero-terminated string of up to WINTUN\_MAX\_POOL-1 characters.
+- *Name*: Adapter name. Zero-terminated string of up to MAX\_ADAPTER\_NAME-1 characters.
+
+**Returns**
+
+If the function succeeds, the return value is adapter handle. Must be released with WintunFreeAdapter. If the function fails, the return value is NULL. To get extended error information, call GetLastError. Possible errors include the following: ERROR\_FILE\_NOT\_FOUND if adapter with given name is not found; ERROR\_ALREADY\_EXISTS if adapter is found but not a Wintun-class or not a member of the pool
+
 #### WintunDeleteAdapter()
 
 `BOOL WintunDeleteAdapter (WINTUN_ADAPTER_HANDLE Adapter, BOOL ForceCloseSessions, BOOL * RebootRequired)`
@@ -181,21 +196,6 @@ Deletes a Wintun adapter.
 
 - *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter.
 - *ForceCloseSessions*: Force close adapter handles that may be in use by other processes. Only set this to TRUE with extreme care, as this is resource intensive and may put processes into an undefined or unpredictable state. Most users should set this to FALSE.
-- *RebootRequired*: Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
-
-**Returns**
-
-If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To get extended error information, call GetLastError.
-
-#### WintunDeletePoolDriver()
-
-`BOOL WintunDeletePoolDriver (const WCHAR * Pool, BOOL * RebootRequired)`
-
-Deletes all Wintun adapters in a pool and if there are no more adapters in any other pools, also removes Wintun from the driver store, usually called by uninstallers.
-
-**Parameters**
-
-- *Pool*: Name of the adapter pool. Zero-terminated string of up to WINTUN\_MAX\_POOL-1 characters.
 - *RebootRequired*: Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
 
 **Returns**
@@ -228,20 +228,20 @@ Releases Wintun adapter resources.
 
 - *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter.
 
-#### WintunOpenAdapter()
+#### WintunDeletePoolDriver()
 
-`WINTUN_ADAPTER_HANDLE WintunOpenAdapter (const WCHAR * Pool, const WCHAR * Name)`
+`BOOL WintunDeletePoolDriver (const WCHAR * Pool, BOOL * RebootRequired)`
 
-Finds a Wintun adapter by its name.
+Deletes all Wintun adapters in a pool and if there are no more adapters in any other pools, also removes Wintun from the driver store, usually called by uninstallers.
 
 **Parameters**
 
 - *Pool*: Name of the adapter pool. Zero-terminated string of up to WINTUN\_MAX\_POOL-1 characters.
-- *Name*: Adapter name. Zero-terminated string of up to MAX\_ADAPTER\_NAME-1 characters.
+- *RebootRequired*: Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
 
 **Returns**
 
-If the function succeeds, the return value is adapter handle. Must be released with WintunFreeAdapter. If the function fails, the return value is NULL. To get extended error information, call GetLastError. Possible errors include the following: ERROR\_FILE\_NOT\_FOUND if adapter with given name is not found; ERROR\_ALREADY\_EXISTS if adapter is found but not a Wintun-class or not a member of the pool
+If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To get extended error information, call GetLastError.
 
 #### WintunOpenAdapterDeviceObject()
 

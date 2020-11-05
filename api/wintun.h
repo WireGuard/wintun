@@ -24,7 +24,7 @@ typedef void *WINTUN_ADAPTER_HANDLE;
 #define WINTUN_MAX_POOL 256
 
 /**
- * Creates a Wintun adapter.
+ * Creates a new Wintun adapter.
  *
  * @param Pool          Name of the adapter pool. Zero-terminated string of up to WINTUN_MAX_POOL-1 characters.
  *
@@ -48,6 +48,23 @@ typedef _Return_type_success_(return != NULL) WINTUN_ADAPTER_HANDLE(WINAPI *WINT
     _Out_opt_ BOOL *RebootRequired);
 
 /**
+ * Opens an existing Wintun adapter.
+ *
+ * @param Pool          Name of the adapter pool. Zero-terminated string of up to WINTUN_MAX_POOL-1 characters.
+ *
+ * @param Name          Adapter name. Zero-terminated string of up to MAX_ADAPTER_NAME-1 characters.
+ *
+ * @return If the function succeeds, the return value is adapter handle. Must be released with WintunFreeAdapter. If the
+ *         function fails, the return value is NULL. To get extended error information, call GetLastError. Possible
+ *         errors include the following:
+ *         ERROR_FILE_NOT_FOUND if adapter with given name is not found;
+ *         ERROR_ALREADY_EXISTS if adapter is found but not a Wintun-class or not a member of the pool
+ */
+typedef _Return_type_success_(return != NULL)
+    WINTUN_ADAPTER_HANDLE(WINAPI *WINTUN_OPEN_ADAPTER_FUNC)(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name);
+
+
+/**
  * Deletes a Wintun adapter.
  *
  * @param Adapter            Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter.
@@ -67,23 +84,9 @@ typedef _Return_type_success_(return != FALSE) BOOL(WINAPI *WINTUN_DELETE_ADAPTE
     _Out_opt_ BOOL *RebootRequired);
 
 /**
- * Deletes all Wintun adapters in a pool and if there are no more adapters in any other pools, also removes Wintun
- * from the driver store, usually called by uninstallers.
- *
- * @param Pool             Name of the adapter pool. Zero-terminated string of up to WINTUN_MAX_POOL-1 characters.
- *
- * @param RebootRequired   Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
- *
- * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
- *         get extended error information, call GetLastError.
- */
-typedef _Return_type_success_(return != FALSE)
-    BOOL(WINAPI *WINTUN_DELETE_POOL_DRIVER_FUNC)(_In_z_ const WCHAR *Pool, _Out_opt_ BOOL *RebootRequired);
-
-/**
  * Called by WintunEnumAdapters for each adapter in the pool.
  *
- * @param Adapter       Adapter handle.
+ * @param Adapter       Adapter handle, which will be freed when this function returns.
  *
  * @param Param         An application-defined value passed to the WintunEnumAdapters.
  *
@@ -115,20 +118,18 @@ typedef _Return_type_success_(return != FALSE) BOOL(
 typedef void(WINAPI *WINTUN_FREE_ADAPTER_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter);
 
 /**
- * Finds a Wintun adapter by its name.
+ * Deletes all Wintun adapters in a pool and if there are no more adapters in any other pools, also removes Wintun
+ * from the driver store, usually called by uninstallers.
  *
- * @param Pool          Name of the adapter pool. Zero-terminated string of up to WINTUN_MAX_POOL-1 characters.
+ * @param Pool             Name of the adapter pool. Zero-terminated string of up to WINTUN_MAX_POOL-1 characters.
  *
- * @param Name          Adapter name. Zero-terminated string of up to MAX_ADAPTER_NAME-1 characters.
+ * @param RebootRequired   Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
  *
- * @return If the function succeeds, the return value is adapter handle. Must be released with WintunFreeAdapter. If the
- *         function fails, the return value is NULL. To get extended error information, call GetLastError. Possible
- *         errors include the following:
- *         ERROR_FILE_NOT_FOUND if adapter with given name is not found;
- *         ERROR_ALREADY_EXISTS if adapter is found but not a Wintun-class or not a member of the pool
+ * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
+ *         get extended error information, call GetLastError.
  */
-typedef _Return_type_success_(return != NULL)
-    WINTUN_ADAPTER_HANDLE(WINAPI *WINTUN_OPEN_ADAPTER_FUNC)(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name);
+typedef _Return_type_success_(return != FALSE)
+    BOOL(WINAPI *WINTUN_DELETE_POOL_DRIVER_FUNC)(_In_z_ const WCHAR *Pool, _Out_opt_ BOOL *RebootRequired);
 
 /**
  * Returns a handle to the adapter device object.
