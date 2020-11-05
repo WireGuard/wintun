@@ -32,8 +32,35 @@ static WINTUN_RECEIVE_RELEASE_FUNC WintunReceiveRelease;
 static WINTUN_ALLOCATE_SEND_PACKET_FUNC WintunAllocateSendPacket;
 static WINTUN_SEND_PACKET_FUNC WintunSendPacket;
 
-static HANDLE QuitEvent;
-static volatile BOOL HaveQuit;
+static HMODULE
+InitializeWintun(void)
+{
+    HMODULE Wintun =
+        LoadLibraryExW(L"wintun.dll", NULL, LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!Wintun)
+        return NULL;
+#define X(Name, Type) ((Name = (Type)GetProcAddress(Wintun, #Name)) == NULL)
+    if (X(WintunCreateAdapter, WINTUN_CREATE_ADAPTER_FUNC) || X(WintunDeleteAdapter, WINTUN_DELETE_ADAPTER_FUNC) ||
+        X(WintunDeletePoolDriver, WINTUN_DELETE_POOL_DRIVER_FUNC) || X(WintunEnumAdapters, WINTUN_ENUM_ADAPTERS_FUNC) ||
+        X(WintunFreeAdapter, WINTUN_FREE_ADAPTER_FUNC) || X(WintunGetAdapter, WINTUN_GET_ADAPTER_FUNC) ||
+        X(WintunOpenAdapterDeviceObject, WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC) ||
+        X(WintunGetAdapterLUID, WINTUN_GET_ADAPTER_LUID_FUNC) ||
+        X(WintunGetAdapterName, WINTUN_GET_ADAPTER_NAME_FUNC) ||
+        X(WintunSetAdapterName, WINTUN_SET_ADAPTER_NAME_FUNC) ||
+        X(WintunGetRunningDriverVersion, WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC) ||
+        X(WintunSetLogger, WINTUN_SET_LOGGER_FUNC) || X(WintunStartSession, WINTUN_START_SESSION_FUNC) ||
+        X(WintunEndSession, WINTUN_END_SESSION_FUNC) || X(WintunGetReadWaitEvent, WINTUN_GET_READ_WAIT_EVENT_FUNC) ||
+        X(WintunReceivePacket, WINTUN_RECEIVE_PACKET_FUNC) || X(WintunReceiveRelease, WINTUN_RECEIVE_RELEASE_FUNC) ||
+        X(WintunAllocateSendPacket, WINTUN_ALLOCATE_SEND_PACKET_FUNC) || X(WintunSendPacket, WINTUN_SEND_PACKET_FUNC))
+#undef X
+    {
+        DWORD LastError = GetLastError();
+        FreeLibrary(Wintun);
+        SetLastError(LastError);
+        return NULL;
+    }
+    return Wintun;
+}
 
 static BOOL CALLBACK
 ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
@@ -119,6 +146,9 @@ Log(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Format, ...)
     va_end(args);
     ConsoleLogger(Level, LogLine);
 }
+
+static HANDLE QuitEvent;
+static volatile BOOL HaveQuit;
 
 static BOOL WINAPI
 CtrlHandler(_In_ DWORD CtrlType)
@@ -263,37 +293,6 @@ SendPackets(_Inout_ DWORD_PTR SessionPtr)
         }
     }
     return ERROR_SUCCESS;
-}
-
-static HMODULE
-InitializeWintun(void)
-{
-    HMODULE Wintun =
-        LoadLibraryExW(L"wintun.dll", NULL, LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!Wintun)
-        return NULL;
-#define X(Name, Type) ((Name = (Type)GetProcAddress(Wintun, #Name)) == NULL)
-    if (X(WintunCreateAdapter, WINTUN_CREATE_ADAPTER_FUNC) || X(WintunDeleteAdapter, WINTUN_DELETE_ADAPTER_FUNC) ||
-        X(WintunDeletePoolDriver, WINTUN_DELETE_POOL_DRIVER_FUNC) || X(WintunEnumAdapters, WINTUN_ENUM_ADAPTERS_FUNC) ||
-        X(WintunFreeAdapter, WINTUN_FREE_ADAPTER_FUNC) || X(WintunGetAdapter, WINTUN_GET_ADAPTER_FUNC) ||
-        X(WintunOpenAdapterDeviceObject, WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC) ||
-        X(WintunGetAdapterLUID, WINTUN_GET_ADAPTER_LUID_FUNC) ||
-        X(WintunGetAdapterName, WINTUN_GET_ADAPTER_NAME_FUNC) ||
-        X(WintunSetAdapterName, WINTUN_SET_ADAPTER_NAME_FUNC) ||
-        X(WintunGetRunningDriverVersion, WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC) ||
-        X(WintunSetLogger, WINTUN_SET_LOGGER_FUNC) || X(WintunStartSession, WINTUN_START_SESSION_FUNC) ||
-        X(WintunEndSession, WINTUN_END_SESSION_FUNC) || X(WintunGetReadWaitEvent, WINTUN_GET_READ_WAIT_EVENT_FUNC) ||
-        X(WintunReceivePacket, WINTUN_RECEIVE_PACKET_FUNC) || X(WintunReceiveRelease, WINTUN_RECEIVE_RELEASE_FUNC) ||
-        X(WintunAllocateSendPacket, WINTUN_ALLOCATE_SEND_PACKET_FUNC) || X(WintunSendPacket, WINTUN_SEND_PACKET_FUNC))
-#undef X
-    {
-        DWORD LastError = GetLastError();
-        FreeLibrary(Wintun);
-        SetLastError(LastError);
-        return NULL;
-    }
-    SetLastError(ERROR_SUCCESS);
-    return Wintun;
 }
 
 int
