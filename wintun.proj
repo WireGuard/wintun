@@ -83,7 +83,8 @@
     <MSBuild Projects="api\api.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=Win32" />
   </Target>
   <Target Name="Dll-amd64"
-    Outputs="$(Configuration)\amd64\wintun.dll">
+    Outputs="$(Configuration)\amd64\wintun.dll"
+    DependsOnTargets="Dll-arm64">
     <MSBuild Projects="api\api.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=x64" />
   </Target>
   <Target Name="Dll-arm"
