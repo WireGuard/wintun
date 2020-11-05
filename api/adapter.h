@@ -35,12 +35,6 @@ void WINAPI
 WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter);
 
 /**
- * @copydoc WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC
- */
-_Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE WINAPI
-    WintunOpenAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter);
-
-/**
  * @copydoc WINTUN_CREATE_ADAPTER_FUNC
  */
 _Return_type_success_(return != NULL) WINTUN_ADAPTER *WINAPI WintunCreateAdapter(
@@ -62,3 +56,15 @@ _Return_type_success_(return != FALSE) BOOL WINAPI WintunDeleteAdapter(
  */
 _Return_type_success_(return != FALSE) BOOL WINAPI
     WintunDeletePoolDriver(_In_z_ const WCHAR *Pool, _Out_opt_ BOOL *RebootRequired);
+
+/**
+ * Returns a handle to the adapter device object.
+ *
+ * @param Adapter       Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter.
+ *
+ * @return If the function succeeds, the return value is adapter device object handle. Must be released with
+ *         CloseHandle. If the function fails, the return value is INVALID_HANDLE_VALUE. To get extended error
+ *         information, call GetLastError.
+ */
+_Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE WINAPI
+    AdapterOpenDeviceObject(_In_ const WINTUN_ADAPTER *Adapter);

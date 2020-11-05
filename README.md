@@ -243,20 +243,6 @@ Deletes all Wintun adapters in a pool and if there are no more adapters in any o
 
 If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To get extended error information, call GetLastError.
 
-#### WintunOpenAdapterDeviceObject()
-
-`HANDLE WintunOpenAdapterDeviceObject (WINTUN_ADAPTER_HANDLE Adapter)`
-
-Returns a handle to the adapter device object.
-
-**Parameters**
-
-- *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter.
-
-**Returns**
-
-If the function succeeds, the return value is adapter device object handle. Must be released with CloseHandle. If the function fails, the return value is INVALID\_HANDLE\_VALUE. To get extended error information, call GetLastError.
-
 #### WintunGetAdapterLuid()
 
 `void WintunGetAdapterLuid (WINTUN_ADAPTER_HANDLE Adapter, NET_LUID * Luid)`

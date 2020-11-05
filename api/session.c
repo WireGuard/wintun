@@ -109,7 +109,7 @@ _Return_type_success_(return != NULL) TUN_SESSION *WINAPI
         goto cleanupSendTailMoved;
     }
 
-    Session->Handle = WintunOpenAdapterDeviceObject(Adapter);
+    Session->Handle = AdapterOpenDeviceObject(Adapter);
     if (Session->Handle == INVALID_HANDLE_VALUE)
     {
         LastError = LOG(WINTUN_LOG_ERR, L"Failed to open adapter device object");

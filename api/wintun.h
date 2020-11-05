@@ -132,18 +132,6 @@ typedef _Return_type_success_(return != FALSE)
     BOOL(WINAPI *WINTUN_DELETE_POOL_DRIVER_FUNC)(_In_z_ const WCHAR *Pool, _Out_opt_ BOOL *RebootRequired);
 
 /**
- * Returns a handle to the adapter device object.
- *
- * @param Adapter       Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter.
- *
- * @return If the function succeeds, the return value is adapter device object handle. Must be released with
- *         CloseHandle. If the function fails, the return value is INVALID_HANDLE_VALUE. To get extended error
- *         information, call GetLastError.
- */
-typedef _Return_type_success_(return != INVALID_HANDLE_VALUE)
-    HANDLE(WINAPI *WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter);
-
-/**
  * Returns the LUID of the adapter.
  *
  * @param Adapter       Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter

@@ -8,7 +8,6 @@ EXPORTS
 	WintunEnumAdapters
 	WintunFreeAdapter
 	WintunOpenAdapter
-	WintunOpenAdapterDeviceObject
 	WintunGetAdapterLUID
 	WintunGetAdapterName
 	WintunGetReadWaitEvent

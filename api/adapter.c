@@ -824,7 +824,7 @@ WintunGetAdapterLUID(_In_ const WINTUN_ADAPTER *Adapter, _Out_ NET_LUID *Luid)
 }
 
 _Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE WINAPI
-    WintunOpenAdapterDeviceObject(_In_ const WINTUN_ADAPTER *Adapter)
+    AdapterOpenDeviceObject(_In_ const WINTUN_ADAPTER *Adapter)
 {
     return OpenDeviceObject(Adapter->DevInstanceID);
 }

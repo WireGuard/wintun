@@ -18,7 +18,6 @@ static WINTUN_DELETE_POOL_DRIVER_FUNC WintunDeletePoolDriver;
 static WINTUN_ENUM_ADAPTERS_FUNC WintunEnumAdapters;
 static WINTUN_FREE_ADAPTER_FUNC WintunFreeAdapter;
 static WINTUN_OPEN_ADAPTER_FUNC WintunOpenAdapter;
-static WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC WintunOpenAdapterDeviceObject;
 static WINTUN_GET_ADAPTER_LUID_FUNC WintunGetAdapterLUID;
 static WINTUN_GET_ADAPTER_NAME_FUNC WintunGetAdapterName;
 static WINTUN_SET_ADAPTER_NAME_FUNC WintunSetAdapterName;
@@ -43,7 +42,6 @@ InitializeWintun(void)
     if (X(WintunCreateAdapter, WINTUN_CREATE_ADAPTER_FUNC) || X(WintunDeleteAdapter, WINTUN_DELETE_ADAPTER_FUNC) ||
         X(WintunDeletePoolDriver, WINTUN_DELETE_POOL_DRIVER_FUNC) || X(WintunEnumAdapters, WINTUN_ENUM_ADAPTERS_FUNC) ||
         X(WintunFreeAdapter, WINTUN_FREE_ADAPTER_FUNC) || X(WintunOpenAdapter, WINTUN_OPEN_ADAPTER_FUNC) ||
-        X(WintunOpenAdapterDeviceObject, WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC) ||
         X(WintunGetAdapterLUID, WINTUN_GET_ADAPTER_LUID_FUNC) ||
         X(WintunGetAdapterName, WINTUN_GET_ADAPTER_NAME_FUNC) ||
         X(WintunSetAdapterName, WINTUN_SET_ADAPTER_NAME_FUNC) ||
