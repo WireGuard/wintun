@@ -7,7 +7,7 @@ EXPORTS
 	WintunEndSession
 	WintunEnumAdapters
 	WintunFreeAdapter
-	WintunGetAdapter
+	WintunOpenAdapter
 	WintunOpenAdapterDeviceObject
 	WintunGetAdapterLUID
 	WintunGetAdapterName

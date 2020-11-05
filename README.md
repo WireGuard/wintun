@@ -179,7 +179,7 @@ Deletes a Wintun adapter.
 
 **Parameters**
 
-- *Adapter*: Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
+- *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter.
 - *ForceCloseSessions*: Force close adapter handles that may be in use by other processes. Only set this to TRUE with extreme care, as this is resource intensive and may put processes into an undefined or unpredictable state. Most users should set this to FALSE.
 - *RebootRequired*: Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
 
@@ -226,11 +226,11 @@ Releases Wintun adapter resources.
 
 **Parameters**
 
-- *Adapter*: Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
+- *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter.
 
-#### WintunGetAdapter()
+#### WintunOpenAdapter()
 
-`WINTUN_ADAPTER_HANDLE WintunGetAdapter (const WCHAR * Pool, const WCHAR * Name)`
+`WINTUN_ADAPTER_HANDLE WintunOpenAdapter (const WCHAR * Pool, const WCHAR * Name)`
 
 Finds a Wintun adapter by its name.
 
@@ -251,7 +251,7 @@ Returns a handle to the adapter device object.
 
 **Parameters**
 
-- *Adapter*: Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
+- *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter.
 
 **Returns**
 
@@ -265,7 +265,7 @@ Returns the LUID of the adapter.
 
 **Parameters**
 
-- *Adapter*: Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+- *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
 - *Luid*: Pointer to LUID to receive adapter LUID.
 
 #### WintunGetAdapterName()
@@ -276,7 +276,7 @@ Returns the name of the Wintun adapter.
 
 **Parameters**
 
-- *Adapter*: Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+- *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
 - *Name*: Pointer to a string to receive adapter name
 
 **Returns**
@@ -291,7 +291,7 @@ Sets name of the Wintun adapter.
 
 **Parameters**
 
-- *Adapter*: Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+- *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
 - *Name*: Adapter name. Zero-terminated string of up to MAX\_ADAPTER\_NAME-1 characters.
 
 **Returns**
@@ -326,7 +326,7 @@ Starts Wintun session.
 
 **Parameters**
 
-- *Adapter*: Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+- *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
 - *Capacity*: Rings capacity. Must be between WINTUN\_MIN\_RING\_CAPACITY and WINTUN\_MAX\_RING\_CAPACITY (incl.) Must be a power of two.
 
 **Returns**

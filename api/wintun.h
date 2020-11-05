@@ -50,7 +50,7 @@ typedef _Return_type_success_(return != NULL) WINTUN_ADAPTER_HANDLE(WINAPI *WINT
 /**
  * Deletes a Wintun adapter.
  *
- * @param Adapter            Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
+ * @param Adapter            Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter.
  *
  * @param ForceCloseSessions Force close adapter handles that may be in use by other processes. Only set this to TRUE
  *                           with extreme care, as this is resource intensive and may put processes into an undefined
@@ -110,7 +110,7 @@ typedef _Return_type_success_(return != FALSE) BOOL(
 /**
  * Releases Wintun adapter resources.
  *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
+ * @param Adapter       Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter.
  */
 typedef void(WINAPI *WINTUN_FREE_ADAPTER_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter);
 
@@ -128,12 +128,12 @@ typedef void(WINAPI *WINTUN_FREE_ADAPTER_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapte
  *         ERROR_ALREADY_EXISTS if adapter is found but not a Wintun-class or not a member of the pool
  */
 typedef _Return_type_success_(return != NULL)
-    WINTUN_ADAPTER_HANDLE(WINAPI *WINTUN_GET_ADAPTER_FUNC)(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name);
+    WINTUN_ADAPTER_HANDLE(WINAPI *WINTUN_OPEN_ADAPTER_FUNC)(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name);
 
 /**
  * Returns a handle to the adapter device object.
  *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter.
+ * @param Adapter       Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter.
  *
  * @return If the function succeeds, the return value is adapter device object handle. Must be released with
  *         CloseHandle. If the function fails, the return value is INVALID_HANDLE_VALUE. To get extended error
@@ -145,7 +145,7 @@ typedef _Return_type_success_(return != INVALID_HANDLE_VALUE)
 /**
  * Returns the LUID of the adapter.
  *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+ * @param Adapter       Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
  *
  * @param Luid          Pointer to LUID to receive adapter LUID.
  */
@@ -154,7 +154,7 @@ typedef void(WINAPI *WINTUN_GET_ADAPTER_LUID_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Ad
 /**
  * Returns the name of the Wintun adapter.
  *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+ * @param Adapter       Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
  *
  * @param Name          Pointer to a string to receive adapter name
  *
@@ -168,7 +168,7 @@ typedef _Return_type_success_(return != FALSE) BOOL(WINAPI *WINTUN_GET_ADAPTER_N
 /**
  * Sets name of the Wintun adapter.
  *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+ * @param Adapter       Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
  *
  * @param Name          Adapter name. Zero-terminated string of up to MAX_ADAPTER_NAME-1 characters.
  *
@@ -235,7 +235,7 @@ typedef void *WINTUN_SESSION_HANDLE;
 /**
  * Starts Wintun session.
  *
- * @param Adapter       Adapter handle obtained with WintunGetAdapter or WintunCreateAdapter
+ * @param Adapter       Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
  *
  * @param Capacity      Rings capacity. Must be between WINTUN_MIN_RING_CAPACITY and WINTUN_MAX_RING_CAPACITY (incl.)
  *                      Must be a power of two.

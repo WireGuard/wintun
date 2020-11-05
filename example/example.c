@@ -17,7 +17,7 @@ static WINTUN_DELETE_ADAPTER_FUNC WintunDeleteAdapter;
 static WINTUN_DELETE_POOL_DRIVER_FUNC WintunDeletePoolDriver;
 static WINTUN_ENUM_ADAPTERS_FUNC WintunEnumAdapters;
 static WINTUN_FREE_ADAPTER_FUNC WintunFreeAdapter;
-static WINTUN_GET_ADAPTER_FUNC WintunGetAdapter;
+static WINTUN_OPEN_ADAPTER_FUNC WintunOpenAdapter;
 static WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC WintunOpenAdapterDeviceObject;
 static WINTUN_GET_ADAPTER_LUID_FUNC WintunGetAdapterLUID;
 static WINTUN_GET_ADAPTER_NAME_FUNC WintunGetAdapterName;
@@ -42,7 +42,7 @@ InitializeWintun(void)
 #define X(Name, Type) ((Name = (Type)GetProcAddress(Wintun, #Name)) == NULL)
     if (X(WintunCreateAdapter, WINTUN_CREATE_ADAPTER_FUNC) || X(WintunDeleteAdapter, WINTUN_DELETE_ADAPTER_FUNC) ||
         X(WintunDeletePoolDriver, WINTUN_DELETE_POOL_DRIVER_FUNC) || X(WintunEnumAdapters, WINTUN_ENUM_ADAPTERS_FUNC) ||
-        X(WintunFreeAdapter, WINTUN_FREE_ADAPTER_FUNC) || X(WintunGetAdapter, WINTUN_GET_ADAPTER_FUNC) ||
+        X(WintunFreeAdapter, WINTUN_FREE_ADAPTER_FUNC) || X(WintunOpenAdapter, WINTUN_OPEN_ADAPTER_FUNC) ||
         X(WintunOpenAdapterDeviceObject, WINTUN_OPEN_ADAPTER_DEVICE_OBJECT_FUNC) ||
         X(WintunGetAdapterLUID, WINTUN_GET_ADAPTER_LUID_FUNC) ||
         X(WintunGetAdapterName, WINTUN_GET_ADAPTER_NAME_FUNC) ||
@@ -320,7 +320,7 @@ main(void)
     }
 
     GUID ExampleGuid = { 0xdeadbabe, 0xcafe, 0xbeef, { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef } };
-    WINTUN_ADAPTER_HANDLE Adapter = WintunGetAdapter(L"Example", L"Demo");
+    WINTUN_ADAPTER_HANDLE Adapter = WintunOpenAdapter(L"Example", L"Demo");
     if (!Adapter)
     {
         Adapter = WintunCreateAdapter(L"Example", L"Demo", &ExampleGuid, NULL);

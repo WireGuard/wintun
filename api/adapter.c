@@ -607,7 +607,7 @@ WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
 }
 
 _Return_type_success_(return != NULL) WINTUN_ADAPTER *WINAPI
-    WintunGetAdapter(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name)
+    WintunOpenAdapter(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name)
 {
     if (!ElevateToSystem())
     {
