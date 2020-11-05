@@ -348,7 +348,7 @@ main(void)
         goto cleanupAdapter;
     }
 
-    WINTUN_SESSION_HANDLE Session = WintunStartSession(Adapter, 0x40000);
+    WINTUN_SESSION_HANDLE Session = WintunStartSession(Adapter, 0x400000);
     if (!Session)
     {
         LastError = LogLastError(L"Failed to create adapter");

@@ -22,7 +22,7 @@ WINTUN_ADAPTER_HANDLE Adapter3 = WintunCreateAdapter(L"WireGuard", L"Data Center
 After creating an adapter, we can use it by starting a session:
 
 ```C
-WINTUN_SESSION_HANDLE Session = WintunStartSession(Adapter2, 0x40000);
+WINTUN_SESSION_HANDLE Session = WintunStartSession(Adapter2, 0x400000);
 ```
 
 Then, the `WintunAllocateSendPacket` and `WintunSendPacket` functions can be used for sending packets ([used by `SendPackets` in the example.c code](https://git.zx2c4.com/wintun/tree/example/example.c)):
