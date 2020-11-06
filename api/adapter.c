@@ -1082,8 +1082,8 @@ static _Return_type_success_(return != FALSE) BOOL
     return TRUE;
 }
 
-DWORD WINAPI
-WintunGetRunningDriverVersion(void)
+static DWORD WINAPI
+MaybeGetRunningDriverVersion(BOOL ReturnOneIfRunningInsteadOfVersion)
 {
     PRTL_PROCESS_MODULES Modules;
     ULONG BufferSize = 128 * 1024;
@@ -1108,6 +1108,11 @@ WintunGetRunningDriverVersion(void)
         const char *NtPath = (const char *)Modules->Modules[i].FullPathName;
         if (!_stricmp(&NtPath[Modules->Modules[i].OffsetToFileName], "wintun.sys"))
         {
+            if (ReturnOneIfRunningInsteadOfVersion)
+            {
+                Version = 1;
+                goto cleanupModules;
+            }
             WCHAR FilePath[MAX_PATH * 3 + 15];
             if (_snwprintf_s(FilePath, _countof(FilePath), _TRUNCATE, L"\\\\?\\GLOBALROOT%S", NtPath) == -1)
                 continue;
@@ -1123,11 +1128,17 @@ cleanupModules:
     return RET_ERROR(Version, LastError);
 }
 
+DWORD WINAPI
+WintunGetRunningDriverVersion(void)
+{
+    return MaybeGetRunningDriverVersion(FALSE);
+}
+
 static BOOL
 EnsureWintunUnloaded(void)
 {
     BOOL Loaded;
-    for (int i = 0; (Loaded = WintunGetRunningDriverVersion() != 0) != FALSE && i < 300; ++i)
+    for (int i = 0; (Loaded = MaybeGetRunningDriverVersion(TRUE) != 0) != FALSE && i < 300; ++i)
         Sleep(50);
     return !Loaded;
 }
