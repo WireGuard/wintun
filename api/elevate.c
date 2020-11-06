@@ -124,7 +124,7 @@ cleanup:
 
 _Return_type_success_(return != NULL) HANDLE GetPrimarySystemTokenFromThread(void)
 {
-    HANDLE CurrentThreadToken, DuplicatedToken;
+    HANDLE CurrentToken, DuplicatedToken;
     BOOL Ret;
     DWORD LastError;
     TOKEN_PRIVILEGES Privileges = { .PrivilegeCount = 1, .Privileges = { { .Attributes = SE_PRIVILEGE_ENABLED } } };
@@ -143,13 +143,16 @@ _Return_type_success_(return != NULL) HANDLE GetPrimarySystemTokenFromThread(voi
         return NULL;
     }
     Ret = OpenThreadToken(
-        GetCurrentThread(), TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES | TOKEN_DUPLICATE, FALSE, &CurrentThreadToken);
+        GetCurrentThread(), TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES | TOKEN_DUPLICATE, FALSE, &CurrentToken);
+    if (!Ret && GetLastError() == ERROR_NO_TOKEN)
+        Ret = OpenProcessToken(
+            GetCurrentProcess(), TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES | TOKEN_DUPLICATE, &CurrentToken);
     if (!Ret)
     {
-        LastError = LOG_LAST_ERROR(L"Failed to open thread token");
+        LastError = LOG_LAST_ERROR(L"Failed to open token");
         return NULL;
     }
-    Ret = GetTokenInformation(CurrentThreadToken, TokenUser, &TokenUserBuffer, sizeof(TokenUserBuffer), &RequiredBytes);
+    Ret = GetTokenInformation(CurrentToken, TokenUser, &TokenUserBuffer, sizeof(TokenUserBuffer), &RequiredBytes);
     if (!Ret)
     {
         LastError = LOG_LAST_ERROR(L"Failed to get token information");
@@ -167,14 +170,14 @@ _Return_type_success_(return != NULL) HANDLE GetPrimarySystemTokenFromThread(voi
         LastError = LOG_LAST_ERROR(L"Failed to lookup privilege value");
         goto cleanup;
     }
-    Ret = AdjustTokenPrivileges(CurrentThreadToken, FALSE, &Privileges, sizeof(Privileges), NULL, NULL);
+    Ret = AdjustTokenPrivileges(CurrentToken, FALSE, &Privileges, sizeof(Privileges), NULL, NULL);
     if (!Ret)
     {
         LastError = LOG_LAST_ERROR(L"Failed to adjust token privileges");
         goto cleanup;
     }
     Ret = DuplicateTokenEx(
-        CurrentThreadToken,
+        CurrentToken,
         TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
         NULL,
         SecurityImpersonation,
@@ -185,11 +188,11 @@ _Return_type_success_(return != NULL) HANDLE GetPrimarySystemTokenFromThread(voi
         LastError = LOG_LAST_ERROR(L"Failed to duplicate token");
         goto cleanup;
     }
-    CloseHandle(CurrentThreadToken);
+    CloseHandle(CurrentToken);
     return DuplicatedToken;
 
 cleanup:
-    CloseHandle(CurrentThreadToken);
+    CloseHandle(CurrentToken);
     SetLastError(LastError);
     return NULL;
 }
