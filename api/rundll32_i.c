@@ -206,9 +206,10 @@ cleanupThreads:
         CloseHandle(StreamWStdout);
         StreamWStdout = INVALID_HANDLE_VALUE;
         WaitForSingleObject(ThreadStdout, INFINITE);
-        if (!GetExitCodeThread(ThreadStdout, &LastError))
-            LastError = LOG_LAST_ERROR(L"Failed to retrieve stdout reader result");
-        else if (LastError != ERROR_SUCCESS)
+        DWORD ThreadResult;
+        if (!GetExitCodeThread(ThreadStdout, &ThreadResult))
+            LOG_LAST_ERROR(L"Failed to retrieve stdout reader result");
+        else if (ThreadResult != ERROR_SUCCESS)
             LOG_ERROR(L"Failed to read process output", LastError);
         CloseHandle(ThreadStdout);
     }
