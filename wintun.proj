@@ -104,7 +104,7 @@
     <ZipIntDir>dist\.tmp\</ZipIntDir>
   </PropertyGroup>
   <ItemGroup>
-    <ZipFilesSrc Include="COPYING"                           /><ZipFilesDst Include="$(ZipIntDir)wintun\COPYING"              />
+    <ZipFilesSrc Include="COPYING"                           /><ZipFilesDst Include="$(ZipIntDir)wintun\license.gpl-2.txt"    />
     <ZipFilesSrc Include="README.md"                         /><ZipFilesDst Include="$(ZipIntDir)wintun\README.md"            />
     <ZipFilesSrc Include="api\wintun.h"                      /><ZipFilesDst Include="$(ZipIntDir)wintun\include\wintun.h"     />
     <ZipFilesSrc Include="$(Configuration)\amd64\wintun.dll" /><ZipFilesDst Include="$(ZipIntDir)wintun\bin\amd64\wintun.dll" />
