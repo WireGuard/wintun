@@ -21,9 +21,8 @@
     <RemoveDir Directories="$(Configuration)\arm\" />
     <RemoveDir Directories="$(Configuration)\arm64\" />
     <RemoveDir Directories="$(Configuration)\x86\" />
-    <RemoveDir Directories="$(SDVDir)" />
-    <RemoveDir Directories="$(DistributionDir)" />
-    <Delete Files="smvbuild.log;smvstats.txt;wintun.DVL.XML" />
+    <RemoveDir Directories="driver\sdv\;dist\" />
+    <Delete Files="driver\smvbuild.log;driver\smvstats.txt;driver\wintun.DVL.XML" />
   </Target>
   <Target Name="Rebuild" DependsOnTargets="Clean;Build" />
 
@@ -32,46 +31,46 @@
     Note: Use explicit Inputs/Outputs as WindowsDriver.Common.targets triggers driver re-packaging and signing on every invocation.
   -->
   <PropertyGroup>
-    <DriverInputs>atomic.h;undocumented.h;wintun.c;wintun.inf;wintun.props;wintun.rc;wintun.vcxproj;$(DriverInputs)</DriverInputs>
+    <DriverInputs>driver\undocumented.h;driver\wintun.c;driver\wintun.inf;wintun.props;driver\wintun.rc;driver\driver.vcxproj;$(DriverInputs)</DriverInputs>
   </PropertyGroup>
   <Target Name="Driver-x86"
     Outputs="$(Configuration)\x86\wintun\wintun.sys;$(Configuration)\x86\wintun\wintun.inf;$(Configuration)\x86\wintun\wintun.cat"
     Inputs="$(DriverInputs)">
-    <MSBuild Projects="wintun.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=Win32" />
+    <MSBuild Projects="driver\driver.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=Win32" />
   </Target>
   <Target Name="Driver-amd64"
     Outputs="$(Configuration)\amd64\wintun\wintun.sys;$(Configuration)\amd64\wintun\wintun.inf;$(Configuration)\amd64\wintun\wintun.cat"
     Inputs="$(DriverInputs)">
-    <MSBuild Projects="wintun.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=x64" />
+    <MSBuild Projects="driver\driver.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=x64" />
   </Target>
   <Target Name="Driver-arm"
     Outputs="$(Configuration)\arm\wintun\wintun.sys;$(Configuration)\arm\wintun\wintun.inf;$(Configuration)\arm\wintun\wintun.cat"
     Inputs="$(DriverInputs)">
-    <MSBuild Projects="wintun.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=ARM" />
+    <MSBuild Projects="driver\driver.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=ARM" />
   </Target>
   <Target Name="Driver-arm64"
     Outputs="$(Configuration)\arm64\wintun\wintun.sys;$(Configuration)\arm64\wintun\wintun.inf;$(Configuration)\arm64\wintun\wintun.cat"
     Inputs="$(DriverInputs)">
-    <MSBuild Projects="wintun.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=ARM64" />
+    <MSBuild Projects="driver\driver.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=ARM64" />
   </Target>
 
   <!--
     Static Driver Verifier
   -->
-  <Target Name="SDV" Outputs="$(SDVDir)SDV.DVL.xml;$(Configuration)\amd64\vc.nativecodeanalysis.all.xml">
-    <MSBuild Projects="wintun.vcxproj" Targets="sdv" Properties="Inputs=/check:*;Configuration=$(Configuration);Platform=x64" />
+  <Target Name="SDV" Outputs="driver\sdv\SDV.DVL.xml;$(Configuration)\amd64\wintun-intermediate\vc.nativecodeanalysis.all.xml">
+    <Exec WorkingDirectory="driver" Command="msbuild.exe driver.vcxproj /t:sdv /p:Inputs=/check:*;Configuration=$(Configuration);Platform=x64 /nologo" />
   </Target>
   <Target Name="SDVView">
-    <MSBuild Projects="wintun.vcxproj" Targets="sdv" Properties="Inputs=/view;Configuration=$(Configuration);Platform=x64" />
+    <Exec WorkingDirectory="driver" Command="msbuild.exe driver.vcxproj /t:sdv /p:Inputs=/view;Configuration=$(Configuration);Platform=x64 /nologo" />
   </Target>
 
   <!--
     Driver Verification Log
   -->
   <Target Name="DVL" DependsOnTargets="SDV"
-    Outputs="wintun.DVL.XML"
-    Inputs="$(SDVDir)SDV.DVL.xml;$(Configuration)\amd64\vc.nativecodeanalysis.all.xml">
-    <MSBuild Projects="wintun.vcxproj" Targets="dvl" Properties="Configuration=$(Configuration);Platform=x64" />
+    Outputs="driver\wintun.DVL.XML"
+    Inputs="driver\sdv\SDV.DVL.xml;$(Configuration)\amd64\wintun-intermediate\vc.nativecodeanalysis.all.xml">
+    <Exec WorkingDirectory="driver" Command="msbuild.exe driver.vcxproj /t:dvl /p:Configuration=$(Configuration);Platform=x64 /nologo" />
   </Target>
 
   <!--
@@ -101,8 +100,8 @@
     Zip Building
   -->
   <PropertyGroup>
-    <ZipTargetPath>$(DistributionDir)wintun-$(WintunVersionStr).zip</ZipTargetPath>
-    <ZipIntDir>$(DistributionDir).tmp\</ZipIntDir>
+    <ZipTargetPath>dist\wintun-$(WintunVersionStr).zip</ZipTargetPath>
+    <ZipIntDir>dist\.tmp\</ZipIntDir>
   </PropertyGroup>
   <ItemGroup>
     <ZipFilesSrc Include="COPYING"                           /><ZipFilesDst Include="$(ZipIntDir)wintun\COPYING"              />

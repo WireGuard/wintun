@@ -71,12 +71,12 @@
   <ImportGroup Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <Import Project="wintun.props" />
+  <Import Project="..\wintun.props" />
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
     <_ProjectFileVersion>15.0.28127.55</_ProjectFileVersion>
-    <IntDir>$(ConfigurationName)\$(WintunPlatform)\</IntDir>
-    <OutDir>$(ConfigurationName)\$(WintunPlatform)\</OutDir>
+    <IntDir>..\$(Configuration)\$(WintunPlatform)\$(ProjectName)-intermediate\</IntDir>
+    <OutDir>..\$(ConfigurationName)\$(WintunPlatform)\</OutDir>
     <RunCodeAnalysis>true</RunCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
@@ -132,4 +132,5 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
+  <Import Project="..\wintun.vcxproj.user" Condition="exists('..\wintun.vcxproj.user')" />
 </Project>

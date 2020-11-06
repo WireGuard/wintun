@@ -9,7 +9,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "api", "api\api.vcxproj", "{
 		{F7679B65-2FEC-469A-8BAC-B07BF4439422} = {F7679B65-2FEC-469A-8BAC-B07BF4439422}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wintun", "wintun.vcxproj", "{F7679B65-2FEC-469A-8BAC-B07BF4439422}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wintun", "driver\driver.vcxproj", "{F7679B65-2FEC-469A-8BAC-B07BF4439422}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{3A98F138-EE02-4488-B856-B3C48500BEA8}"
 	ProjectSection(SolutionItems) = preProject

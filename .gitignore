@@ -8,12 +8,12 @@
 /Release
 
 # Static Driver Verifier Output
-/sdv
-/smvbuild.log
-/smvstats.txt
+/driver/sdv
+/driver/smvbuild.log
+/driver/smvstats.txt
 
 # Driver Verification Log
-/wintun.DVL.XML
+/driver/wintun.DVL.XML
 
 # Temporary files
 *~

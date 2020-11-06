@@ -16,9 +16,6 @@
     <WintunPlatform Condition="'$(Platform)'=='ARM64'">arm64</WintunPlatform>
     <WintunPlatform Condition="'$(Platform)'=='Win32'">x86</WintunPlatform>
     <WintunPlatform Condition="'$(Platform)'=='x64'">amd64</WintunPlatform>
-
-    <DistributionDir>dist\</DistributionDir>
-    <SDVDir>sdv\</SDVDir>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
