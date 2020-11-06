@@ -27,7 +27,7 @@ static inline _Post_equals_last_error_ DWORD
 LoggerLastError(_In_z_ const WCHAR *Function, _In_z_ const WCHAR *Prefix)
 {
     DWORD LastError = GetLastError();
-    LoggerError(Prefix, Function, LastError);
+    LoggerError(Function, Prefix, LastError);
     SetLastError(LastError);
     return LastError;
 }
