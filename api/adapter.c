@@ -1707,8 +1707,9 @@ _Return_type_success_(return != FALSE) BOOL WINAPI WintunDeleteAdapter(
     SP_REMOVEDEVICE_PARAMS Params = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
                                                               .InstallFunction = DIF_REMOVE },
                                       .Scope = DI_REMOVEDEVICE_GLOBAL };
-    if (!SetupDiSetClassInstallParamsW(DevInfo, &DevInfoData, &Params.ClassInstallHeader, sizeof(Params)) ||
-        !SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
+    if ((!SetupDiSetClassInstallParamsW(DevInfo, &DevInfoData, &Params.ClassInstallHeader, sizeof(Params)) ||
+         !SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData)) &&
+        GetLastError() != ERROR_NO_SUCH_DEVINST)
     {
         LastError = LOG_LAST_ERROR(L"Failed to remove existing adapter");
         goto cleanupDevInfo;
@@ -1759,8 +1760,9 @@ static _Return_type_success_(return != FALSE) BOOL
             LOG(WINTUN_LOG_WARN, L"Failed to force close adapter handles");
 
         LOG(WINTUN_LOG_INFO, L"Removing existing adapter");
-        if (!SetupDiSetClassInstallParamsW(DevInfo, &DevInfoData, &Params.ClassInstallHeader, sizeof(Params)) ||
-            !SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData))
+        if ((!SetupDiSetClassInstallParamsW(DevInfo, &DevInfoData, &Params.ClassInstallHeader, sizeof(Params)) ||
+             !SetupDiCallClassInstaller(DIF_REMOVE, DevInfo, &DevInfoData)) &&
+            GetLastError() != ERROR_NO_SUCH_DEVINST)
         {
             LOG_LAST_ERROR(L"Failed to remove existing adapter");
             LastError = LastError != ERROR_SUCCESS ? LastError : GetLastError();
