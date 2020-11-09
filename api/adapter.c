@@ -21,7 +21,6 @@
 #include <devguid.h>
 #include <iphlpapi.h>
 #include <ndisguid.h>
-#include <newdev.h>
 #include <NTSecAPI.h>
 #include <SetupAPI.h>
 #include <Shlwapi.h>
@@ -1146,8 +1145,7 @@ EnsureWintunUnloaded(void)
 static _Return_type_success_(return != FALSE) BOOL SelectDriver(
     _In_ HDEVINFO DevInfo,
     _In_opt_ SP_DEVINFO_DATA *DevInfoData,
-    _Inout_ SP_DEVINSTALL_PARAMS_W *DevInstallParams,
-    _Inout_ BOOL *RebootRequired)
+    _Inout_ SP_DEVINSTALL_PARAMS_W *DevInstallParams)
 {
     static const FILETIME OurDriverDate = WINTUN_INF_FILETIME;
     static const DWORDLONG OurDriverVersion = WINTUN_INF_VERSION;
@@ -1267,12 +1265,6 @@ static _Return_type_success_(return != FALSE) BOOL SelectDriver(
         goto cleanupDelete;
     }
     _Analysis_assume_nullterminated_(InfStorePath);
-    BOOL UpdateRebootRequired = FALSE;
-    if (ExistingAdapters &&
-        !UpdateDriverForPlugAndPlayDevicesW(
-            NULL, WINTUN_HWID, InfStorePath, INSTALLFLAG_FORCE | INSTALLFLAG_NONINTERACTIVE, &UpdateRebootRequired))
-        LOG(WINTUN_LOG_WARN, L"Could not update existing adapters");
-    *RebootRequired = *RebootRequired || UpdateRebootRequired;
 
     SetupDiDestroyDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER);
     DestroyDriverInfoListOnCleanup = FALSE;
@@ -1395,7 +1387,7 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
         goto cleanupDevInfo;
     }
 
-    if (!SelectDriver(DevInfo, &DevInfoData, &DevInstallParams, RebootRequired))
+    if (!SelectDriver(DevInfo, &DevInfoData, &DevInstallParams))
     {
         LastError = LOG(WINTUN_LOG_ERR, L"Failed to select driver");
         goto cleanupDevInfo;
