@@ -483,7 +483,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
             break;
 
         TUN_PACKET *Packet = (TUN_PACKET *)(Ring->Data + RingHead);
-        ULONG PacketSize = Packet->Size;
+        ULONG PacketSize = *(volatile ULONG *)&Packet->Size;
         if (PacketSize > TUN_MAX_IP_PACKET_SIZE)
             break;
 
