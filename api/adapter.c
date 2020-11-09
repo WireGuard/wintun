@@ -1689,6 +1689,13 @@ _Return_type_success_(return != FALSE) BOOL WINAPI WintunDeleteAdapter(
         goto cleanupToken;
     }
 
+    HANDLE Mutex = NamespaceTakePoolMutex(Adapter->Pool);
+    if (!Mutex)
+    {
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to take pool mutex");
+        goto cleanupToken;
+    }
+
     HDEVINFO DevInfo;
     SP_DEVINFO_DATA DevInfoData;
     if (!GetDevInfoData(&Adapter->CfgInstanceID, &DevInfo, &DevInfoData))
@@ -1697,7 +1704,7 @@ _Return_type_success_(return != FALSE) BOOL WINAPI WintunDeleteAdapter(
             LastError = ERROR_SUCCESS;
         else
             LOG(WINTUN_LOG_ERR, L"Failed to get adapter info data");
-        goto cleanupToken;
+        goto cleanupMutex;
     }
 
     if (ForceCloseSessions && !ForceCloseWintunAdapterHandle(DevInfo, &DevInfoData))
@@ -1718,6 +1725,8 @@ _Return_type_success_(return != FALSE) BOOL WINAPI WintunDeleteAdapter(
 cleanupDevInfo:
     *RebootRequired = *RebootRequired || CheckReboot(DevInfo, &DevInfoData);
     SetupDiDestroyDeviceInfoList(DevInfo);
+cleanupMutex:
+    NamespaceReleaseMutex(Mutex);
 cleanupToken:
     RevertToSelf();
     return RET_ERROR(TRUE, LastError);
