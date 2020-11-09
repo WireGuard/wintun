@@ -471,40 +471,27 @@ static BOOL
 IsPoolMember(_In_z_ const WCHAR *Pool, _In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
 {
     WCHAR *DeviceDesc = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_DEVICEDESC);
-    if (!DeviceDesc)
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to get adapter description");
-        return FALSE;
-    }
+    WCHAR *FriendlyName = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_FRIENDLYNAME);
     DWORD LastError = ERROR_SUCCESS;
     BOOL Ret = FALSE;
-    WCHAR *FriendlyName = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_FRIENDLYNAME);
-    if (!FriendlyName)
-    {
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get adapter friendly name");
-        goto cleanupDeviceDesc;
-    }
     WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
     if (!GetPoolDeviceTypeName(Pool, PoolDeviceTypeName))
     {
         LastError = GetLastError();
-        goto cleanupFriendlyName;
+        goto cleanupNames;
     }
-    if (!_wcsicmp(FriendlyName, PoolDeviceTypeName) || !_wcsicmp(DeviceDesc, PoolDeviceTypeName))
-    {
-        Ret = TRUE;
-        goto cleanupFriendlyName;
-    }
-    RemoveNumberedSuffix(FriendlyName);
-    RemoveNumberedSuffix(DeviceDesc);
-    if (!_wcsicmp(FriendlyName, PoolDeviceTypeName) || !_wcsicmp(DeviceDesc, PoolDeviceTypeName))
-    {
-        Ret = TRUE;
-        goto cleanupFriendlyName;
-    }
-cleanupFriendlyName:
+    Ret = (FriendlyName && !_wcsicmp(FriendlyName, PoolDeviceTypeName)) ||
+          (DeviceDesc && !_wcsicmp(DeviceDesc, PoolDeviceTypeName));
+    if (Ret)
+        goto cleanupNames;
+    if (FriendlyName)
+        RemoveNumberedSuffix(FriendlyName);
+    if (DeviceDesc)
+        RemoveNumberedSuffix(DeviceDesc);
+    Ret = (FriendlyName && !_wcsicmp(FriendlyName, PoolDeviceTypeName)) ||
+          (DeviceDesc && !_wcsicmp(DeviceDesc, PoolDeviceTypeName));
+cleanupNames:
     Free(FriendlyName);
-cleanupDeviceDesc:
     Free(DeviceDesc);
     SetLastError(LastError);
     return Ret;
