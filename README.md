@@ -119,7 +119,7 @@ Non-zero to continue iterating adapters; zero to stop.
 
 #### WINTUN\_LOGGER\_CALLBACK
 
-`typedef BOOL(* WINTUN_LOGGER_CALLBACK) (WINTUN_LOGGER_LEVEL Level, const WCHAR *Message)`
+`typedef void(* WINTUN_LOGGER_CALLBACK) (WINTUN_LOGGER_LEVEL Level, const WCHAR *Message)`
 
 Called by internal logger to report diagnostic messages
 
@@ -127,10 +127,6 @@ Called by internal logger to report diagnostic messages
 
 - *Level*: Message level.
 - *Message*: Message text.
-
-**Returns**
-
-Anything - return value is ignored.
 
 #### WINTUN\_SESSION\_HANDLE
 

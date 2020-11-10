@@ -39,7 +39,7 @@ WriteFormatted(_In_ DWORD StdHandle, _In_z_ const WCHAR *Template, ...)
     return SizeWritten / sizeof(WCHAR);
 }
 
-static BOOL CALLBACK
+static void CALLBACK
 ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
 {
     const WCHAR *Template;
@@ -55,10 +55,9 @@ ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
         Template = L"[!] %1\n";
         break;
     default:
-        return FALSE;
+        return;
     }
     WriteFormatted(STD_ERROR_HANDLE, Template, LogLine);
-    return TRUE;
 }
 
 static int Argc;

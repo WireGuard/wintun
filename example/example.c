@@ -61,7 +61,7 @@ InitializeWintun(void)
     return Wintun;
 }
 
-static BOOL CALLBACK
+static void CALLBACK
 ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
 {
     FILETIME Timestamp;
@@ -81,7 +81,7 @@ ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
         LevelMarker = L'!';
         break;
     default:
-        return FALSE;
+        return;
     }
     fwprintf(
         stderr,
@@ -95,7 +95,6 @@ ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
         SystemTime.wMilliseconds,
         LevelMarker,
         LogLine);
-    return TRUE;
 }
 
 static DWORD

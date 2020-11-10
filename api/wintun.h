@@ -192,10 +192,8 @@ typedef enum
  * @param Level         Message level.
  *
  * @param Message       Message text.
- *
- * @return Anything - return value is ignored.
  */
-typedef BOOL(CALLBACK *WINTUN_LOGGER_CALLBACK)(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Message);
+typedef void(CALLBACK *WINTUN_LOGGER_CALLBACK)(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Message);
 
 /**
  * Sets logger callback function.
