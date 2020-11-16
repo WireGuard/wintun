@@ -34,7 +34,7 @@ DelayedLoadLibraryHook(unsigned dliNotify, PDelayLoadInfo pdli)
 }
 
 const PfnDliHook __pfnDliNotifyHook2 = DelayedLoadLibraryHook;
-#define NOT 1
+
 BOOL APIENTRY
 DllMain(_In_ HINSTANCE hinstDLL, _In_ DWORD fdwReason, _In_ LPVOID lpvReserved)
 {
