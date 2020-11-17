@@ -1524,7 +1524,7 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
         RegCloseKey(TcpipInterfaceRegKey);
         if (LastError == ERROR_SUCCESS)
             break;
-        if (LastError != ERROR_TRANSACTION_NOT_ACTIVE || Tries == 299)
+        if (LastError != ERROR_TRANSACTION_NOT_ACTIVE)
         {
             LOG_ERROR(L"Failed to set EnableDeadGWDetect", LastError);
             goto cleanupTcpipAdapterRegKey;
