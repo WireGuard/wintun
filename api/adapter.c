@@ -1497,34 +1497,45 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
     }
     Free(DummyStr);
 
-    HKEY TcpipInterfaceRegKey;
     WCHAR TcpipInterfaceRegPath[MAX_REG_PATH];
     if (!GetTcpipInterfaceRegPath(Adapter, TcpipInterfaceRegPath))
     {
         LastError = LOG(WINTUN_LOG_ERR, L"Failed to determine interface-specific TCP/IP network registry key path");
         goto cleanupTcpipAdapterRegKey;
     }
-    TcpipInterfaceRegKey = RegistryOpenKeyWait(
-        HKEY_LOCAL_MACHINE, TcpipInterfaceRegPath, KEY_QUERY_VALUE | KEY_SET_VALUE, WAIT_FOR_REGISTRY_TIMEOUT);
-    if (!TcpipInterfaceRegKey)
+    for (int Tries = 0; Tries < 300; ++Tries)
     {
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to open interface-specific TCP/IP network registry key");
-        goto cleanupTcpipAdapterRegKey;
-    }
+        HKEY TcpipInterfaceRegKey = RegistryOpenKeyWait(
+            HKEY_LOCAL_MACHINE, TcpipInterfaceRegPath, KEY_QUERY_VALUE | KEY_SET_VALUE, WAIT_FOR_REGISTRY_TIMEOUT);
+        if (!TcpipInterfaceRegKey)
+        {
+            LastError = LOG(WINTUN_LOG_ERR, L"Failed to open interface-specific TCP/IP network registry key");
+            goto cleanupTcpipAdapterRegKey;
+        }
 
-    static const DWORD EnableDeadGWDetect = 0;
-    LastError = RegSetKeyValueW(
-        TcpipInterfaceRegKey, NULL, L"EnableDeadGWDetect", REG_DWORD, &EnableDeadGWDetect, sizeof(EnableDeadGWDetect));
-    if (LastError != ERROR_SUCCESS)
-    {
-        LOG_ERROR(L"Failed to set EnableDeadGWDetect", LastError);
-        goto cleanupTcpipInterfaceRegKey;
+        static const DWORD EnableDeadGWDetect = 0;
+        LastError = RegSetKeyValueW(
+            TcpipInterfaceRegKey,
+            NULL,
+            L"EnableDeadGWDetect",
+            REG_DWORD,
+            &EnableDeadGWDetect,
+            sizeof(EnableDeadGWDetect));
+        RegCloseKey(TcpipInterfaceRegKey);
+        if (LastError == ERROR_SUCCESS)
+            break;
+        if (LastError != ERROR_TRANSACTION_NOT_ACTIVE || Tries == 299)
+        {
+            LOG_ERROR(L"Failed to set EnableDeadGWDetect", LastError);
+            goto cleanupTcpipAdapterRegKey;
+        }
+        Sleep(10);
     }
 
     if (!WintunSetAdapterName(Adapter, Name))
     {
         LastError = LOG(WINTUN_LOG_ERR, L"Failed to set adapter name");
-        goto cleanupTcpipInterfaceRegKey;
+        goto cleanupTcpipAdapterRegKey;
     }
 
     DEVPROPTYPE PropertyType;
@@ -1547,7 +1558,7 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
             if (ProblemStatus != STATUS_PNP_DEVICE_CONFIGURATION_PENDING || Tries == 999)
             {
                 LOG_ERROR(L"Failed to setup adapter", LastError);
-                goto cleanupTcpipInterfaceRegKey;
+                goto cleanupTcpipAdapterRegKey;
             }
             Sleep(10);
         }
@@ -1556,8 +1567,6 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
     }
     LastError = ERROR_SUCCESS;
 
-cleanupTcpipInterfaceRegKey:
-    RegCloseKey(TcpipInterfaceRegKey);
 cleanupTcpipAdapterRegKey:
     RegCloseKey(TcpipAdapterRegKey);
 cleanupAdapter:
