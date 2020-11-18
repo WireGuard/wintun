@@ -293,8 +293,10 @@ WintunSendPacket(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
             TUN_RING_WRAP(Session->Receive.TailRelease + AlignedPacketSize, Session->Capacity);
         Session->Receive.PacketsToRelease--;
     }
-    WriteULongRelease(&Session->Descriptor.Receive.Ring->Tail, Session->Receive.TailRelease);
-    if (ReadAcquire(&Session->Descriptor.Receive.Ring->Alertable))
-        SetEvent(Session->Descriptor.Receive.TailMoved);
+    if (Session->Descriptor.Receive.Ring->Tail != Session->Receive.TailRelease) {
+        WriteULongRelease(&Session->Descriptor.Receive.Ring->Tail, Session->Receive.TailRelease);
+        if (ReadAcquire(&Session->Descriptor.Receive.Ring->Alertable))
+            SetEvent(Session->Descriptor.Receive.TailMoved);
+    }
     LeaveCriticalSection(&Session->Receive.Lock);
 }
