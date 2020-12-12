@@ -507,11 +507,20 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
             break;
 
         RingHead = TUN_RING_WRAP(RingHead + AlignedPacketSize, RingCapacity);
-
-        NET_BUFFER_LIST *Nbl = NdisAllocateNetBufferAndNetBufferList(
-            Ctx->NblPool, 0, 0, Ctx->Device.Receive.Mdl, (ULONG)(Packet->Data - (UCHAR *)Ring), PacketSize);
+        MDL *Mdl;
+        NET_BUFFER_LIST *Nbl = NdisAllocateNetBufferAndNetBufferList(Ctx->NblPool, sizeof(*Mdl), 0, NULL, 0, 0);
         if (!Nbl)
             goto skipNbl;
+        Mdl = (MDL *)NET_BUFFER_LIST_CONTEXT_DATA_START(Nbl);
+        IoBuildPartialMdl(
+            Ctx->Device.Receive.Mdl,
+            Mdl,
+            (UCHAR *)MmGetMdlVirtualAddress(Ctx->Device.Receive.Mdl) + (ULONG)(Packet->Data - (UCHAR *)Ring),
+            PacketSize);
+        NET_BUFFER *Nb = NET_BUFFER_LIST_FIRST_NB(Nbl);
+        NET_BUFFER_FIRST_MDL(Nb) = NET_BUFFER_CURRENT_MDL(Nb) = Mdl;
+        NET_BUFFER_DATA_LENGTH(Nb) = PacketSize;
+        NET_BUFFER_DATA_OFFSET(Nb) = NET_BUFFER_CURRENT_MDL_OFFSET(Nb) = 0;
         Nbl->SourceHandle = Ctx->MiniportAdapterHandle;
         NdisSetNblFlag(Nbl, NblFlags);
         NET_BUFFER_LIST_INFO(Nbl, NetBufferListFrameType) = (PVOID)NblProto;
