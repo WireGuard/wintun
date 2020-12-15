@@ -412,6 +412,16 @@ TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUFFER_LIST Net
                 KeSetEvent(&Ctx->Device.Receive.ActiveNbls.Empty, IO_NO_INCREMENT, FALSE);
             KeReleaseInStackQueuedSpinLock(&LockHandle);
             WriteULongRelease(&Ring->Head, TunNblGetOffset(CompletedNbl));
+            const MDL *TargetMdl = Ctx->Device.Receive.Mdl;
+            for (MDL *Mdl = NET_BUFFER_FIRST_MDL(NET_BUFFER_LIST_FIRST_NB(CompletedNbl)); Mdl; Mdl = Mdl->Next)
+            {
+                if (MmGetMdlVirtualAddress(Mdl) < MmGetMdlVirtualAddress(TargetMdl) ||
+                    (UCHAR *)MmGetMdlVirtualAddress(Mdl) + MmGetMdlByteCount(Mdl) >
+                        (UCHAR *)MmGetMdlVirtualAddress(TargetMdl) + MmGetMdlByteCount(TargetMdl))
+                    continue;
+                IoFreeMdl(Mdl);
+                break;
+            }
             NdisFreeNetBufferList(CompletedNbl);
         }
     }
@@ -507,20 +517,17 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
             break;
 
         RingHead = TUN_RING_WRAP(RingHead + AlignedPacketSize, RingCapacity);
-        MDL *Mdl;
-        NET_BUFFER_LIST *Nbl = NdisAllocateNetBufferAndNetBufferList(Ctx->NblPool, sizeof(*Mdl), 0, NULL, 0, 0);
-        if (!Nbl)
+        MDL *Mdl = IoAllocateMdl(NULL, PacketSize, FALSE, FALSE, NULL);
+        if (!Mdl)
             goto skipNbl;
-        Mdl = (MDL *)NET_BUFFER_LIST_CONTEXT_DATA_START(Nbl);
         IoBuildPartialMdl(
             Ctx->Device.Receive.Mdl,
             Mdl,
             (UCHAR *)MmGetMdlVirtualAddress(Ctx->Device.Receive.Mdl) + (ULONG)(Packet->Data - (UCHAR *)Ring),
             PacketSize);
-        NET_BUFFER *Nb = NET_BUFFER_LIST_FIRST_NB(Nbl);
-        NET_BUFFER_FIRST_MDL(Nb) = NET_BUFFER_CURRENT_MDL(Nb) = Mdl;
-        NET_BUFFER_DATA_LENGTH(Nb) = PacketSize;
-        NET_BUFFER_DATA_OFFSET(Nb) = NET_BUFFER_CURRENT_MDL_OFFSET(Nb) = 0;
+        NET_BUFFER_LIST *Nbl = NdisAllocateNetBufferAndNetBufferList(Ctx->NblPool, 0, 0, Mdl, 0, PacketSize);
+        if (!Nbl)
+            goto cleanupMdl;
         Nbl->SourceHandle = Ctx->MiniportAdapterHandle;
         NdisSetNblFlag(Nbl, NblFlags);
         NET_BUFFER_LIST_INFO(Nbl, NetBufferListFrameType) = (PVOID)NblProto;
@@ -556,6 +563,8 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
     cleanupNbl:
         ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
         NdisFreeNetBufferList(Nbl);
+    cleanupMdl:
+        IoFreeMdl(Mdl);
     skipNbl:
         InterlockedIncrementNoFence64((LONG64 *)&Ctx->Statistics.ifInDiscards);
         KeWaitForSingleObject(&Ctx->Device.Receive.ActiveNbls.Empty, Executive, KernelMode, FALSE, NULL);
