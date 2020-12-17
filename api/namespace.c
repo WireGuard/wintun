@@ -12,7 +12,8 @@
 #include <bcrypt.h>
 #include <wchar.h>
 
-static BOOL HasInitialized = FALSE;
+static HANDLE PrivateNamespace = NULL;
+static HANDLE BoundaryDescriptor = NULL;
 static CRITICAL_SECTION Initializing;
 static BCRYPT_ALG_HANDLE AlgProvider;
 
@@ -43,7 +44,7 @@ static _Return_type_success_(return != FALSE) BOOL NamespaceRuntimeInit(void)
     DWORD LastError;
 
     EnterCriticalSection(&Initializing);
-    if (HasInitialized)
+    if (PrivateNamespace)
     {
         LeaveCriticalSection(&Initializing);
         return TRUE;
@@ -65,25 +66,25 @@ static _Return_type_success_(return != FALSE) BOOL NamespaceRuntimeInit(void)
         goto cleanupBCryptCloseAlgorithmProvider;
     }
 
-    HANDLE Boundary = CreateBoundaryDescriptorW(L"Wintun", 0);
-    if (!Boundary)
+    BoundaryDescriptor = CreateBoundaryDescriptorW(L"Wintun", 0);
+    if (!BoundaryDescriptor)
     {
         LastError = LOG_LAST_ERROR(L"Failed to create boundary descriptor");
         goto cleanupBCryptCloseAlgorithmProvider;
     }
-    if (!AddSIDToBoundaryDescriptor(&Boundary, Sid))
+    if (!AddSIDToBoundaryDescriptor(&BoundaryDescriptor, Sid))
     {
         LastError = LOG_LAST_ERROR(L"Failed to add SID to boundary descriptor");
-        goto cleanupBCryptCloseAlgorithmProvider;
+        goto cleanupBoundaryDescriptor;
     }
 
     for (;;)
     {
-        if (CreatePrivateNamespaceW(&SecurityAttributes, Boundary, L"Wintun"))
+        if ((PrivateNamespace = CreatePrivateNamespaceW(&SecurityAttributes, BoundaryDescriptor, L"Wintun")) != NULL)
             break;
         if ((LastError = GetLastError()) == ERROR_ALREADY_EXISTS)
         {
-            if (OpenPrivateNamespaceW(Boundary, L"Wintun"))
+            if ((PrivateNamespace = OpenPrivateNamespaceW(BoundaryDescriptor, L"Wintun")) != NULL)
                 break;
             if ((LastError = GetLastError()) == ERROR_PATH_NOT_FOUND)
                 continue;
@@ -91,13 +92,14 @@ static _Return_type_success_(return != FALSE) BOOL NamespaceRuntimeInit(void)
         }
         else
             LOG_ERROR(L"Failed to create private namespace", LastError);
-        goto cleanupBCryptCloseAlgorithmProvider;
+        goto cleanupBoundaryDescriptor;
     }
 
-    HasInitialized = TRUE;
     LeaveCriticalSection(&Initializing);
     return TRUE;
 
+cleanupBoundaryDescriptor:
+    DeleteBoundaryDescriptor(BoundaryDescriptor);
 cleanupBCryptCloseAlgorithmProvider:
     BCryptCloseAlgorithmProvider(AlgProvider, 0);
 cleanupLeaveCriticalSection:
@@ -219,10 +221,12 @@ void
 NamespaceDone(void)
 {
     EnterCriticalSection(&Initializing);
-    if (HasInitialized)
+    if (PrivateNamespace)
     {
         BCryptCloseAlgorithmProvider(AlgProvider, 0);
-        HasInitialized = FALSE;
+        ClosePrivateNamespace(PrivateNamespace, 0);
+        DeleteBoundaryDescriptor(BoundaryDescriptor);
+        PrivateNamespace = NULL;
     }
     LeaveCriticalSection(&Initializing);
     DeleteCriticalSection(&Initializing);
