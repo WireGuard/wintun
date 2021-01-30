@@ -44,6 +44,11 @@
 #    error Unsupported architecture
 #endif
 
+static const DEVPROPKEY DEVPKEY_Wintun_Pool = {
+    { 0xaba51201, 0xdf7a, 0x3a38, { 0x0a, 0xd9, 0x90, 0x64, 0x42, 0xd2, 0x71, 0xae } },
+    DEVPROPID_FIRST_USABLE + 0
+};
+
 typedef struct _SP_DEVINFO_DATA_LIST
 {
     SP_DEVINFO_DATA Data;
@@ -470,10 +475,18 @@ static _Return_type_success_(return != FALSE) BOOL
 static BOOL
 IsPoolMember(_In_z_ const WCHAR *Pool, _In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
 {
-    WCHAR *DeviceDesc = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_DEVICEDESC);
-    WCHAR *FriendlyName = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_FRIENDLYNAME);
+    WCHAR PoolProp[MAX_POOL_DEVICE_TYPE];
+    DEVPROPTYPE PropType;
+    if (SetupDiGetDevicePropertyW(
+            DevInfo, DevInfoData, &DEVPKEY_Wintun_Pool, &PropType, (PBYTE)PoolProp, sizeof(PoolProp), NULL, 0) &&
+        PropType == DEVPROP_TYPE_STRING)
+        return !_wcsicmp(PoolProp, Pool);
+
+    LOG_LAST_ERROR(L"Reading pool devpkey failed, falling back");
     DWORD LastError = ERROR_SUCCESS;
     BOOL Ret = FALSE;
+    WCHAR *DeviceDesc = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_DEVICEDESC);
+    WCHAR *FriendlyName = GetDeviceRegistryString(DevInfo, DevInfoData, SPDRP_FRIENDLYNAME);
     WCHAR PoolDeviceTypeName[MAX_POOL_DEVICE_TYPE];
     if (!GetPoolDeviceTypeName(Pool, PoolDeviceTypeName))
     {
@@ -1436,6 +1449,19 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
     }
     *RebootRequired = *RebootRequired || CheckReboot(DevInfo, &DevInfoData);
 
+    if (!SetupDiSetDevicePropertyW(
+            DevInfo,
+            &DevInfoData,
+            &DEVPKEY_Wintun_Pool,
+            DEVPROP_TYPE_STRING,
+#pragma warning(suppress : 4090)
+            (const BYTE *)Pool,
+            (DWORD)((wcslen(Pool) + 1) * sizeof(WCHAR)),
+            0))
+    {
+        LastError = LOG_LAST_ERROR(L"Failed to set adapter pool");
+        goto cleanupNetDevRegKey;
+    }
     if (!SetupDiSetDeviceRegistryPropertyW(
             DevInfo,
             &DevInfoData,
