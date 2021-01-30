@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0
  *
- * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
+ * Copyright (C) 2018-2021 WireGuard LLC. All Rights Reserved.
  */
 
 #include <windows.h>
@@ -24,7 +24,7 @@ BEGIN
       VALUE "FileDescription", "Wintun Driver"
       VALUE "FileVersion", EXPAND(WINTUN_VERSION_STR)
       VALUE "InternalName", "wintun.sys"
-      VALUE "LegalCopyright", "Copyright \xa9 2018-2020 WireGuard LLC. All Rights Reserved."
+      VALUE "LegalCopyright", "Copyright \xa9 2018-2021 WireGuard LLC. All Rights Reserved."
       VALUE "OriginalFilename", "wintun.sys"
       VALUE "ProductName", "Wintun Driver"
       VALUE "ProductVersion", EXPAND(WINTUN_VERSION_STR)

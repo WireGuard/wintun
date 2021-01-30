@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR MIT
  *
- * Copyright (C) 2018-2020 WireGuard LLC. All Rights Reserved.
+ * Copyright (C) 2018-2021 WireGuard LLC. All Rights Reserved.
  */
 
 #pragma once
