@@ -397,7 +397,7 @@ Sends the packet and releases internal buffer. WintunSendPacket is thread-safe, 
 
 General requirements:
 
-- [Visual Studio 2019](https://visualstudio.microsoft.com/downloads/)
+- [Visual Studio 2019](https://visualstudio.microsoft.com/downloads/) with Windows SDK 10.0.18362.0
 - [Windows Driver Kit for Windows 10, version 1903](https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk)
 
 `wintun.sln` may be opened in Visual Studio for development and building. Be sure to run `bcdedit /set testsigning on` before to enable unsigned driver loading. The default run sequence (F5) in Visual Studio will build the example project.
