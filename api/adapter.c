@@ -427,7 +427,23 @@ static _Return_type_success_(return != FALSE) BOOL
 }
 
 static _Return_type_success_(return != FALSE) BOOL
-    GetNetCfgInstanceId(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ GUID *CfgInstanceID)
+    GetNetCfgInstanceIdFromHKEY(_In_ HKEY Key, _Out_ GUID *CfgInstanceID)
+{
+    WCHAR *ValueStr = RegistryQueryString(Key, L"NetCfgInstanceId", TRUE);
+    if (!ValueStr)
+        return RET_ERROR(TRUE, LOG(WINTUN_LOG_ERR, L"Failed to get NetCfgInstanceId"));
+    DWORD LastError = ERROR_SUCCESS;
+    if (FAILED(CLSIDFromString(ValueStr, CfgInstanceID)))
+    {
+        LOG(WINTUN_LOG_ERR, L"NetCfgInstanceId is not a GUID");
+        LastError = ERROR_INVALID_DATA;
+    }
+    Free(ValueStr);
+    return RET_ERROR(TRUE, LastError);
+}
+
+static _Return_type_success_(return != FALSE) BOOL
+    GetNetCfgInstanceIdFromDevInfo(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData, _Out_ GUID *CfgInstanceID)
 {
     HKEY Key = SetupDiOpenDevRegKey(DevInfo, DevInfoData, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_QUERY_VALUE);
     if (Key == INVALID_HANDLE_VALUE)
@@ -436,19 +452,8 @@ static _Return_type_success_(return != FALSE) BOOL
         return FALSE;
     }
     DWORD LastError = ERROR_SUCCESS;
-    WCHAR *ValueStr = RegistryQueryString(Key, L"NetCfgInstanceId", TRUE);
-    if (!ValueStr)
-    {
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get NetCfgInstanceId");
-        goto cleanupKey;
-    }
-    if (FAILED(CLSIDFromString(ValueStr, CfgInstanceID)))
-    {
-        LOG(WINTUN_LOG_ERR, L"NetCfgInstanceId is not a GUID");
-        LastError = ERROR_INVALID_DATA;
-    }
-    Free(ValueStr);
-cleanupKey:
+    if (!GetNetCfgInstanceIdFromHKEY(Key, CfgInstanceID))
+        LastError = GetLastError();
     RegCloseKey(Key);
     return RET_ERROR(TRUE, LastError);
 }
@@ -472,7 +477,7 @@ static _Return_type_success_(return != FALSE) BOOL
             continue;
         }
         GUID CfgInstanceID2;
-        if (GetNetCfgInstanceId(*DevInfo, DevInfoData, &CfgInstanceID2) &&
+        if (GetNetCfgInstanceIdFromDevInfo(*DevInfo, DevInfoData, &CfgInstanceID2) &&
             !memcmp(CfgInstanceID, &CfgInstanceID2, sizeof(GUID)))
             return TRUE;
     }
@@ -561,20 +566,11 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER
         goto cleanupKey;
     }
 
-    WCHAR *ValueStr = RegistryQueryString(Key, L"NetCfgInstanceId", TRUE);
-    if (!ValueStr)
+    if (!GetNetCfgInstanceIdFromHKEY(Key, &Adapter->CfgInstanceID))
     {
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get NetCfgInstanceId");
+        LastError = GetLastError();
         goto cleanupAdapter;
     }
-    if (FAILED(CLSIDFromString(ValueStr, &Adapter->CfgInstanceID)))
-    {
-        LOG(WINTUN_LOG_ERR, L"NetCfgInstanceId is not Adapter GUID");
-        Free(ValueStr);
-        LastError = ERROR_INVALID_DATA;
-        goto cleanupAdapter;
-    }
-    Free(ValueStr);
 
     if (!RegistryQueryDWORD(Key, L"NetLuidIndex", &Adapter->LuidIndex, TRUE))
     {
@@ -672,7 +668,7 @@ _Return_type_success_(return != NULL) WINTUN_ADAPTER *WINAPI
         }
 
         GUID CfgInstanceID;
-        if (!GetNetCfgInstanceId(DevInfo, &DevInfoData, &CfgInstanceID))
+        if (!GetNetCfgInstanceIdFromDevInfo(DevInfo, &DevInfoData, &CfgInstanceID))
             continue;
 
         /* TODO: is there a better way than comparing ifnames? */
