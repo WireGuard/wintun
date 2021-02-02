@@ -83,7 +83,7 @@ _Return_type_success_(return != NULL) TUN_SESSION *WINAPI
     BYTE *AllocatedRegion = VirtualAlloc(0, (size_t)RingSize * 2, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!AllocatedRegion)
     {
-        LastError = LOG_LAST_ERROR(L"Failed to allocate ring memory");
+        LastError = LOG_LAST_ERROR(L"Failed to allocate ring memory (requested size: 0x%zx)", (size_t)RingSize * 2);
         goto cleanupRings;
     }
     if (!ElevateToSystem())
