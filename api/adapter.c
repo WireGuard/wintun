@@ -178,7 +178,7 @@ IsOurAdapter(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
     return IsOurs;
 }
 
-static _Return_type_success_(return != NULL) WCHAR *GetDeviceObjectFileName(_In_opt_z_ const WCHAR *InstanceId)
+static _Return_type_success_(return != NULL) WCHAR *GetDeviceObjectFileName(_In_z_ const WCHAR *InstanceId)
 {
     ULONG InterfacesLen;
     DWORD LastError = CM_MapCrToWin32Err(
@@ -214,7 +214,7 @@ static _Return_type_success_(return != NULL) WCHAR *GetDeviceObjectFileName(_In_
     return Interfaces;
 }
 
-static _Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE OpenDeviceObject(_In_opt_z_ const WCHAR *InstanceId)
+static _Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE OpenDeviceObject(_In_z_ const WCHAR *InstanceId)
 {
     WCHAR *Filename = GetDeviceObjectFileName(InstanceId);
     if (!Filename)
@@ -234,7 +234,7 @@ static _Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE OpenDeviceOb
 }
 
 static BOOL
-EnsureDeviceObject(_In_opt_z_ const WCHAR *InstanceId)
+EnsureDeviceObject(_In_z_ const WCHAR *InstanceId)
 {
     WCHAR *Filename = GetDeviceObjectFileName(InstanceId);
     if (!Filename)
@@ -426,8 +426,7 @@ static _Return_type_success_(return != FALSE) BOOL
     return TRUE;
 }
 
-static _Return_type_success_(return != FALSE) BOOL
-    GetNetCfgInstanceIdFromHKEY(_In_ HKEY Key, _Out_ GUID *CfgInstanceID)
+static _Return_type_success_(return != FALSE) BOOL GetNetCfgInstanceIdFromHKEY(_In_ HKEY Key, _Out_ GUID *CfgInstanceID)
 {
     WCHAR *ValueStr = RegistryQueryString(Key, L"NetCfgInstanceId", TRUE);
     if (!ValueStr)
@@ -1184,7 +1183,7 @@ EnsureWintunUnloaded(void)
 
 static _Return_type_success_(return != FALSE) BOOL SelectDriver(
     _In_ HDEVINFO DevInfo,
-    _In_opt_ SP_DEVINFO_DATA *DevInfoData,
+    _In_ SP_DEVINFO_DATA *DevInfoData,
     _Inout_ SP_DEVINSTALL_PARAMS_W *DevInstallParams)
 {
     static const FILETIME OurDriverDate = WINTUN_INF_FILETIME;
