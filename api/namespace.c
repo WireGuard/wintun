@@ -32,7 +32,7 @@ static _Return_type_success_(
         Free(Str);
         if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
         {
-            LOG_LAST_ERROR(L"Failed");
+            LOG_LAST_ERROR(L"Failed: %s", Source);
             return NULL;
         }
         Len = -Len;
@@ -53,7 +53,7 @@ static _Return_type_success_(return != FALSE) BOOL NamespaceRuntimeInit(void)
     NTSTATUS Status;
     if (!BCRYPT_SUCCESS(Status = BCryptOpenAlgorithmProvider(&AlgProvider, BCRYPT_SHA256_ALGORITHM, NULL, 0)))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to open algorithm provider");
+        LOG(WINTUN_LOG_ERR, L"Failed to open algorithm provider (status: 0x%x)", Status);
         LastError = RtlNtStatusToDosError(Status);
         goto cleanupLeaveCriticalSection;
     }
@@ -88,10 +88,10 @@ static _Return_type_success_(return != FALSE) BOOL NamespaceRuntimeInit(void)
                 break;
             if ((LastError = GetLastError()) == ERROR_PATH_NOT_FOUND)
                 continue;
-            LOG_ERROR(L"Failed to open private namespace", LastError);
+            LOG_ERROR(LastError, L"Failed to open private namespace");
         }
         else
-            LOG_ERROR(L"Failed to create private namespace", LastError);
+            LOG_ERROR(LastError, L"Failed to create private namespace");
         goto cleanupBoundaryDescriptor;
     }
 
@@ -118,7 +118,7 @@ _Return_type_success_(return != NULL) HANDLE NamespaceTakePoolMutex(_In_z_ const
     NTSTATUS Status;
     if (!BCRYPT_SUCCESS(Status = BCryptCreateHash(AlgProvider, &Sha256, NULL, 0, NULL, 0, 0)))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to create hash");
+        LOG(WINTUN_LOG_ERR, L"Failed to create hash (status: 0x%x)", Status);
         SetLastError(RtlNtStatusToDosError(Status));
         return NULL;
     }
@@ -127,7 +127,7 @@ _Return_type_success_(return != NULL) HANDLE NamespaceTakePoolMutex(_In_z_ const
     if (!BCRYPT_SUCCESS(
             Status = BCryptHashData(Sha256, (PUCHAR)mutex_label, sizeof(mutex_label) /* Including NULL 2 bytes */, 0)))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to hash data");
+        LOG(WINTUN_LOG_ERR, L"Failed to hash data (status: 0x%x)", Status);
         LastError = RtlNtStatusToDosError(Status);
         goto cleanupSha256;
     }
@@ -140,14 +140,14 @@ _Return_type_success_(return != NULL) HANDLE NamespaceTakePoolMutex(_In_z_ const
     if (!BCRYPT_SUCCESS(
             Status = BCryptHashData(Sha256, (PUCHAR)PoolNorm, (int)wcslen(PoolNorm) + 2 /* Add in NULL 2 bytes */, 0)))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to hash data");
+        LOG(WINTUN_LOG_ERR, L"Failed to hash data (status: 0x%x)", Status);
         LastError = RtlNtStatusToDosError(Status);
         goto cleanupPoolNorm;
     }
     BYTE Hash[32];
     if (!BCRYPT_SUCCESS(Status = BCryptFinishHash(Sha256, Hash, sizeof(Hash), 0)))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to calculate hash");
+        LOG(WINTUN_LOG_ERR, L"Failed to calculate hash (status: 0x%x)", Status);
         LastError = RtlNtStatusToDosError(Status);
         goto cleanupPoolNorm;
     }
@@ -159,10 +159,11 @@ _Return_type_success_(return != NULL) HANDLE NamespaceTakePoolMutex(_In_z_ const
     HANDLE Mutex = CreateMutexW(&SecurityAttributes, FALSE, MutexName);
     if (!Mutex)
     {
-        LastError = LOG_LAST_ERROR(L"Failed to create mutex");
+        LastError = LOG_LAST_ERROR(L"Failed to create mutex %s", MutexName);
         goto cleanupPoolNorm;
     }
-    switch (WaitForSingleObject(Mutex, INFINITE))
+    DWORD Result = WaitForSingleObject(Mutex, INFINITE);
+    switch (Result)
     {
     case WAIT_OBJECT_0:
     case WAIT_ABANDONED:
@@ -170,7 +171,7 @@ _Return_type_success_(return != NULL) HANDLE NamespaceTakePoolMutex(_In_z_ const
         BCryptDestroyHash(Sha256);
         return Mutex;
     }
-    LOG(WINTUN_LOG_ERR, L"Failed to get mutex");
+    LOG(WINTUN_LOG_ERR, L"Failed to get mutex %s (status: 0x%x)", MutexName, Result);
     LastError = ERROR_GEN_FAILURE;
     CloseHandle(Mutex);
 cleanupPoolNorm:
@@ -192,13 +193,14 @@ _Return_type_success_(return != NULL) HANDLE NamespaceTakeDriverInstallationMute
         LOG_LAST_ERROR(L"Failed to create mutex");
         return NULL;
     }
-    switch (WaitForSingleObject(Mutex, INFINITE))
+    DWORD Result = WaitForSingleObject(Mutex, INFINITE);
+    switch (Result)
     {
     case WAIT_OBJECT_0:
     case WAIT_ABANDONED:
         return Mutex;
     }
-    LOG(WINTUN_LOG_ERR, L"Failed to get mutex");
+    LOG(WINTUN_LOG_ERR, L"Failed to get mutex (status: 0x%x)", Result);
     CloseHandle(Mutex);
     SetLastError(ERROR_GEN_FAILURE);
     return NULL;

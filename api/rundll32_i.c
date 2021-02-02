@@ -102,7 +102,7 @@ static _Return_type_success_(return != FALSE) BOOL ExecuteRunDll32(
     WCHAR RandomTempSubDirectory[MAX_PATH];
     if (!CreateTemporaryDirectory(RandomTempSubDirectory))
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder");
+        LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder %s", RandomTempSubDirectory);
         return FALSE;
     }
     WCHAR DllPath[MAX_PATH] = { 0 };
@@ -121,13 +121,13 @@ static _Return_type_success_(return != FALSE) BOOL ExecuteRunDll32(
         WintunDllResourceName = L"wintun-arm64.dll";
         break;
     default:
-        LOG(WINTUN_LOG_ERR, L"Unsupported platform");
+        LOG(WINTUN_LOG_ERR, L"Unsupported platform 0x%x", NativeMachine);
         LastError = ERROR_NOT_SUPPORTED;
         goto cleanupDirectory;
     }
     if (!ResourceCopyToFile(DllPath, WintunDllResourceName))
     {
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to copy resource");
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to copy resource %s to %s", WintunDllResourceName, DllPath);
         goto cleanupDelete;
     }
     size_t CommandLineLen = 10 + MAX_PATH + 2 + wcslen(Arguments) + 1;
@@ -184,7 +184,7 @@ static _Return_type_success_(return != FALSE) BOOL ExecuteRunDll32(
     }
     if (!CreateProcessAsUserW(ProcessToken, RunDll32Path, CommandLine, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
     {
-        LastError = LOG_LAST_ERROR(L"Failed to create process");
+        LastError = LOG_LAST_ERROR(L"Failed to create process: %s", CommandLine);
         goto cleanupToken;
     }
     LastError = ERROR_SUCCESS;
@@ -210,7 +210,7 @@ cleanupThreads:
         if (!GetExitCodeThread(ThreadStdout, &ThreadResult))
             LOG_LAST_ERROR(L"Failed to retrieve stdout reader result");
         else if (ThreadResult != ERROR_SUCCESS)
-            LOG_ERROR(L"Failed to read process output", LastError);
+            LOG_ERROR(LastError, L"Failed to read process output");
         CloseHandle(ThreadStdout);
     }
 cleanupPipes:
@@ -252,7 +252,7 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapterViaRun
     WCHAR Response[8 + 1 + MAX_GUID_STRING_LEN + 1 + 8 + 1];
     if (!ExecuteRunDll32(Arguments, Response, _countof(Response)))
     {
-        LOG(WINTUN_LOG_ERR, L"Error executing worker process");
+        LOG(WINTUN_LOG_ERR, L"Error executing worker process: %s", Arguments);
         return NULL;
     }
     DWORD LastError;
@@ -262,14 +262,14 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapterViaRun
     GUID CfgInstanceID;
     if (Argc < 3 || FAILED(CLSIDFromString(Argv[1], &CfgInstanceID)))
     {
-        LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response");
+        LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response: %s", Response);
         LastError = ERROR_INVALID_PARAMETER;
         goto cleanupArgv;
     }
     LastError = wcstoul(Argv[0], NULL, 16);
     if (LastError == ERROR_SUCCESS && (Adapter = GetAdapter(Pool, &CfgInstanceID)) == NULL)
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to get adapter");
+        LOG(WINTUN_LOG_ERR, L"Failed to get adapter %s", Argv[1]);
         LastError = ERROR_FILE_NOT_FOUND;
     }
     if (wcstoul(Argv[2], NULL, 16))
@@ -305,14 +305,14 @@ static _Return_type_success_(return != FALSE) BOOL DeleteAdapterViaRundll32(
     DWORD LastError;
     if (!ExecuteRunDll32(Arguments, Response, _countof(Response)))
     {
-        LOG(WINTUN_LOG_ERR, L"Error executing worker process");
+        LOG(WINTUN_LOG_ERR, L"Error executing worker process: %s", Arguments);
         return FALSE;
     }
     int Argc;
     WCHAR **Argv = CommandLineToArgvW(Response, &Argc);
     if (Argc < 2)
     {
-        LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response");
+        LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response: %s", Response);
         LastError = ERROR_INVALID_PARAMETER;
         goto cleanupArgv;
     }
@@ -340,14 +340,14 @@ static _Return_type_success_(return != FALSE) BOOL
     DWORD LastError;
     if (!ExecuteRunDll32(Arguments, Response, _countof(Response)))
     {
-        LOG(WINTUN_LOG_ERR, L"Error executing worker process");
+        LOG(WINTUN_LOG_ERR, L"Error executing worker process: %s", Arguments);
         return FALSE;
     }
     int Argc;
     WCHAR **Argv = CommandLineToArgvW(Response, &Argc);
     if (Argc < 2)
     {
-        LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response");
+        LOG(WINTUN_LOG_ERR, L"Incomplete or invalid response: %s", Response);
         LastError = ERROR_INVALID_PARAMETER;
         goto cleanupArgv;
     }

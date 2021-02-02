@@ -42,7 +42,7 @@ _Return_type_success_(return != FALSE) BOOL ElevateToSystem(void)
     CloseHandle(CurrentProcessToken);
     if (!Ret)
     {
-        LOG_ERROR(L"Failed to get token information", LastError);
+        LOG_ERROR(LastError, L"Failed to get token information");
         goto cleanup;
     }
     if (EqualSid(TokenUserBuffer.MaybeLocalSystem.User.Sid, LocalSystemSid))

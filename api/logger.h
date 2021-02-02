@@ -7,7 +7,10 @@
 
 #include "wintun.h"
 #include "entry.h"
+#include "registry.h"
 #include <Windows.h>
+#include <stdarg.h>
+#include <wchar.h>
 
 extern WINTUN_LOGGER_CALLBACK Logger;
 
@@ -21,22 +24,73 @@ _Post_equals_last_error_ DWORD
 LoggerLog(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Function, _In_z_ const WCHAR *LogLine);
 
 _Post_equals_last_error_ DWORD
-LoggerError(_In_z_ const WCHAR *Function, _In_z_ const WCHAR *Prefix, _In_ DWORD Error);
+LoggerLogV(
+    _In_ WINTUN_LOGGER_LEVEL Level,
+    _In_z_ const WCHAR *Function,
+    _In_z_ _Printf_format_string_ const WCHAR *Format,
+    _In_ va_list Args);
 
 static inline _Post_equals_last_error_ DWORD
-LoggerLastError(_In_z_ const WCHAR *Function, _In_z_ const WCHAR *Prefix)
+LoggerLogFmt(
+    _In_ WINTUN_LOGGER_LEVEL Level,
+    _In_z_ const WCHAR *Function,
+    _In_z_ _Printf_format_string_ const WCHAR *Format,
+    ...)
+{
+    va_list Args;
+    va_start(Args, Format);
+    DWORD LastError = LoggerLogV(Level, Function, Format, Args);
+    va_end(Args);
+    return LastError;
+}
+
+_Post_equals_last_error_ DWORD
+LoggerError(_In_ DWORD Error, _In_z_ const WCHAR *Function, _In_z_ const WCHAR *Prefix);
+
+_Post_equals_last_error_ DWORD
+LoggerErrorV(
+    _In_ DWORD Error,
+    _In_z_ const WCHAR *Function,
+    _In_z_ _Printf_format_string_ const WCHAR *Format,
+    _In_ va_list Args);
+
+static inline _Post_equals_last_error_ DWORD
+LoggerErrorFmt(_In_ DWORD Error, _In_z_ const WCHAR *Function, _In_z_ _Printf_format_string_ const WCHAR *Format, ...)
+{
+    va_list Args;
+    va_start(Args, Format);
+    DWORD LastError = LoggerErrorV(Error, Function, Format, Args);
+    va_end(Args);
+    return LastError;
+}
+
+static inline _Post_equals_last_error_ DWORD
+LoggerLastErrorV(_In_z_ const WCHAR *Function, _In_z_ _Printf_format_string_ const WCHAR *Format, _In_ va_list Args)
 {
     DWORD LastError = GetLastError();
-    LoggerError(Function, Prefix, LastError);
+    LoggerErrorV(LastError, Function, Format, Args);
     SetLastError(LastError);
     return LastError;
 }
 
+static inline _Post_equals_last_error_ DWORD
+LoggerLastErrorFmt(_In_z_ const WCHAR *Function, _In_z_ _Printf_format_string_ const WCHAR *Format, ...)
+{
+    va_list Args;
+    va_start(Args, Format);
+    DWORD LastError = LoggerLastErrorV(Function, Format, Args);
+    va_end(Args);
+    return LastError;
+}
+
+VOID
+LoggerGetRegistryKeyPath(_In_ HKEY Key, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path);
+
 #define __L(x) L##x
 #define _L(x) __L(x)
-#define LOG(lvl, msg) (LoggerLog((lvl), _L(__FUNCTION__), msg))
-#define LOG_ERROR(msg, err) (LoggerError(_L(__FUNCTION__), msg, (err)))
-#define LOG_LAST_ERROR(msg) (LoggerLastError(_L(__FUNCTION__), msg))
+#define LOG(lvl, msg, ...) (LoggerLogFmt((lvl), _L(__FUNCTION__), msg, __VA_ARGS__))
+#define LOG_ERROR(err, msg, ...) (LoggerErrorFmt((err), _L(__FUNCTION__), msg, __VA_ARGS__))
+#define LOG_LAST_ERROR(msg, ...) (LoggerLastErrorFmt(_L(__FUNCTION__), msg, __VA_ARGS__))
 
 #define RET_ERROR(Ret, Error) ((Error) == ERROR_SUCCESS ? (Ret) : (SetLastError(Error), 0))
 
@@ -46,13 +100,14 @@ static inline _Return_type_success_(return != NULL) _Ret_maybenull_
     void *Data = HeapAlloc(ModuleHeap, Flags, Size);
     if (!Data)
     {
-        LoggerLog(WINTUN_LOG_ERR, Function, L"Out of memory");
+        LoggerLogFmt(WINTUN_LOG_ERR, Function, L"Out of memory (flags: 0x%x, requested size: 0x%zx)", Flags, Size);
         SetLastError(ERROR_OUTOFMEMORY);
     }
     return Data;
 }
 #define Alloc(Size) LoggerAlloc(_L(__FUNCTION__), 0, Size)
 #define Zalloc(Size) LoggerAlloc(_L(__FUNCTION__), HEAP_ZERO_MEMORY, Size)
+
 static inline void
 Free(void *Ptr)
 {
