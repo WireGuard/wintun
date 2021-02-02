@@ -33,9 +33,11 @@ LoggerLog(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Function, _In_z_ c
     {
         WCHAR Combined[0x400];
         if (_snwprintf_s(Combined, _countof(Combined), _TRUNCATE, L"%s: %s", Function, LogLine) == -1)
-            Logger(Level, LogLine);
-        else
-            Logger(Level, Combined);
+        {
+            Combined[_countof(Combined) - 2] = L'\u2026'; /* Horizontal Ellipsis */
+            Combined[_countof(Combined) - 1] = 0;
+        }
+        Logger(Level, Combined);
     }
     else
         Logger(Level, LogLine);
