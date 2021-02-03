@@ -178,7 +178,7 @@ IsOurAdapter(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData)
     return IsOurs;
 }
 
-static _Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE OpenDeviceObject(_In_opt_z_ const WCHAR *InstanceId)
+static _Return_type_success_(return != NULL) WCHAR *GetDeviceObjectFileName(_In_opt_z_ const WCHAR *InstanceId)
 {
     ULONG InterfacesLen;
     DWORD LastError = CM_MapCrToWin32Err(
@@ -191,12 +191,11 @@ static _Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE OpenDeviceOb
     if (LastError != ERROR_SUCCESS)
     {
         SetLastError(LOG_ERROR(L"Failed to query associated instances size", LastError));
-        return INVALID_HANDLE_VALUE;
+        return NULL;
     }
     WCHAR *Interfaces = Alloc(InterfacesLen * sizeof(WCHAR));
     if (!Interfaces)
-        return INVALID_HANDLE_VALUE;
-    HANDLE Handle = INVALID_HANDLE_VALUE;
+        return NULL;
     LastError = CM_MapCrToWin32Err(
         CM_Get_Device_Interface_ListW(
             (GUID *)&GUID_DEVINTERFACE_NET,
@@ -208,22 +207,55 @@ static _Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE OpenDeviceOb
     if (LastError != ERROR_SUCCESS)
     {
         LOG_ERROR(L"Failed to get associated instances", LastError);
-        goto cleanupBuf;
+        Free(Interfaces);
+        SetLastError(LastError);
+        return NULL;
     }
-    Handle = CreateFileW(
-        Interfaces,
+    return Interfaces;
+}
+
+static _Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE OpenDeviceObject(_In_opt_z_ const WCHAR *InstanceId)
+{
+    WCHAR *Filename = GetDeviceObjectFileName(InstanceId);
+    if (!Filename)
+        return INVALID_HANDLE_VALUE;
+    HANDLE Handle = CreateFileW(
+        Filename,
         GENERIC_READ | GENERIC_WRITE,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         NULL,
         OPEN_EXISTING,
         0,
         NULL);
-    LastError = Handle != INVALID_HANDLE_VALUE ? ERROR_SUCCESS : LOG_LAST_ERROR(L"Failed to connect to adapter");
-cleanupBuf:
-    Free(Interfaces);
-    if (LastError != ERROR_SUCCESS)
-        SetLastError(LastError);
+    Free(Filename);
+    if (Handle == INVALID_HANDLE_VALUE)
+        LOG_LAST_ERROR(L"Failed to connect to adapter");
     return Handle;
+}
+
+static BOOL
+EnsureDeviceObject(_In_opt_z_ const WCHAR *InstanceId)
+{
+    WCHAR *Filename = GetDeviceObjectFileName(InstanceId);
+    if (!Filename)
+        return FALSE;
+    BOOL Exists = TRUE;
+    const int Attempts = 100;
+    for (int i = 0; i < Attempts; ++i)
+    {
+        HANDLE Handle = CreateFileW(Filename, 0, 0, NULL, OPEN_EXISTING, 0, NULL);
+        if (Handle != INVALID_HANDLE_VALUE)
+        {
+            CloseHandle(Handle);
+            goto out;
+        }
+        if (i != Attempts - 1)
+            Sleep(50);
+    }
+    Exists = FALSE;
+out:
+    Free(Filename);
+    return Exists;
 }
 
 #define TUN_IOCTL_FORCE_CLOSE_HANDLES CTL_CODE(51820U, 0x971U, METHOD_NEITHER, FILE_READ_DATA | FILE_WRITE_DATA)
@@ -679,7 +711,19 @@ _Return_type_success_(return != NULL) WINTUN_ADAPTER *WINAPI
         }
 
         Adapter = CreateAdapterData(Pool, DevInfo, &DevInfoData);
-        LastError = Adapter ? ERROR_SUCCESS : LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
+        if (!Adapter)
+        {
+            LastError = LOG(WINTUN_LOG_ERR, L"Failed to create adapter data");
+            goto cleanupDevInfo;
+        }
+
+        if (!EnsureDeviceObject(Adapter->DevInstanceID))
+        {
+            LastError = LOG_LAST_ERROR(L"Device object file did not appear");
+            goto cleanupDevInfo;
+        }
+
+        LastError = ERROR_SUCCESS;
         goto cleanupDevInfo;
     }
     LastError = ERROR_FILE_NOT_FOUND;
@@ -1590,6 +1634,11 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
         }
         else
             break;
+    }
+    if (!EnsureDeviceObject(Adapter->DevInstanceID))
+    {
+        LastError = LOG_LAST_ERROR(L"Device object file did not appear");
+        goto cleanupTcpipAdapterRegKey;
     }
     LastError = ERROR_SUCCESS;
 
