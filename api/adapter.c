@@ -444,17 +444,11 @@ static _Return_type_success_(return != FALSE) BOOL GetNetCfgInstanceIdFromHKEY(_
 {
     WCHAR *ValueStr = RegistryQueryString(Key, L"NetCfgInstanceId", TRUE);
     if (!ValueStr)
-    {
-        WCHAR RegPath[MAX_REG_PATH];
-        LoggerGetRegistryKeyPath(Key, RegPath);
-        return RET_ERROR(TRUE, LOG(WINTUN_LOG_ERR, L"Failed to get %.*s\\NetCfgInstanceId", MAX_REG_PATH, RegPath));
-    }
+        return RET_ERROR(TRUE, LOG(WINTUN_LOG_ERR, L"Failed to get %r\\NetCfgInstanceId", Key));
     DWORD LastError = ERROR_SUCCESS;
     if (FAILED(CLSIDFromString(ValueStr, CfgInstanceID)))
     {
-        WCHAR RegPath[MAX_REG_PATH];
-        LoggerGetRegistryKeyPath(Key, RegPath);
-        LOG(WINTUN_LOG_ERR, L"%.*s\\NetCfgInstanceId is not a GUID: %s", MAX_REG_PATH, RegPath, ValueStr);
+        LOG(WINTUN_LOG_ERR, L"%r\\NetCfgInstanceId is not a GUID: %s", Key, ValueStr);
         LastError = ERROR_INVALID_DATA;
     }
     Free(ValueStr);
@@ -593,17 +587,13 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER
 
     if (!RegistryQueryDWORD(Key, L"NetLuidIndex", &Adapter->LuidIndex, TRUE))
     {
-        WCHAR RegPath[MAX_REG_PATH];
-        LoggerGetRegistryKeyPath(Key, RegPath);
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get %.*s\\NetLuidIndex", MAX_REG_PATH, RegPath);
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get %r\\NetLuidIndex", Key);
         goto cleanupAdapter;
     }
 
     if (!RegistryQueryDWORD(Key, L"*IfType", &Adapter->IfType, TRUE))
     {
-        WCHAR RegPath[MAX_REG_PATH];
-        LoggerGetRegistryKeyPath(Key, RegPath);
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get %.*s\\*IfType", MAX_REG_PATH, RegPath);
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get %r\\*IfType", Key);
         goto cleanupAdapter;
     }
 
@@ -781,11 +771,7 @@ static _Return_type_success_(return != FALSE) BOOL
     LastError = ConvertInterfaceLuidToGuid(&Luid, Guid);
     if (LastError != NO_ERROR)
     {
-        SetLastError(LOG_ERROR(
-            LastError,
-            L"Failed to convert interface %s LUID (%I64u) to GUID",
-            Name,
-            Luid.Value));
+        SetLastError(LOG_ERROR(LastError, L"Failed to convert interface %s LUID (%I64u) to GUID", Name, Luid.Value));
         return FALSE;
     }
     return TRUE;
@@ -1514,9 +1500,7 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
             StringFromGUID2(RequestedGUID, RequestedGUIDStr, _countof(RequestedGUIDStr)) * sizeof(WCHAR));
         if (LastError != ERROR_SUCCESS)
         {
-            WCHAR RegPath[MAX_REG_PATH];
-            LoggerGetRegistryKeyPath(NetDevRegKey, RegPath);
-            LOG_ERROR(LastError, L"Failed to set %.*s\\NetSetupAnticipatedInstanceId", MAX_REG_PATH, RegPath);
+            LOG_ERROR(LastError, L"Failed to set %r\\NetSetupAnticipatedInstanceId", NetDevRegKey);
             goto cleanupNetDevRegKey;
         }
     }
@@ -1560,25 +1544,19 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
     WCHAR *DummyStr = RegistryQueryStringWait(NetDevRegKey, L"NetCfgInstanceId", WAIT_FOR_REGISTRY_TIMEOUT);
     if (!DummyStr)
     {
-        WCHAR RegPath[MAX_REG_PATH];
-        LoggerGetRegistryKeyPath(NetDevRegKey, RegPath);
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get %.*s\\NetCfgInstanceId", MAX_REG_PATH, RegPath);
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get %r\\NetCfgInstanceId", NetDevRegKey);
         goto cleanupNetDevRegKey;
     }
     Free(DummyStr);
     DWORD DummyDWORD;
     if (!RegistryQueryDWORDWait(NetDevRegKey, L"NetLuidIndex", WAIT_FOR_REGISTRY_TIMEOUT, &DummyDWORD))
     {
-        WCHAR RegPath[MAX_REG_PATH];
-        LoggerGetRegistryKeyPath(NetDevRegKey, RegPath);
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get %.*s\\NetLuidIndex", MAX_REG_PATH, RegPath);
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get %r\\NetLuidIndex", NetDevRegKey);
         goto cleanupNetDevRegKey;
     }
     if (!RegistryQueryDWORDWait(NetDevRegKey, L"*IfType", WAIT_FOR_REGISTRY_TIMEOUT, &DummyDWORD))
     {
-        WCHAR RegPath[MAX_REG_PATH];
-        LoggerGetRegistryKeyPath(NetDevRegKey, RegPath);
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get %.*s\\*IfType", MAX_REG_PATH, RegPath);
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get %r\\*IfType", NetDevRegKey);
         goto cleanupNetDevRegKey;
     }
 

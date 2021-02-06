@@ -24,18 +24,10 @@ _Post_equals_last_error_ DWORD
 LoggerLog(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Function, _In_z_ const WCHAR *LogLine);
 
 _Post_equals_last_error_ DWORD
-LoggerLogV(
-    _In_ WINTUN_LOGGER_LEVEL Level,
-    _In_z_ const WCHAR *Function,
-    _In_z_ _Printf_format_string_ const WCHAR *Format,
-    _In_ va_list Args);
+LoggerLogV(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Function, _In_z_ const WCHAR *Format, _In_ va_list Args);
 
 static inline _Post_equals_last_error_ DWORD
-LoggerLogFmt(
-    _In_ WINTUN_LOGGER_LEVEL Level,
-    _In_z_ const WCHAR *Function,
-    _In_z_ _Printf_format_string_ const WCHAR *Format,
-    ...)
+LoggerLogFmt(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Function, _In_z_ const WCHAR *Format, ...)
 {
     va_list Args;
     va_start(Args, Format);
@@ -48,14 +40,10 @@ _Post_equals_last_error_ DWORD
 LoggerError(_In_ DWORD Error, _In_z_ const WCHAR *Function, _In_z_ const WCHAR *Prefix);
 
 _Post_equals_last_error_ DWORD
-LoggerErrorV(
-    _In_ DWORD Error,
-    _In_z_ const WCHAR *Function,
-    _In_z_ _Printf_format_string_ const WCHAR *Format,
-    _In_ va_list Args);
+LoggerErrorV(_In_ DWORD Error, _In_z_ const WCHAR *Function, _In_z_ const WCHAR *Format, _In_ va_list Args);
 
 static inline _Post_equals_last_error_ DWORD
-LoggerErrorFmt(_In_ DWORD Error, _In_z_ const WCHAR *Function, _In_z_ _Printf_format_string_ const WCHAR *Format, ...)
+LoggerErrorFmt(_In_ DWORD Error, _In_z_ const WCHAR *Function, _In_z_ const WCHAR *Format, ...)
 {
     va_list Args;
     va_start(Args, Format);
@@ -65,7 +53,7 @@ LoggerErrorFmt(_In_ DWORD Error, _In_z_ const WCHAR *Function, _In_z_ _Printf_fo
 }
 
 static inline _Post_equals_last_error_ DWORD
-LoggerLastErrorV(_In_z_ const WCHAR *Function, _In_z_ _Printf_format_string_ const WCHAR *Format, _In_ va_list Args)
+LoggerLastErrorV(_In_z_ const WCHAR *Function, _In_z_ const WCHAR *Format, _In_ va_list Args)
 {
     DWORD LastError = GetLastError();
     LoggerErrorV(LastError, Function, Format, Args);
@@ -74,7 +62,7 @@ LoggerLastErrorV(_In_z_ const WCHAR *Function, _In_z_ _Printf_format_string_ con
 }
 
 static inline _Post_equals_last_error_ DWORD
-LoggerLastErrorFmt(_In_z_ const WCHAR *Function, _In_z_ _Printf_format_string_ const WCHAR *Format, ...)
+LoggerLastErrorFmt(_In_z_ const WCHAR *Function, _In_z_ const WCHAR *Format, ...)
 {
     va_list Args;
     va_start(Args, Format);

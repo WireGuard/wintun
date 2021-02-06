@@ -28,9 +28,7 @@ static _Return_type_success_(return != NULL) HKEY
         LastError = RegNotifyChangeKeyValue(Key, FALSE, REG_NOTIFY_CHANGE_NAME, Event, TRUE);
         if (LastError != ERROR_SUCCESS)
         {
-            WCHAR RegPath[MAX_REG_PATH];
-            LoggerGetRegistryKeyPath(Key, RegPath);
-            LOG_ERROR(LastError, L"Failed to setup registry key %.*s notification", MAX_REG_PATH, RegPath);
+            LOG_ERROR(LastError, L"Failed to setup registry key %r notification", Key);
             break;
         }
 
@@ -58,9 +56,7 @@ static _Return_type_success_(return != NULL) HKEY
         }
         if (LastError != ERROR_FILE_NOT_FOUND && LastError != ERROR_PATH_NOT_FOUND)
         {
-            WCHAR RegPath[MAX_REG_PATH];
-            LoggerGetRegistryKeyPath(Key, RegPath);
-            LOG_ERROR(LastError, L"Failed to open registry key %.*s\\%s", MAX_REG_PATH, RegPath, Path);
+            LOG_ERROR(LastError, L"Failed to open registry key %r\\%s", Key, Path);
             break;
         }
 
@@ -70,14 +66,7 @@ static _Return_type_success_(return != NULL) HKEY
         DWORD Result = WaitForSingleObject(Event, (DWORD)TimeLeft);
         if (Result != WAIT_OBJECT_0)
         {
-            WCHAR RegPath[MAX_REG_PATH];
-            LoggerGetRegistryKeyPath(Key, RegPath);
-            LOG(WINTUN_LOG_ERR,
-                L"Timeout waiting for registry key %.*s\\%s (status: 0x%x)",
-                MAX_REG_PATH,
-                RegPath,
-                Path,
-                Result);
+            LOG(WINTUN_LOG_ERR, L"Timeout waiting for registry key %r\\%s (status: 0x%x)", Key, Path, Result);
             break;
         }
     }
@@ -216,11 +205,7 @@ static _Return_type_success_(return != NULL) void *RegistryQuery(
         if (LastError != ERROR_MORE_DATA)
         {
             if (Log)
-            {
-                WCHAR RegPath[MAX_REG_PATH];
-                LoggerGetRegistryKeyPath(Key, RegPath);
-                LOG_ERROR(LastError, L"Querying registry value %.*s\\%s failed", MAX_REG_PATH, RegPath, Name);
-            }
+                LOG_ERROR(LastError, L"Querying registry value %r\\%s failed", Key, Name);
             SetLastError(LastError);
             return NULL;
         }
@@ -243,17 +228,9 @@ _Return_type_success_(
             return Value;
         LastError = GetLastError();
         break;
-    default: {
-        WCHAR RegPath[MAX_REG_PATH];
-        LoggerGetRegistryKeyPath(Key, RegPath);
-        LOG(WINTUN_LOG_ERR,
-            L"Registry value %.*s\\%s is not a string (type: %u)",
-            MAX_REG_PATH,
-            RegPath,
-            Name,
-            ValueType);
+    default:
+        LOG(WINTUN_LOG_ERR, L"Registry value %r\\%s is not a string (type: %u)", Key, Name, ValueType);
         LastError = ERROR_INVALID_DATATYPE;
-    }
     }
     Free(Value);
     SetLastError(LastError);
@@ -276,9 +253,7 @@ _Return_type_success_(
         LastError = RegNotifyChangeKeyValue(Key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, Event, TRUE);
         if (LastError != ERROR_SUCCESS)
         {
-            WCHAR RegPath[MAX_REG_PATH];
-            LoggerGetRegistryKeyPath(Key, RegPath);
-            LOG_ERROR(LastError, L"Failed to setup registry key %.*s notification", MAX_REG_PATH, RegPath);
+            LOG_ERROR(LastError, L"Failed to setup registry key %r notification", Key);
             break;
         }
         WCHAR *Value = RegistryQueryString(Key, Name, FALSE);
@@ -296,14 +271,7 @@ _Return_type_success_(
         DWORD Result = WaitForSingleObject(Event, (DWORD)TimeLeft);
         if (Result != WAIT_OBJECT_0)
         {
-            WCHAR RegPath[MAX_REG_PATH];
-            LoggerGetRegistryKeyPath(Key, RegPath);
-            LOG(WINTUN_LOG_ERR,
-                L"Timeout waiting for registry value %.*s\\%s (status: 0x%x)",
-                MAX_REG_PATH,
-                RegPath,
-                Name,
-                Result);
+            LOG(WINTUN_LOG_ERR, L"Timeout waiting for registry value %r\\%s (status: 0x%x)", Key, Name, Result);
             break;
         }
     }
@@ -320,27 +288,19 @@ _Return_type_success_(return != FALSE) BOOL
     if (LastError != ERROR_SUCCESS)
     {
         if (Log)
-        {
-            WCHAR RegPath[MAX_REG_PATH];
-            LoggerGetRegistryKeyPath(Key, RegPath);
-            LOG_ERROR(LastError, L"Querying registry value %.*s\\%s failed", MAX_REG_PATH, RegPath, Name);
-        }
+            LOG_ERROR(LastError, L"Querying registry value %r\\%s failed", Key, Name);
         SetLastError(LastError);
         return FALSE;
     }
     if (ValueType != REG_DWORD)
     {
-        WCHAR RegPath[MAX_REG_PATH];
-        LoggerGetRegistryKeyPath(Key, RegPath);
-        LOG(WINTUN_LOG_ERR, L"Value %.*s\\%s is not a DWORD (type: %u)", MAX_REG_PATH, RegPath, Name, ValueType);
+        LOG(WINTUN_LOG_ERR, L"Value %r\\%s is not a DWORD (type: %u)", Key, Name, ValueType);
         SetLastError(ERROR_INVALID_DATATYPE);
         return FALSE;
     }
     if (Size != sizeof(DWORD))
     {
-        WCHAR RegPath[MAX_REG_PATH];
-        LoggerGetRegistryKeyPath(Key, RegPath);
-        LOG(WINTUN_LOG_ERR, L"Value %.*s\\%s size is not 4 bytes (size: %u)", MAX_REG_PATH, RegPath, Name, Size);
+        LOG(WINTUN_LOG_ERR, L"Value %r\\%s size is not 4 bytes (size: %u)", Key, Name, Size);
         SetLastError(ERROR_INVALID_DATA);
         return FALSE;
     }
@@ -363,9 +323,7 @@ _Return_type_success_(return != FALSE) BOOL
         LastError = RegNotifyChangeKeyValue(Key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, Event, TRUE);
         if (LastError != ERROR_SUCCESS)
         {
-            WCHAR RegPath[MAX_REG_PATH];
-            LoggerGetRegistryKeyPath(Key, RegPath);
-            LOG_ERROR(LastError, L"Failed to setup registry key %.*s notification", MAX_REG_PATH, RegPath);
+            LOG_ERROR(LastError, L"Failed to setup registry key %r notification", Key);
             break;
         }
         if (RegistryQueryDWORD(Key, Name, Value, FALSE))
@@ -382,9 +340,11 @@ _Return_type_success_(return != FALSE) BOOL
         DWORD Result = WaitForSingleObject(Event, (DWORD)TimeLeft);
         if (Result != WAIT_OBJECT_0)
         {
-            WCHAR RegPath[MAX_REG_PATH];
-            LoggerGetRegistryKeyPath(Key, RegPath);
-            LOG(WINTUN_LOG_ERR, L"Timeout waiting registry value %.*s\\%s (status: 0x%x)", MAX_REG_PATH, RegPath, Name, Result);
+            LOG(WINTUN_LOG_ERR,
+                L"Timeout waiting registry value %r\\%s (status: 0x%x)",
+                Key,
+                Name,
+                Result);
             break;
         }
     }
