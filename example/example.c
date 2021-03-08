@@ -293,6 +293,16 @@ SendPackets(_Inout_ DWORD_PTR SessionPtr)
     return ERROR_SUCCESS;
 }
 
+static BOOL CALLBACK
+PrintAdapter(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In_ LPARAM Param)
+{
+    UNREFERENCED_PARAMETER(Param);
+    WCHAR szAdapterName[MAX_ADAPTER_NAME];
+    if (WintunGetAdapterName(Adapter, szAdapterName))
+        Log(WINTUN_LOG_INFO, L"Existing Wintun adapter: %s", szAdapterName);
+    return TRUE;
+}
+
 int
 main(void)
 {
@@ -301,6 +311,7 @@ main(void)
         return LogError(L"Failed to initialize Wintun", GetLastError());
     WintunSetLogger(ConsoleLogger);
     Log(WINTUN_LOG_INFO, L"Wintun library loaded");
+    WintunEnumAdapters(L"Example", PrintAdapter, 0);
 
     DWORD LastError;
     HaveQuit = FALSE;

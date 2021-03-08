@@ -1983,13 +1983,18 @@ cleanupToken:
 _Return_type_success_(return != FALSE) BOOL WINAPI
     WintunEnumAdapters(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK Func, _In_ LPARAM Param)
 {
-    HANDLE Mutex = NamespaceTakePoolMutex(Pool);
-    if (!Mutex)
+    if (!ElevateToSystem())
     {
-        LOG(WINTUN_LOG_ERR, L"Failed to take %s pool mutex", Pool);
+        LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user");
         return FALSE;
     }
     DWORD LastError = ERROR_SUCCESS;
+    HANDLE Mutex = NamespaceTakePoolMutex(Pool);
+    if (!Mutex)
+    {
+        LastError = LOG(WINTUN_LOG_ERR, L"Failed to take %s pool mutex", Pool);
+        goto cleanupToken;
+    }
     HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
     {
@@ -2022,5 +2027,7 @@ _Return_type_success_(return != FALSE) BOOL WINAPI
     SetupDiDestroyDeviceInfoList(DevInfo);
 cleanupMutex:
     NamespaceReleaseMutex(Mutex);
+cleanupToken:
+    RevertToSelf();
     return RET_ERROR(TRUE, LastError);
 }
