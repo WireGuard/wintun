@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include <Windows.h>
-#include <IPExport.h>
+#include <windows.h>
+#include <ipexport.h>
 #include <ifdef.h>
 
 #ifdef __cplusplus
