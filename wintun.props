@@ -8,8 +8,11 @@
   <PropertyGroup>
     <WintunVersionMaj>0</WintunVersionMaj>
     <WintunVersionMin>10</WintunVersionMin>
-    <WintunVersionStr>0.10</WintunVersionStr><!-- Used in filenames and ProductVersion resource string, may contain strings. -->
-    <WintunVersion>$(WintunVersionMaj).$(WintunVersionMin)</WintunVersion><!-- Used for versioning, must be n.n[.n[.n]]. -->
+    <WintunVersionRel>2</WintunVersionRel>
+
+    <!-- Used for versioning, must be n.n[.n[.n]]. -->
+    <WintunVersion>$(WintunVersionMaj).$(WintunVersionMin)</WintunVersion>
+    <WintunVersion Condition="'$(WintunVersionRel)'!='0'">$(WintunVersion).$(WintunVersionRel)</WintunVersion>
 
     <!-- .vcxproj are using different platform names. -->
     <WintunPlatform Condition="'$(Platform)'=='ARM'">arm</WintunPlatform>
@@ -19,11 +22,11 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_STR="$(WintunVersionStr)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_REL=$(WintunVersionRel);WINTUN_VERSION="$(WintunVersion)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level4</WarningLevel>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_STR="$(WintunVersionStr)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_REL=$(WintunVersionRel);WINTUN_VERSION="$(WintunVersion)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">

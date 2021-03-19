@@ -100,7 +100,7 @@
     Zip Building
   -->
   <PropertyGroup>
-    <ZipTargetPath>dist\wintun-$(WintunVersionStr).zip</ZipTargetPath>
+    <ZipTargetPath>dist\wintun-$(WintunVersion).zip</ZipTargetPath>
     <ZipIntDir>dist\.tmp\</ZipIntDir>
   </PropertyGroup>
   <ItemGroup>

@@ -27,8 +27,8 @@ wintun-arm64.dll RCDATA "arm64\\wintun.dll"
 #define EXPAND(x) STRINGIZE(x)
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION    WINTUN_VERSION_MAJ, WINTUN_VERSION_MIN, 0, 0
-PRODUCTVERSION WINTUN_VERSION_MAJ, WINTUN_VERSION_MIN, 0, 0
+FILEVERSION    WINTUN_VERSION_MAJ, WINTUN_VERSION_MIN, WINTUN_VERSION_REL, 0
+PRODUCTVERSION WINTUN_VERSION_MAJ, WINTUN_VERSION_MIN, WINTUN_VERSION_REL, 0
 FILEOS         VOS_NT_WINDOWS32
 FILETYPE       VFT_DLL
 FILESUBTYPE    VFT2_UNKNOWN
@@ -39,12 +39,12 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "WireGuard LLC"
       VALUE "FileDescription", "Wintun API Library"
-      VALUE "FileVersion", EXPAND(WINTUN_VERSION_STR)
+      VALUE "FileVersion", EXPAND(WINTUN_VERSION)
       VALUE "InternalName", "wintun.dll"
       VALUE "LegalCopyright", "Copyright \xa9 2018-2021 WireGuard LLC. All Rights Reserved."
       VALUE "OriginalFilename", "wintun.dll"
       VALUE "ProductName", "Wintun Driver"
-      VALUE "ProductVersion", EXPAND(WINTUN_VERSION_STR)
+      VALUE "ProductVersion", EXPAND(WINTUN_VERSION)
       VALUE "Comments", "https://www.wintun.net/"
     END
   END
