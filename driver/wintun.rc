@@ -6,6 +6,8 @@
 #include <windows.h>
 #include <ntverp.h>
 
+#pragma code_page(1252)
+
 #define STRINGIZE(x) #x
 #define EXPAND(x) STRINGIZE(x)
 

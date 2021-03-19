@@ -6,6 +6,8 @@
 #include <windows.h>
 #include <ntverp.h>
 
+#pragma code_page(1252)
+
 wintun.cat RCDATA "wintun\\wintun.cat"
 wintun.inf RCDATA "wintun\\wintun.inf"
 wintun.sys RCDATA "wintun\\wintun.sys"
