@@ -11,13 +11,17 @@
 #include <Windows.h>
 
 #pragma warning(disable : 4200) /* nonstandard: zero-sized array in struct/union */
+#pragma warning(disable : 4201) /* nonstandard extension used: nameless struct/union */
 
 #define TUN_ALIGNMENT sizeof(ULONG)
 #define TUN_ALIGN(Size) (((ULONG)(Size) + ((ULONG)TUN_ALIGNMENT - 1)) & ~((ULONG)TUN_ALIGNMENT - 1))
 #define TUN_IS_ALIGNED(Size) (!((ULONG)(Size) & ((ULONG)TUN_ALIGNMENT - 1)))
-#define TUN_MAX_PACKET_SIZE TUN_ALIGN(sizeof(TUN_PACKET) + WINTUN_MAX_IP_PACKET_SIZE)
-#define TUN_RING_CAPACITY(Size) ((Size) - sizeof(TUN_RING) - (TUN_MAX_PACKET_SIZE - TUN_ALIGNMENT))
-#define TUN_RING_SIZE(Capacity) (sizeof(TUN_RING) + (Capacity) + (TUN_MAX_PACKET_SIZE - TUN_ALIGNMENT))
+#define TUN_MAX_PACKET_SIZE(LeadPadding, TrailPadding) \
+    TUN_ALIGN(sizeof(TUN_PACKET) + (LeadPadding) + WINTUN_MAX_IP_PACKET_SIZE + (TrailPadding))
+#define TUN_RING_CAPACITY(Size, LeadPadding, TrailPadding) \
+    ((Size) - sizeof(TUN_RING) - (TUN_MAX_PACKET_SIZE(LeadPadding, TrailPadding) - TUN_ALIGNMENT))
+#define TUN_RING_SIZE(Capacity, LeadPadding, TrailPadding) \
+    (sizeof(TUN_RING) + (Capacity) + (TUN_MAX_PACKET_SIZE(LeadPadding, TrailPadding) - TUN_ALIGNMENT))
 #define TUN_RING_WRAP(Value, Capacity) ((Value) & (Capacity - 1))
 #define LOCK_SPIN_COUNT 0x10000
 #define TUN_PACKET_RELEASE ((DWORD)0x80000000)
@@ -43,8 +47,18 @@ typedef struct _TUN_REGISTER_RINGS
     struct
     {
         ULONG RingSize;
-        TUN_RING *Ring;
-        HANDLE TailMoved;
+        ULONG LeadPadding;
+        ULONG TrailPadding;
+        union
+        {
+            TUN_RING *Ring;
+            ULONG64 RingAddress;
+        };
+        union
+        {
+            HANDLE TailMoved;
+            ULONG64 TailMovedHandle;
+        };
     } Send, Receive;
 } TUN_REGISTER_RINGS;
 
@@ -69,8 +83,11 @@ typedef struct _TUN_SESSION
     HANDLE Handle;
 } TUN_SESSION;
 
-_Return_type_success_(return != NULL) TUN_SESSION *WINAPI
-    WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity)
+_Return_type_success_(return != NULL) TUN_SESSION *WINAPI WintunStartSessionWithPadding(
+    _In_ const WINTUN_ADAPTER *Adapter,
+    _In_ DWORD Capacity,
+    _In_ DWORD LeadPadding,
+    _In_ DWORD TrailPadding)
 {
     DWORD LastError;
     TUN_SESSION *Session = Zalloc(sizeof(TUN_SESSION));
@@ -79,7 +96,7 @@ _Return_type_success_(return != NULL) TUN_SESSION *WINAPI
         LastError = GetLastError();
         goto out;
     }
-    const ULONG RingSize = TUN_RING_SIZE(Capacity);
+    const ULONG RingSize = TUN_RING_SIZE(Capacity, LeadPadding, TrailPadding);
     BYTE *AllocatedRegion = VirtualAlloc(0, (size_t)RingSize * 2, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!AllocatedRegion)
     {
@@ -92,6 +109,8 @@ _Return_type_success_(return != NULL) TUN_SESSION *WINAPI
         goto cleanupAllocatedRegion;
     }
     Session->Descriptor.Send.RingSize = RingSize;
+    Session->Descriptor.Send.LeadPadding = LeadPadding;
+    Session->Descriptor.Send.TrailPadding = TrailPadding;
     Session->Descriptor.Send.Ring = (TUN_RING *)AllocatedRegion;
     Session->Descriptor.Send.TailMoved = CreateEventW(&SecurityAttributes, FALSE, FALSE, NULL);
     if (!Session->Descriptor.Send.TailMoved)
@@ -101,6 +120,8 @@ _Return_type_success_(return != NULL) TUN_SESSION *WINAPI
     }
 
     Session->Descriptor.Receive.RingSize = RingSize;
+    Session->Descriptor.Receive.LeadPadding = LeadPadding;
+    Session->Descriptor.Receive.TrailPadding = TrailPadding;
     Session->Descriptor.Receive.Ring = (TUN_RING *)(AllocatedRegion + RingSize);
     Session->Descriptor.Receive.TailMoved = CreateEventW(&SecurityAttributes, FALSE, FALSE, NULL);
     if (!Session->Descriptor.Receive.TailMoved)
@@ -149,6 +170,12 @@ cleanupRings:
 out:
     SetLastError(LastError);
     return NULL;
+}
+
+_Return_type_success_(return != NULL) TUN_SESSION *WINAPI
+    WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity)
+{
+    return WintunStartSessionWithPadding(Adapter, Capacity, 0, 0);
 }
 
 void WINAPI
@@ -203,14 +230,16 @@ _Return_type_success_(return != NULL) _Ret_bytecount_(*PacketSize) BYTE *WINAPI
         LastError = ERROR_INVALID_DATA;
         goto cleanup;
     }
-    const ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + BuffPacket->Size);
+    const ULONG AlignedPacketSize = TUN_ALIGN(
+        sizeof(TUN_PACKET) + Session->Descriptor.Send.LeadPadding + BuffPacket->Size +
+        Session->Descriptor.Send.TrailPadding);
     if (AlignedPacketSize > BuffContent)
     {
         LastError = ERROR_INVALID_DATA;
         goto cleanup;
     }
     *PacketSize = BuffPacket->Size;
-    BYTE *Packet = BuffPacket->Data;
+    BYTE *Packet = BuffPacket->Data + Session->Descriptor.Send.LeadPadding;
     Session->Send.Head = TUN_RING_WRAP(Session->Send.Head + AlignedPacketSize, Session->Capacity);
     Session->Send.PacketsToRelease++;
     LeaveCriticalSection(&Session->Send.Lock);
@@ -225,14 +254,17 @@ void WINAPI
 WintunReleaseReceivePacket(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
 {
     EnterCriticalSection(&Session->Send.Lock);
-    TUN_PACKET *ReleasedBuffPacket = (TUN_PACKET *)(Packet - offsetof(TUN_PACKET, Data));
+    TUN_PACKET *ReleasedBuffPacket =
+        (TUN_PACKET *)(Packet - Session->Descriptor.Send.LeadPadding - offsetof(TUN_PACKET, Data));
     ReleasedBuffPacket->Size |= TUN_PACKET_RELEASE;
     while (Session->Send.PacketsToRelease)
     {
         const TUN_PACKET *BuffPacket = (TUN_PACKET *)&Session->Descriptor.Send.Ring->Data[Session->Send.HeadRelease];
         if ((BuffPacket->Size & TUN_PACKET_RELEASE) == 0)
             break;
-        const ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + (BuffPacket->Size & ~TUN_PACKET_RELEASE));
+        const ULONG AlignedPacketSize = TUN_ALIGN(
+            sizeof(TUN_PACKET) + Session->Descriptor.Send.LeadPadding + (BuffPacket->Size & ~TUN_PACKET_RELEASE) +
+            Session->Descriptor.Send.TrailPadding);
         Session->Send.HeadRelease = TUN_RING_WRAP(Session->Send.HeadRelease + AlignedPacketSize, Session->Capacity);
         Session->Send.PacketsToRelease--;
     }
@@ -250,7 +282,9 @@ _Return_type_success_(return != NULL) _Ret_bytecount_(PacketSize) BYTE *WINAPI
         LastError = ERROR_HANDLE_EOF;
         goto cleanup;
     }
-    const ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize);
+    const ULONG AlignedPacketSize = TUN_ALIGN(
+        sizeof(TUN_PACKET) + Session->Descriptor.Receive.LeadPadding + PacketSize +
+        Session->Descriptor.Receive.TrailPadding);
     const ULONG BuffHead = ReadULongAcquire(&Session->Descriptor.Receive.Ring->Head);
     if (BuffHead >= Session->Capacity)
     {
@@ -265,7 +299,7 @@ _Return_type_success_(return != NULL) _Ret_bytecount_(PacketSize) BYTE *WINAPI
     }
     TUN_PACKET *BuffPacket = (TUN_PACKET *)&Session->Descriptor.Receive.Ring->Data[Session->Receive.Tail];
     BuffPacket->Size = PacketSize | TUN_PACKET_RELEASE;
-    BYTE *Packet = BuffPacket->Data;
+    BYTE *Packet = BuffPacket->Data + Session->Descriptor.Receive.LeadPadding;
     Session->Receive.Tail = TUN_RING_WRAP(Session->Receive.Tail + AlignedPacketSize, Session->Capacity);
     Session->Receive.PacketsToRelease++;
     LeaveCriticalSection(&Session->Receive.Lock);
@@ -280,7 +314,8 @@ void WINAPI
 WintunSendPacket(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
 {
     EnterCriticalSection(&Session->Receive.Lock);
-    TUN_PACKET *ReleasedBuffPacket = (TUN_PACKET *)(Packet - offsetof(TUN_PACKET, Data));
+    TUN_PACKET *ReleasedBuffPacket =
+        (TUN_PACKET *)(Packet - Session->Descriptor.Receive.LeadPadding - offsetof(TUN_PACKET, Data));
     ReleasedBuffPacket->Size &= ~TUN_PACKET_RELEASE;
     while (Session->Receive.PacketsToRelease)
     {
@@ -288,12 +323,15 @@ WintunSendPacket(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
             (TUN_PACKET *)&Session->Descriptor.Receive.Ring->Data[Session->Receive.TailRelease];
         if (BuffPacket->Size & TUN_PACKET_RELEASE)
             break;
-        const ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + BuffPacket->Size);
+        const ULONG AlignedPacketSize = TUN_ALIGN(
+            sizeof(TUN_PACKET) + Session->Descriptor.Receive.LeadPadding + BuffPacket->Size +
+            Session->Descriptor.Receive.TrailPadding);
         Session->Receive.TailRelease =
             TUN_RING_WRAP(Session->Receive.TailRelease + AlignedPacketSize, Session->Capacity);
         Session->Receive.PacketsToRelease--;
     }
-    if (Session->Descriptor.Receive.Ring->Tail != Session->Receive.TailRelease) {
+    if (Session->Descriptor.Receive.Ring->Tail != Session->Receive.TailRelease)
+    {
         WriteULongRelease(&Session->Descriptor.Receive.Ring->Tail, Session->Receive.TailRelease);
         if (ReadAcquire(&Session->Descriptor.Receive.Ring->Alertable))
             SetEvent(Session->Descriptor.Receive.TailMoved);

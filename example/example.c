@@ -24,6 +24,7 @@ static WINTUN_SET_ADAPTER_NAME_FUNC WintunSetAdapterName;
 static WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC WintunGetRunningDriverVersion;
 static WINTUN_SET_LOGGER_FUNC WintunSetLogger;
 static WINTUN_START_SESSION_FUNC WintunStartSession;
+static WINTUN_START_SESSION_WITH_PADDING_FUNC WintunStartSessionWithPadding;
 static WINTUN_END_SESSION_FUNC WintunEndSession;
 static WINTUN_GET_READ_WAIT_EVENT_FUNC WintunGetReadWaitEvent;
 static WINTUN_RECEIVE_PACKET_FUNC WintunReceivePacket;
@@ -47,6 +48,7 @@ InitializeWintun(void)
         X(WintunSetAdapterName, WINTUN_SET_ADAPTER_NAME_FUNC) ||
         X(WintunGetRunningDriverVersion, WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC) ||
         X(WintunSetLogger, WINTUN_SET_LOGGER_FUNC) || X(WintunStartSession, WINTUN_START_SESSION_FUNC) ||
+        X(WintunStartSessionWithPadding, WINTUN_START_SESSION_WITH_PADDING_FUNC) ||
         X(WintunEndSession, WINTUN_END_SESSION_FUNC) || X(WintunGetReadWaitEvent, WINTUN_GET_READ_WAIT_EVENT_FUNC) ||
         X(WintunReceivePacket, WINTUN_RECEIVE_PACKET_FUNC) ||
         X(WintunReleaseReceivePacket, WINTUN_RELEASE_RECEIVE_PACKET_FUNC) ||

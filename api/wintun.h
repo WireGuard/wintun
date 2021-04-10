@@ -63,7 +63,6 @@ typedef _Return_type_success_(return != NULL) WINTUN_ADAPTER_HANDLE(WINAPI *WINT
 typedef _Return_type_success_(return != NULL)
     WINTUN_ADAPTER_HANDLE(WINAPI *WINTUN_OPEN_ADAPTER_FUNC)(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name);
 
-
 /**
  * Deletes a Wintun adapter.
  *
@@ -220,7 +219,7 @@ typedef void(WINAPI *WINTUN_SET_LOGGER_FUNC)(_In_ WINTUN_LOGGER_CALLBACK NewLogg
 typedef void *WINTUN_SESSION_HANDLE;
 
 /**
- * Starts Wintun session.
+ * Starts Wintun session. Use WintunStartSessionWithPadding() when packet leading and/or trailing space is required.
  *
  * @param Adapter       Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
  *
@@ -232,6 +231,27 @@ typedef void *WINTUN_SESSION_HANDLE;
  */
 typedef _Return_type_success_(return != NULL)
     WINTUN_SESSION_HANDLE(WINAPI *WINTUN_START_SESSION_FUNC)(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In_ DWORD Capacity);
+
+/**
+ * Starts Wintun session with specific packet padding.
+ *
+ * @param Adapter       Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
+ *
+ * @param Capacity      Rings capacity. Must be between WINTUN_MIN_RING_CAPACITY and WINTUN_MAX_RING_CAPACITY (incl.)
+ *                      Must be a power of two.
+ *
+ * @param LeadPadding   Amount of extra space before packet data
+ *
+ * @param TrailPadding  Amount of extra space after packet data
+ *
+ * @return Wintun session handle. Must be released with WintunEndSession. If the function fails, the return value is
+ *         NULL. To get extended error information, call GetLastError.
+ */
+typedef _Return_type_success_(return != NULL) WINTUN_SESSION_HANDLE(WINAPI *WINTUN_START_SESSION_WITH_PADDING_FUNC)(
+    _In_ WINTUN_ADAPTER_HANDLE Adapter,
+    _In_ DWORD Capacity,
+    _In_ DWORD LeadPadding,
+    _In_ DWORD TrailPadding);
 
 /**
  * Ends Wintun session.
@@ -271,6 +291,8 @@ typedef HANDLE(WINAPI *WINTUN_GET_READ_WAIT_EVENT_FUNC)(_In_ WINTUN_SESSION_HAND
  *         ERROR_HANDLE_EOF     Wintun adapter is terminating;
  *         ERROR_NO_MORE_ITEMS  Wintun buffer is exhausted;
  *         ERROR_INVALID_DATA   Wintun buffer is corrupt
+ *         When non-zero padding is used, requested leading amount of space is available before this pointer and
+ *         trailing amount of space after this pointer+PacketSize. The driver will ignore padding data.
  */
 typedef _Return_type_success_(return != NULL) _Ret_bytecount_(*PacketSize) BYTE *(
     WINAPI *WINTUN_RECEIVE_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _Out_ DWORD *PacketSize);
@@ -298,6 +320,8 @@ typedef void(WINAPI *WINTUN_RELEASE_RECEIVE_PACKET_FUNC)(_In_ WINTUN_SESSION_HAN
  *         following:
  *         ERROR_HANDLE_EOF       Wintun adapter is terminating;
  *         ERROR_BUFFER_OVERFLOW  Wintun buffer is full;
+ *         When non-zero padding is used, requested leading amount of space is available before this pointer and
+ *         trailing amount of space after this pointer+PacketSize. The driver will ignore padding data.
  */
 typedef _Return_type_success_(return != NULL) _Ret_bytecount_(PacketSize) BYTE *(
     WINAPI *WINTUN_ALLOCATE_SEND_PACKET_FUNC)(_In_ WINTUN_SESSION_HANDLE Session, _In_ DWORD PacketSize);

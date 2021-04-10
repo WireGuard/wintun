@@ -304,12 +304,29 @@ Sets logger callback function.
 
 `WINTUN_SESSION_HANDLE WintunStartSession (WINTUN_ADAPTER_HANDLE Adapter, DWORD Capacity)`
 
-Starts Wintun session.
+Starts Wintun session. Use `WintunStartSessionWithPadding()` when packet leading and/or trailing space is required.
 
 **Parameters**
 
 - *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
 - *Capacity*: Rings capacity. Must be between WINTUN\_MIN\_RING\_CAPACITY and WINTUN\_MAX\_RING\_CAPACITY (incl.) Must be a power of two.
+
+**Returns**
+
+Wintun session handle. Must be released with WintunEndSession. If the function fails, the return value is NULL. To get extended error information, call GetLastError.
+
+#### WintunStartSessionWithPadding()
+
+`WINTUN_SESSION_HANDLE WintunStartSessionWithPadding (WINTUN_ADAPTER_HANDLE Adapter, DWORD Capacity, DWORD LeadPadding, DWORD TrailPadding)`
+
+Starts Wintun session with specific packet padding.
+
+**Parameters**
+
+- *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
+- *Capacity*: Rings capacity. Must be between WINTUN\_MIN\_RING\_CAPACITY and WINTUN\_MAX\_RING\_CAPACITY (incl.) Must be a power of two.
+- *LeadPadding*: Amount of extra space before packet data
+- *TrailPadding*: Amount of extra space after packet data
 
 **Returns**
 
@@ -353,6 +370,7 @@ Retrieves one or packet. After the packet content is consumed, call WintunReleas
 **Returns**
 
 Pointer to layer 3 IPv4 or IPv6 packet. Client may modify its content at will. If the function fails, the return value is NULL. To get extended error information, call GetLastError. Possible errors include the following: ERROR\_HANDLE\_EOF Wintun adapter is terminating; ERROR\_NO\_MORE\_ITEMS Wintun buffer is exhausted; ERROR\_INVALID\_DATA Wintun buffer is corrupt
+When non-zero padding is used, requested leading amount of space is available before this pointer and trailing amount of space after this pointer+`PacketSize`. The driver will ignore padding data.
 
 #### WintunReleaseReceivePacket()
 
@@ -379,6 +397,7 @@ Allocates memory for a packet to send. After the memory is filled with packet da
 **Returns**
 
 Returns pointer to memory where to prepare layer 3 IPv4 or IPv6 packet for sending. If the function fails, the return value is NULL. To get extended error information, call GetLastError. Possible errors include the following: ERROR\_HANDLE\_EOF Wintun adapter is terminating; ERROR\_BUFFER\_OVERFLOW Wintun buffer is full;
+When non-zero padding is used, requested leading amount of space is available before this pointer and trailing amount of space after this pointer+`PacketSize`. The driver will ignore padding data.
 
 #### WintunSendPacket()
 

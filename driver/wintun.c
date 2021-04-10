@@ -12,6 +12,7 @@
 
 #pragma warning(disable : 4100) /* unreferenced formal parameter */
 #pragma warning(disable : 4200) /* nonstandard: zero-sized array in struct/union */
+#pragma warning(disable : 4201) /* nonstandard extension used: nameless struct/union */
 #pragma warning(disable : 4204) /* nonstandard: non-constant aggregate initializer */
 #pragma warning(disable : 4221) /* nonstandard: cannot be initialized using address of automatic variable */
 #pragma warning(disable : 6320) /* exception-filter expression is the constant EXCEPTION_EXECUTE_HANDLER */
@@ -30,13 +31,15 @@
 /* Maximum IP packet size */
 #define TUN_MAX_IP_PACKET_SIZE 0xFFFF
 /* Maximum packet size */
-#define TUN_MAX_PACKET_SIZE TUN_ALIGN(sizeof(TUN_PACKET) + TUN_MAX_IP_PACKET_SIZE)
+#define TUN_MAX_PACKET_SIZE(LeadPadding, TrailPadding) \
+    TUN_ALIGN(sizeof(TUN_PACKET) + (LeadPadding) + TUN_MAX_IP_PACKET_SIZE + (TrailPadding))
 /* Minimum ring capacity. */
 #define TUN_MIN_RING_CAPACITY 0x20000 /* 128kiB */
 /* Maximum ring capacity. */
 #define TUN_MAX_RING_CAPACITY 0x4000000 /* 64MiB */
 /* Calculates ring capacity */
-#define TUN_RING_CAPACITY(Size) ((Size) - sizeof(TUN_RING) - (TUN_MAX_PACKET_SIZE - TUN_ALIGNMENT))
+#define TUN_RING_CAPACITY(Size, LeadPadding, TrailPadding) \
+    ((Size) - sizeof(TUN_RING) - (TUN_MAX_PACKET_SIZE(LeadPadding, TrailPadding) - TUN_ALIGNMENT))
 /* Calculates ring offset modulo capacity */
 #define TUN_RING_WRAP(Value, Capacity) ((Value) & (Capacity - 1))
 
@@ -60,8 +63,7 @@ typedef struct _TUN_PACKET
     ULONG Size;
 
     /* Packet data */
-    UCHAR _Field_size_bytes_(Size)
-    Data[];
+    UCHAR Data[];
 } TUN_PACKET;
 
 typedef struct _TUN_RING
@@ -82,41 +84,63 @@ typedef struct _TUN_RING
     UCHAR Data[];
 } TUN_RING;
 
-typedef struct _TUN_REGISTER_RINGS
+/* Obsolete: See TUN_REGISTER_RINGS */
+typedef struct _TUN_REGISTER_RINGS_V1
 {
     struct
     {
-        /* Size of the ring */
         ULONG RingSize;
-
-        /* Pointer to client allocated ring */
         TUN_RING *Ring;
-
-        /* On send: An event created by the client the Wintun signals after it moves the Tail member of the send ring.
-         * On receive: An event created by the client the client will signal when it moves the Tail member of
-         * the receive ring if receive ring is alertable. */
         HANDLE TailMoved;
     } Send, Receive;
-} TUN_REGISTER_RINGS;
+} TUN_REGISTER_RINGS_V1;
 
 #ifdef _WIN64
-typedef struct _TUN_REGISTER_RINGS_32
+/* Obsolete: See TUN_REGISTER_RINGS */
+typedef struct _TUN_REGISTER_RINGS_V1_32
+{
+    struct
+    {
+        ULONG RingSize;
+        ULONG Ring;
+        ULONG TailMoved;
+    } Send, Receive;
+} TUN_REGISTER_RINGS_V1_32;
+#endif
+
+typedef struct _TUN_REGISTER_RINGS_V2
 {
     struct
     {
         /* Size of the ring */
         ULONG RingSize;
 
-        /* 32-bit addres of client allocated ring */
-        ULONG Ring;
+        /* Extra space before each packet data */
+        ULONG LeadPadding;
 
-        /* On send: An event created by the client the Wintun signals after it moves the Tail member of the send ring.
-         * On receive: An event created by the client the client will signal when it moves the Tail member of
-         * the receive ring if receive ring is alertable. */
-        ULONG TailMoved;
+        /* Extra space after each packet data */
+        ULONG TrailPadding;
+
+        union
+        {
+            /* Address of client allocated ring */
+            TUN_RING *Ring;
+            ULONG64 RingAddress;
+        };
+
+        union
+        {
+            /* On send: An event handle created by the client the Wintun signals after it moves the Tail member of the
+             * send ring.
+             * On receive: An event handle created by the client the client will signal when it moves the Tail member
+             * of the receive ring if receive ring is alertable. */
+            HANDLE TailMoved;
+            ULONG64 TailMovedHandle;
+        };
     } Send, Receive;
-} TUN_REGISTER_RINGS_32;
-#endif
+} TUN_REGISTER_RINGS_V2;
+
+#define TUN_REGISTER_RINGS TUN_REGISTER_RINGS_V2
 
 /* Register rings hosted by the client.
  * The lpInBuffer and nInBufferSize parameters of DeviceIoControl() must point to an TUN_REGISTER_RINGS struct.
@@ -151,6 +175,8 @@ typedef struct _TUN_CTX
             MDL *Mdl;
             TUN_RING *Ring;
             ULONG Capacity;
+            ULONG LeadPadding;
+            ULONG TrailPadding;
             KEVENT *TailMoved;
             KSPIN_LOCK Lock;
             ULONG RingTail;
@@ -165,6 +191,8 @@ typedef struct _TUN_CTX
             MDL *Mdl;
             TUN_RING *Ring;
             ULONG Capacity;
+            ULONG LeadPadding;
+            ULONG TrailPadding;
             KEVENT *TailMoved;
             HANDLE Thread;
             KSPIN_LOCK Lock;
@@ -251,6 +279,7 @@ TunSendNetBufferLists(
 {
     TUN_CTX *Ctx = (TUN_CTX *)MiniportAdapterContext;
     LONG64 SentPacketsCount = 0, SentPacketsSize = 0, ErrorPacketsCount = 0, DiscardedPacketsCount = 0;
+    const UINT Padding = Ctx->Device.Send.LeadPadding + Ctx->Device.Send.TrailPadding;
 
     /* Measure NBLs. */
     ULONG PacketsCount = 0, RequiredRingSpace = 0;
@@ -262,7 +291,7 @@ TunSendNetBufferLists(
             UINT PacketSize = NET_BUFFER_DATA_LENGTH(Nb);
             if (PacketSize > TUN_MAX_IP_PACKET_SIZE)
                 continue; /* The same condition holds down below, where we `goto skipPacket`. */
-            RequiredRingSpace += TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize);
+            RequiredRingSpace += TUN_ALIGN(sizeof(TUN_PACKET) + Padding + PacketSize);
         }
     }
 
@@ -309,24 +338,25 @@ TunSendNetBufferLists(
 
             TUN_PACKET *Packet = (TUN_PACKET *)(Ring->Data + RingTail);
             Packet->Size = PacketSize;
-            void *NbData = NdisGetDataBuffer(Nb, PacketSize, Packet->Data, 1, 0);
+            UCHAR *PacketData = Packet->Data + Ctx->Device.Send.LeadPadding;
+            void *NbData = NdisGetDataBuffer(Nb, PacketSize, PacketData, 1, 0);
             if (!NbData)
             {
                 /* The space for the packet has already been allocated in the ring. Write a zero-packet rather than
                  * fixing the gap in the ring. */
-                NdisZeroMemory(Packet->Data, PacketSize);
+                NdisZeroMemory(PacketData, PacketSize);
                 DiscardedPacketsCount++;
                 NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_FAILURE;
             }
             else
             {
-                if (NbData != Packet->Data)
-                    NdisMoveMemory(Packet->Data, NbData, PacketSize);
+                if (NbData != PacketData)
+                    NdisMoveMemory(PacketData, NbData, PacketSize);
                 SentPacketsCount++;
                 SentPacketsSize += PacketSize;
             }
 
-            RingTail = TUN_RING_WRAP(RingTail + TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize), RingCapacity);
+            RingTail = TUN_RING_WRAP(RingTail + TUN_ALIGN(sizeof(TUN_PACKET) + Padding + PacketSize), RingCapacity);
             continue;
 
         skipPacket:
@@ -441,6 +471,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
 
     TUN_RING *Ring = Ctx->Device.Receive.Ring;
     ULONG RingCapacity = Ctx->Device.Receive.Capacity;
+    const UINT Padding = Ctx->Device.Receive.LeadPadding + Ctx->Device.Receive.TrailPadding;
     LARGE_INTEGER Frequency;
     KeQueryPerformanceCounter(&Frequency);
     ULONG64 SpinMax = Frequency.QuadPart / 1000 / 10; /* 1/10 ms */
@@ -497,18 +528,19 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         if (PacketSize > TUN_MAX_IP_PACKET_SIZE)
             break;
 
-        ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + PacketSize);
+        ULONG AlignedPacketSize = TUN_ALIGN(sizeof(TUN_PACKET) + Padding + PacketSize);
         if (AlignedPacketSize > RingContent)
             break;
 
         ULONG NblFlags;
         USHORT NblProto;
-        if (PacketSize >= 20 && Packet->Data[0] >> 4 == 4)
+        const UCHAR *PacketData = Packet->Data + Ctx->Device.Receive.LeadPadding;
+        if (PacketSize >= 20 && PacketData[0] >> 4 == 4)
         {
             NblFlags = NDIS_NBL_FLAGS_IS_IPV4;
             NblProto = HTONS(NDIS_ETH_TYPE_IPV4);
         }
-        else if (PacketSize >= 40 && Packet->Data[0] >> 4 == 6)
+        else if (PacketSize >= 40 && PacketData[0] >> 4 == 6)
         {
             NblFlags = NDIS_NBL_FLAGS_IS_IPV6;
             NblProto = HTONS(NDIS_ETH_TYPE_IPV6);
@@ -523,7 +555,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         IoBuildPartialMdl(
             Ctx->Device.Receive.Mdl,
             Mdl,
-            (UCHAR *)MmGetMdlVirtualAddress(Ctx->Device.Receive.Mdl) + (ULONG)(Packet->Data - (UCHAR *)Ring),
+            (UCHAR *)MmGetMdlVirtualAddress(Ctx->Device.Receive.Mdl) + (ULONG)(PacketData - (UCHAR *)Ring),
             PacketSize);
         NET_BUFFER_LIST *Nbl = NdisAllocateNetBufferAndNetBufferList(Ctx->NblPool, 0, 0, Mdl, 0, PacketSize);
         if (!Nbl)
@@ -595,14 +627,25 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         goto cleanupMutex;
     Ctx->Device.OwningFileObject = Stack->FileObject;
 
-    TUN_REGISTER_RINGS Rrb;
+    TUN_REGISTER_RINGS Rrb = { 0 };
     if (Stack->Parameters.DeviceIoControl.InputBufferLength == sizeof(Rrb))
         NdisMoveMemory(&Rrb, Irp->AssociatedIrp.SystemBuffer, sizeof(Rrb));
+    else if (Stack->Parameters.DeviceIoControl.InputBufferLength == sizeof(TUN_REGISTER_RINGS_V1))
+    {
+        TUN_REGISTER_RINGS_V1 *RrbV1 = Irp->AssociatedIrp.SystemBuffer;
+        Rrb.Send.RingSize = RrbV1->Send.RingSize;
+        Rrb.Send.Ring = RrbV1->Send.Ring;
+        Rrb.Send.TailMoved = RrbV1->Send.TailMoved;
+        Rrb.Receive.RingSize = RrbV1->Receive.RingSize;
+        Rrb.Receive.Ring = RrbV1->Receive.Ring;
+        Rrb.Receive.TailMoved = RrbV1->Receive.TailMoved;
+    }
 #ifdef _WIN64
     else if (
-        IoIs32bitProcess(Irp) && Stack->Parameters.DeviceIoControl.InputBufferLength == sizeof(TUN_REGISTER_RINGS_32))
+        IoIs32bitProcess(Irp) &&
+        Stack->Parameters.DeviceIoControl.InputBufferLength == sizeof(TUN_REGISTER_RINGS_V1_32))
     {
-        TUN_REGISTER_RINGS_32 *Rrb32 = Irp->AssociatedIrp.SystemBuffer;
+        TUN_REGISTER_RINGS_V1_32 *Rrb32 = Irp->AssociatedIrp.SystemBuffer;
         Rrb.Send.RingSize = Rrb32->Send.RingSize;
         Rrb.Send.Ring = (TUN_RING *)Rrb32->Send.Ring;
         Rrb.Send.TailMoved = (HANDLE)Rrb32->Send.TailMoved;
@@ -617,15 +660,17 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
         goto cleanupResetOwner;
     }
 
-    Ctx->Device.Send.Capacity = TUN_RING_CAPACITY(Rrb.Send.RingSize);
+    Ctx->Device.Send.Capacity = TUN_RING_CAPACITY(Rrb.Send.RingSize, Rrb.Send.LeadPadding, Rrb.Send.TrailPadding);
     if (Status = STATUS_INVALID_PARAMETER,
         (Ctx->Device.Send.Capacity < TUN_MIN_RING_CAPACITY || Ctx->Device.Send.Capacity > TUN_MAX_RING_CAPACITY ||
          !IS_POW2(Ctx->Device.Send.Capacity) || !Rrb.Send.TailMoved || !Rrb.Send.Ring))
         goto cleanupResetOwner;
+    Ctx->Device.Send.LeadPadding = Rrb.Send.LeadPadding;
+    Ctx->Device.Send.TrailPadding = Rrb.Send.TrailPadding;
 
     if (!NT_SUCCESS(
             Status = ObReferenceObjectByHandle(
-                Rrb.Send.TailMoved,
+                (HANDLE)Rrb.Send.TailMoved,
                 /* We will not wait on send ring tail moved event. */
                 EVENT_MODIFY_STATE,
                 *ExEventObjectType,
@@ -634,7 +679,7 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
                 NULL)))
         goto cleanupResetOwner;
 
-    Ctx->Device.Send.Mdl = IoAllocateMdl(Rrb.Send.Ring, Rrb.Send.RingSize, FALSE, FALSE, NULL);
+    Ctx->Device.Send.Mdl = IoAllocateMdl((PVOID)Rrb.Send.Ring, Rrb.Send.RingSize, FALSE, FALSE, NULL);
     if (Status = STATUS_INSUFFICIENT_RESOURCES, !Ctx->Device.Send.Mdl)
         goto cleanupSendTailMoved;
     try
@@ -653,15 +698,18 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     if (Status = STATUS_INVALID_PARAMETER, Ctx->Device.Send.RingTail >= Ctx->Device.Send.Capacity)
         goto cleanupSendUnlockPages;
 
-    Ctx->Device.Receive.Capacity = TUN_RING_CAPACITY(Rrb.Receive.RingSize);
+    Ctx->Device.Receive.Capacity =
+        TUN_RING_CAPACITY(Rrb.Receive.RingSize, Rrb.Receive.LeadPadding, Rrb.Receive.TrailPadding);
     if (Status = STATUS_INVALID_PARAMETER,
         (Ctx->Device.Receive.Capacity < TUN_MIN_RING_CAPACITY || Ctx->Device.Receive.Capacity > TUN_MAX_RING_CAPACITY ||
          !IS_POW2(Ctx->Device.Receive.Capacity) || !Rrb.Receive.TailMoved || !Rrb.Receive.Ring))
         goto cleanupSendUnlockPages;
+    Ctx->Device.Receive.LeadPadding = Rrb.Receive.LeadPadding;
+    Ctx->Device.Receive.TrailPadding = Rrb.Receive.TrailPadding;
 
     if (!NT_SUCCESS(
             Status = ObReferenceObjectByHandle(
-                Rrb.Receive.TailMoved,
+                (HANDLE)Rrb.Receive.TailMoved,
                 /* We need to clear receive ring TailMoved event on transition to non-alertable state. */
                 SYNCHRONIZE | EVENT_MODIFY_STATE,
                 *ExEventObjectType,
@@ -670,7 +718,7 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
                 NULL)))
         goto cleanupSendUnlockPages;
 
-    Ctx->Device.Receive.Mdl = IoAllocateMdl(Rrb.Receive.Ring, Rrb.Receive.RingSize, FALSE, FALSE, NULL);
+    Ctx->Device.Receive.Mdl = IoAllocateMdl((PVOID)Rrb.Receive.Ring, Rrb.Receive.RingSize, FALSE, FALSE, NULL);
     if (Status = STATUS_INSUFFICIENT_RESOURCES, !Ctx->Device.Receive.Mdl)
         goto cleanupReceiveTailMoved;
     try
