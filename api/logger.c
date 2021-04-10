@@ -85,7 +85,7 @@ LoggerError(_In_ DWORD Error, _In_z_ const WCHAR *Function, _In_z_ const WCHAR *
     FormatMessageW(
         FORMAT_MESSAGE_FROM_STRING | FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_ARGUMENT_ARRAY |
             FORMAT_MESSAGE_MAX_WIDTH_MASK,
-        SystemMessage ? L"%4: %1: %3(Code 0x%2!08X!)" : L"%1: Code 0x%2!08X!",
+        SystemMessage ? L"%4: %1: %3(Code 0x%2!08X!)" : L"%4: %1: Code 0x%2!08X!",
         0,
         0,
         (void *)&FormattedMessage,
