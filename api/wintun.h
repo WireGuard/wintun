@@ -313,7 +313,9 @@ typedef void(WINAPI *WINTUN_RELEASE_RECEIVE_PACKET_FUNC)(_In_ WINTUN_SESSION_HAN
  *
  * @param Session       Wintun session handle obtained with WintunStartSession
  *
- * @param PacketSize    Exact packet size. Must be less or equal to WINTUN_MAX_IP_PACKET_SIZE.
+ * @param PacketSize    Upper estimate of packet size. Must be less or equal to WINTUN_MAX_IP_PACKET_SIZE. The exact
+ *                      size of the packet is determined from layer 3 IPv4 or IPv6 packet header on WintunSendPacket.
+ *                      IPv6 Jumbograms are not supported.
  *
  * @return Returns pointer to memory where to prepare layer 3 IPv4 or IPv6 packet for sending. If the function fails,
  *         the return value is NULL. To get extended error information, call GetLastError. Possible errors include the

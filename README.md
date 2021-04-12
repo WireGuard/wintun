@@ -392,7 +392,7 @@ Allocates memory for a packet to send. After the memory is filled with packet da
 **Parameters**
 
 - *Session*: Wintun session handle obtained with WintunStartSession
-- *PacketSize*: Exact packet size. Must be less or equal to WINTUN\_MAX\_IP\_PACKET\_SIZE.
+- *PacketSize*: Upper estimate of packet size. Must be less or equal to WINTUN\_MAX\_IP\_PACKET\_SIZE. The exact size of the packet is determined from layer 3 IPv4 or IPv6 packet header on WintunSendPacket. IPv6 Jumbograms are not supported.
 
 **Returns**
 

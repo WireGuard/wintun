@@ -532,15 +532,19 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         if (AlignedPacketSize > RingContent)
             break;
 
+        ULONG Layer3PacketSize;
         ULONG NblFlags;
         USHORT NblProto;
         const UCHAR *PacketData = Packet->Data + Ctx->Device.Receive.LeadPadding;
-        if (PacketSize >= 20 && PacketData[0] >> 4 == 4)
+        if (PacketSize >= 20 && PacketData[0] >> 4 == 4 &&
+            (Layer3PacketSize = RtlUshortByteSwap(*(USHORT *)&PacketData[2])) >= 20 && Layer3PacketSize <= PacketSize)
         {
             NblFlags = NDIS_NBL_FLAGS_IS_IPV4;
             NblProto = HTONS(NDIS_ETH_TYPE_IPV4);
         }
-        else if (PacketSize >= 40 && PacketData[0] >> 4 == 6)
+        else if (
+            PacketSize >= 40 && PacketData[0] >> 4 == 6 &&
+            (Layer3PacketSize = 40ul + RtlUshortByteSwap(*(USHORT *)&PacketData[4])) <= PacketSize)
         {
             NblFlags = NDIS_NBL_FLAGS_IS_IPV6;
             NblProto = HTONS(NDIS_ETH_TYPE_IPV6);
@@ -549,15 +553,15 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
             break;
 
         RingHead = TUN_RING_WRAP(RingHead + AlignedPacketSize, RingCapacity);
-        MDL *Mdl = IoAllocateMdl(NULL, PacketSize, FALSE, FALSE, NULL);
+        MDL *Mdl = IoAllocateMdl(NULL, Layer3PacketSize, FALSE, FALSE, NULL);
         if (!Mdl)
             goto skipNbl;
         IoBuildPartialMdl(
             Ctx->Device.Receive.Mdl,
             Mdl,
             (UCHAR *)MmGetMdlVirtualAddress(Ctx->Device.Receive.Mdl) + (ULONG)(PacketData - (UCHAR *)Ring),
-            PacketSize);
-        NET_BUFFER_LIST *Nbl = NdisAllocateNetBufferAndNetBufferList(Ctx->NblPool, 0, 0, Mdl, 0, PacketSize);
+            Layer3PacketSize);
+        NET_BUFFER_LIST *Nbl = NdisAllocateNetBufferAndNetBufferList(Ctx->NblPool, 0, 0, Mdl, 0, Layer3PacketSize);
         if (!Nbl)
             goto cleanupMdl;
         Nbl->SourceHandle = Ctx->MiniportAdapterHandle;
