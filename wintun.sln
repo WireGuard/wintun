@@ -5,9 +5,6 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "example", "example\example.vcxproj", "{2ABAC503-245D-4F53-85C5-0F844DEF738B}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "api", "api\api.vcxproj", "{897F02E3-3EAA-40AF-A6DC-17EB2376EDAF}"
-	ProjectSection(ProjectDependencies) = postProject
-		{F7679B65-2FEC-469A-8BAC-B07BF4439422} = {F7679B65-2FEC-469A-8BAC-B07BF4439422}
-	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wintun", "driver\driver.vcxproj", "{F7679B65-2FEC-469A-8BAC-B07BF4439422}"
 EndProject
