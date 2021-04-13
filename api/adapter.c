@@ -1306,7 +1306,7 @@ static _Return_type_success_(return != FALSE) BOOL SelectDriver(
     WCHAR RandomTempSubDirectory[MAX_PATH];
     if (!CreateTemporaryDirectory(RandomTempSubDirectory))
     {
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to create temporary folder %s", RandomTempSubDirectory);
+        LastError = LOG_LAST_ERROR(L"Failed to create temporary folder %s", RandomTempSubDirectory);
         goto cleanupExistingAdapters;
     }
 
@@ -1330,7 +1330,7 @@ static _Return_type_success_(return != FALSE) BOOL SelectDriver(
         !ResourceCopyToFile(SysPath, UseWHQL ? L"wintun-whql.sys" : L"wintun.sys") ||
         !ResourceCopyToFile(InfPath, UseWHQL ? L"wintun-whql.inf" : L"wintun.inf"))
     {
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to extract driver");
+        LastError = LOG_LAST_ERROR(L"Failed to extract driver");
         goto cleanupDelete;
     }
     LOG(WINTUN_LOG_INFO, L"Installing driver");
