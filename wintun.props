@@ -40,6 +40,9 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
     </ClCompile>
+    <Link>
+      <ProgramDatabaseFile>$(IntDir)$(TargetName).pdb</ProgramDatabaseFile>
+    </Link>
   </ItemDefinitionGroup>
   <PropertyGroup>
     <WindowsSdkToolchainPlatform>$(PROCESSOR_ARCHITECTURE)</WindowsSdkToolchainPlatform>
