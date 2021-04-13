@@ -8,7 +8,7 @@
   <PropertyGroup>
     <WintunVersionMaj>0</WintunVersionMaj>
     <WintunVersionMin>10</WintunVersionMin>
-    <WintunVersionRel>2</WintunVersionRel>
+    <WintunVersionRel>3</WintunVersionRel>
 
     <!-- Used for versioning, must be n.n[.n[.n]]. -->
     <WintunVersion>$(WintunVersionMaj).$(WintunVersionMin)</WintunVersion>
