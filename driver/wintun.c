@@ -1457,15 +1457,14 @@ DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
 {
     NTSTATUS Status;
 
-    if (!NT_SUCCESS(Status = TunInitializeDispatchSecurityDescriptor()))
-        return Status;
-
     NdisVersion = NdisGetVersion();
     if (NdisVersion < NDIS_MINIPORT_VERSION_MIN)
         return NDIS_STATUS_UNSUPPORTED_REVISION;
     if (NdisVersion > NDIS_MINIPORT_VERSION_MAX)
         NdisVersion = NDIS_MINIPORT_VERSION_MAX;
 
+    if (!NT_SUCCESS(Status = TunInitializeDispatchSecurityDescriptor()))
+        return Status;
     ExInitializeResourceLite(&TunDispatchCtxGuard);
     ExInitializeResourceLite(&TunDispatchDeviceListLock);
 
