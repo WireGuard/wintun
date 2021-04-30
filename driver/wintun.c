@@ -838,6 +838,12 @@ cleanup:
     return DidClose;
 }
 
+_Must_inspect_result_
+static NTSTATUS TunInitializeDispatchSecurityDescriptor(VOID);
+#ifdef ALLOC_PRAGMA
+#    pragma alloc_text(INIT, TunInitializeDispatchSecurityDescriptor)
+#endif
+_Use_decl_annotations_
 static NTSTATUS TunInitializeDispatchSecurityDescriptor(VOID)
 {
     NTSTATUS Status;
@@ -1451,6 +1457,9 @@ TunUnload(PDRIVER_OBJECT DriverObject)
 }
 
 DRIVER_INITIALIZE DriverEntry;
+#ifdef ALLOC_PRAGMA
+#    pragma alloc_text(INIT, DriverEntry)
+#endif
 _Use_decl_annotations_
 NTSTATUS
 DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
