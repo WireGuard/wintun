@@ -141,3 +141,15 @@ _Return_type_success_(return != FALSE) BOOL
  */
 _Return_type_success_(return != FALSE) BOOL
     RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout, _Out_ DWORD *Value);
+
+/**
+ * Deletes the entire registry key subtree recursively.
+ *
+ * @param Key           Handle of the registry key to at which the subtree is rooted.
+ *
+ * @param Name          Name of the subtree to delete.
+ *
+ * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
+ *         get extended error information, call GetLastError.
+ */
+_Return_type_success_(return != FALSE) BOOL RegistryDeleteKeyRecursive(_In_ HKEY Key, _In_z_ const WCHAR *Name);

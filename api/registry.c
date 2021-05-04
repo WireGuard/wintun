@@ -8,6 +8,7 @@
 #include "registry.h"
 #include <Windows.h>
 #include <wchar.h>
+#include <strsafe.h>
 
 static _Return_type_success_(return != NULL) HKEY
     OpenKeyWait(_In_ HKEY Key, _Inout_z_ WCHAR *Path, _In_ DWORD Access, _In_ ULONGLONG Deadline)
@@ -396,4 +397,74 @@ _Return_type_success_(return != FALSE) BOOL
     CloseHandle(Event);
     SetLastError(LastError);
     return FALSE;
+}
+
+_Return_type_success_(return != FALSE) static BOOL
+    DeleteNodeRecurse(_In_ HKEY Key, _In_z_ WCHAR *Name)
+{
+    LSTATUS Ret;
+    DWORD Size;
+    SIZE_T Len;
+    WCHAR SubName[MAX_REG_PATH], *End;
+    HKEY SubKey;
+
+    Len = wcslen(Name);
+    if (Len >= MAX_REG_PATH || !Len)
+        return TRUE;
+
+    if (RegDeleteKeyW(Key, Name) == ERROR_SUCCESS)
+        return TRUE;
+
+    Ret = RegOpenKeyEx(Key, Name, 0, KEY_READ, &SubKey);
+    if (Ret != ERROR_SUCCESS)
+    {
+        if (Ret == ERROR_FILE_NOT_FOUND)
+            return TRUE;
+        SetLastError(Ret);
+        return FALSE;
+    }
+
+    End = Name + Len;
+    if (End[-1] != L'\\')
+    {
+        *(End++) = L'\\';
+        *End = L'\0';
+    }
+    Size = MAX_REG_PATH;
+    Ret = RegEnumKeyEx(SubKey, 0, SubName, &Size, NULL, NULL, NULL, NULL);
+    if (Ret == ERROR_SUCCESS)
+    {
+        do
+        {
+            End[0] = L'\0';
+            StringCchCatW(Name, MAX_REG_PATH * 2, SubName);
+            if (!DeleteNodeRecurse(Key, Name))
+                break;
+            Size = MAX_REG_PATH;
+            Ret = RegEnumKeyEx(SubKey, 0, SubName, &Size, NULL, NULL, NULL, NULL);
+        } while (Ret == ERROR_SUCCESS);
+    }
+    else
+    {
+        SetLastError(Ret);
+        *(--End) = L'\0';
+        RegCloseKey(SubKey);
+        return FALSE;
+    }
+    *(--End) = L'\0';
+    RegCloseKey(SubKey);
+
+    Ret = RegDeleteKey(Key, Name);
+    if (Ret == ERROR_SUCCESS)
+        return TRUE;
+    SetLastError(Ret);
+    return FALSE;
+}
+
+_Return_type_success_(return != FALSE) BOOL
+RegistryDeleteKeyRecursive(_In_ HKEY Key, _In_z_ const WCHAR *Name)
+{
+    WCHAR NameBuf[(MAX_REG_PATH + 2) * 2] = { 0 };
+    StringCchCopyW(NameBuf, MAX_REG_PATH * 2, Name);
+    return DeleteNodeRecurse(Key, NameBuf);
 }

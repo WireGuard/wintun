@@ -10,3 +10,7 @@
 _Return_type_success_(return != FALSE) BOOL ElevateToSystem(void);
 
 _Return_type_success_(return != NULL) HANDLE GetPrimarySystemTokenFromThread(void);
+
+_Return_type_success_(return != FALSE) BOOL ImpersonateService(_In_z_ WCHAR *ServiceName, _In_ HANDLE *OriginalToken);
+
+_Return_type_success_(return != FALSE) BOOL RestoreToken(_In_ HANDLE OriginalToken);

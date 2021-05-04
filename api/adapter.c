@@ -1418,6 +1418,56 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
 {
     LOG(WINTUN_LOG_INFO, L"Creating adapter");
 
+    if (RequestedGUID)
+    {
+        WCHAR RegPath[MAX_REG_PATH];
+        WCHAR RequestedGUIDStr[MAX_GUID_STRING_LEN];
+        int GuidStrLen = StringFromGUID2(RequestedGUID, RequestedGUIDStr, _countof(RequestedGUIDStr)) * sizeof(WCHAR);
+        if (_snwprintf_s(
+                RegPath,
+                MAX_REG_PATH,
+                _TRUNCATE,
+                L"SYSTEM\\CurrentControlSet\\Control\\Network\\{4D36E972-E325-11CE-BFC1-08002BE10318}\\%.*s\\Connection",
+                GuidStrLen,
+                RequestedGUIDStr) == -1)
+            goto guidIsFresh;
+        HKEY Key;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, RegPath, 0, KEY_QUERY_VALUE, &Key) != ERROR_SUCCESS)
+            goto guidIsFresh;
+        WCHAR *InstanceID = RegistryQueryString(Key, L"PnPInstanceId", FALSE);
+        RegCloseKey(Key);
+        if (!InstanceID)
+            goto guidIsFresh;
+        int Ret = _snwprintf_s(RegPath, MAX_REG_PATH, _TRUNCATE, L"SYSTEM\\CurrentControlSet\\Enum\\%s", InstanceID);
+        Free(InstanceID);
+        if (Ret == -1)
+            goto guidIsFresh;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, RegPath, 0, KEY_QUERY_VALUE, &Key) == ERROR_SUCCESS)
+        {
+            RegCloseKey(Key);
+            SetLastError(LOG_ERROR(ERROR_ALREADY_EXISTS, L"Requested GUID is already in use: %s", RequestedGUIDStr));
+            return NULL;
+        }
+        LOG(WINTUN_LOG_WARN, L"Requested GUID %s has leftover residue", RequestedGUIDStr);
+        HANDLE OriginalToken;
+        if (!ImpersonateService(L"NetSetupSvc", &OriginalToken))
+        {
+            LOG_LAST_ERROR(L"Unable to impersonate NetSetupSvc");
+            goto guidIsFresh; // non-fatal
+        }
+        if (_snwprintf_s(
+                RegPath,
+                MAX_REG_PATH,
+                _TRUNCATE,
+                L"SYSTEM\\CurrentControlSet\\Control\\NetworkSetup2\\Interfaces\\%.*s",
+                GuidStrLen,
+                RequestedGUIDStr) == -1 ||
+            !RegistryDeleteKeyRecursive(HKEY_LOCAL_MACHINE, RegPath))
+            LOG_LAST_ERROR(L"Unable to delete NetworkSetup2 registry key"); // non-fatal
+        RestoreToken(OriginalToken);
+    guidIsFresh:;
+    }
+
     HDEVINFO DevInfo = SetupDiCreateDeviceInfoListExW(&GUID_DEVCLASS_NET, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
     {
