@@ -224,6 +224,13 @@ static _Return_type_success_(return != NULL) WCHAR *GetDeviceObjectFileName(_In_
         SetLastError(LastError);
         return NULL;
     }
+    if (!Interfaces[0])
+    {
+        LOG(WINTUN_LOG_ERR, L"Received empty adapter object file name");
+        Free(Interfaces);
+        SetLastError(ERROR_DEVICE_NOT_AVAILABLE);
+        return NULL;
+    }
     return Interfaces;
 }
 
@@ -1652,11 +1659,22 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
         goto cleanupTcpipAdapterRegKey;
     }
 
-    DEVPROPTYPE PropertyType;
     for (int Tries = 0; Tries < 1000; ++Tries)
     {
+        DEVPROPTYPE PropertyType;
+        INT32 ProblemCode;
         NTSTATUS ProblemStatus;
         if (SetupDiGetDevicePropertyW(
+                DevInfo,
+                &DevInfoData,
+                &DEVPKEY_Device_ProblemCode,
+                &PropertyType,
+                (PBYTE)&ProblemCode,
+                sizeof(ProblemCode),
+                NULL,
+                0) &&
+            PropertyType == DEVPROP_TYPE_INT32 && ProblemCode &&
+            SetupDiGetDevicePropertyW(
                 DevInfo,
                 &DevInfoData,
                 &DEVPKEY_Device_ProblemStatus,
@@ -1667,11 +1685,12 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
                 0) &&
             PropertyType == DEVPROP_TYPE_NTSTATUS)
         {
-            LastError = RtlNtStatusToDosError(ProblemStatus);
-            _Analysis_assume_(LastError != ERROR_SUCCESS);
             if (ProblemStatus != STATUS_PNP_DEVICE_CONFIGURATION_PENDING || Tries == 999)
             {
-                LOG_ERROR(LastError, L"Failed to setup adapter (status: 0x%x)", ProblemStatus);
+                LastError = RtlNtStatusToDosError(ProblemStatus);
+                LOG_ERROR(LastError, L"Failed to setup adapter (code: 0x%x, status: 0x%x)", ProblemCode, ProblemStatus);
+                if (LastError == ERROR_SUCCESS)
+                    LastError = ERROR_NOT_READY;
                 goto cleanupTcpipAdapterRegKey;
             }
             Sleep(10);
