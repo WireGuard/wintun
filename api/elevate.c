@@ -77,7 +77,7 @@ _Return_type_success_(return != FALSE) BOOL ElevateToSystem(void)
             LastError = GetLastError();
             continue;
         }
-        Ret = AdjustTokenPrivileges(ThreadToken, FALSE, &Privileges, sizeof(Privileges), NULL, NULL);
+        Ret = AdjustTokenPrivileges(ThreadToken, FALSE, &Privileges, 0, NULL, NULL);
         LastError = GetLastError();
         CloseHandle(ThreadToken);
         if (!Ret)
@@ -170,7 +170,7 @@ _Return_type_success_(return != NULL) HANDLE GetPrimarySystemTokenFromThread(voi
         LastError = LOG_LAST_ERROR(L"Failed to lookup privilege value");
         goto cleanup;
     }
-    Ret = AdjustTokenPrivileges(CurrentToken, FALSE, &Privileges, sizeof(Privileges), NULL, NULL);
+    Ret = AdjustTokenPrivileges(CurrentToken, FALSE, &Privileges, 0, NULL, NULL);
     if (!Ret)
     {
         LastError = LOG_LAST_ERROR(L"Failed to adjust token privileges");
