@@ -899,14 +899,18 @@ _Return_type_success_(return != INVALID_HANDLE_VALUE) HANDLE WINAPI
 }
 
 static BOOL
+IsWindows10(void)
+{
+    DWORD MajorVersion;
+    RtlGetNtVersionNumbers(&MajorVersion, NULL, NULL);
+    return MajorVersion >= 10;
+}
+
+static BOOL
 HaveWHQL(void)
 {
     if (HAVE_WHQL)
-    {
-        DWORD MajorVersion;
-        RtlGetNtVersionNumbers(&MajorVersion, NULL, NULL);
-        return MajorVersion >= 10;
-    }
+        return IsWindows10();
     return FALSE;
 }
 
@@ -1417,6 +1421,9 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
     _Inout_ BOOL *RebootRequired)
 {
     LOG(WINTUN_LOG_INFO, L"Creating adapter");
+
+    if (!IsWindows10())
+        RequestedGUID = NULL;
 
     if (RequestedGUID)
     {
