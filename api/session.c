@@ -154,7 +154,6 @@ out:
 void WINAPI
 WintunEndSession(_In_ TUN_SESSION *Session)
 {
-    SetEvent(Session->Descriptor.Send.TailMoved); // Wake the reader if it's sleeping.
     DeleteCriticalSection(&Session->Send.Lock);
     DeleteCriticalSection(&Session->Receive.Lock);
     CloseHandle(Session->Handle);
