@@ -1452,8 +1452,13 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
         if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, RegPath, 0, KEY_QUERY_VALUE, &Key) == ERROR_SUCCESS)
         {
             RegCloseKey(Key);
-            SetLastError(LOG_ERROR(ERROR_ALREADY_EXISTS, L"Requested GUID is already in use: %s", RequestedGUIDStr));
-            return NULL;
+            NET_LUID Luid;
+            if (ConvertInterfaceGuidToLuid(RequestedGUID, &Luid) == NO_ERROR)
+            {
+                SetLastError(
+                    LOG_ERROR(ERROR_ALREADY_EXISTS, L"Requested GUID is already in use: %s", RequestedGUIDStr));
+                return NULL;
+            }
         }
         LOG(WINTUN_LOG_WARN, L"Requested GUID %s has leftover residue", RequestedGUIDStr);
         HANDLE OriginalToken;
