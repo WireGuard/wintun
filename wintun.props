@@ -7,8 +7,8 @@
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <WintunVersionMaj>0</WintunVersionMaj>
-    <WintunVersionMin>10</WintunVersionMin>
-    <WintunVersionRel>5</WintunVersionRel>
+    <WintunVersionMin>11</WintunVersionMin>
+    <WintunVersionRel>0</WintunVersionRel>
 
     <!-- Used for versioning, must be n.n[.n[.n]]. -->
     <WintunVersion>$(WintunVersionMaj).$(WintunVersionMin)</WintunVersion>
