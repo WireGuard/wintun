@@ -517,13 +517,15 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
             break;
 
         RingHead = TUN_RING_WRAP(RingHead + AlignedPacketSize, RingCapacity);
-        MDL *Mdl = IoAllocateMdl(NULL, PacketSize, FALSE, FALSE, NULL);
+        VOID *PacketAddr =
+            (UCHAR *)MmGetMdlVirtualAddress(Ctx->Device.Receive.Mdl) + (ULONG)(Packet->Data - (UCHAR *)Ring);
+        MDL *Mdl = IoAllocateMdl(PacketAddr, PacketSize, FALSE, FALSE, NULL);
         if (!Mdl)
             goto skipNbl;
         IoBuildPartialMdl(
             Ctx->Device.Receive.Mdl,
             Mdl,
-            (UCHAR *)MmGetMdlVirtualAddress(Ctx->Device.Receive.Mdl) + (ULONG)(Packet->Data - (UCHAR *)Ring),
+            PacketAddr,
             PacketSize);
         NET_BUFFER_LIST *Nbl = NdisAllocateNetBufferAndNetBufferList(Ctx->NblPool, 0, 0, Mdl, 0, PacketSize);
         if (!Nbl)
