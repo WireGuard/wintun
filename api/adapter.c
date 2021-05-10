@@ -1724,19 +1724,8 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
     for (int Tries = 0; Tries < 1000; ++Tries)
     {
         DEVPROPTYPE PropertyType;
-        INT32 ProblemCode;
         NTSTATUS ProblemStatus;
         if (SetupDiGetDevicePropertyW(
-                DevInfo,
-                &DevInfoData,
-                &DEVPKEY_Device_ProblemCode,
-                &PropertyType,
-                (PBYTE)&ProblemCode,
-                sizeof(ProblemCode),
-                NULL,
-                0) &&
-            PropertyType == DEVPROP_TYPE_INT32 && ProblemCode &&
-            SetupDiGetDevicePropertyW(
                 DevInfo,
                 &DevInfoData,
                 &DEVPKEY_Device_ProblemStatus,
@@ -1749,8 +1738,20 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
         {
             if (ProblemStatus != STATUS_PNP_DEVICE_CONFIGURATION_PENDING || Tries == 999)
             {
-                LastError = RtlNtStatusToDosError(ProblemStatus);
+                INT32 ProblemCode;
+                if (!SetupDiGetDevicePropertyW(
+                        DevInfo,
+                        &DevInfoData,
+                        &DEVPKEY_Device_ProblemCode,
+                        &PropertyType,
+                        (PBYTE)&ProblemCode,
+                        sizeof(ProblemCode),
+                        NULL,
+                        0) ||
+                    PropertyType != DEVPROP_TYPE_INT32)
+                    ProblemCode = 0;
                 LOG_ERROR(LastError, L"Failed to setup adapter (code: 0x%x, status: 0x%x)", ProblemCode, ProblemStatus);
+                LastError = RtlNtStatusToDosError(ProblemStatus);
                 if (LastError == ERROR_SUCCESS)
                     LastError = ERROR_NOT_READY;
                 goto cleanupTcpipAdapterRegKey;
