@@ -1427,6 +1427,7 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
 
     if (RequestedGUID)
     {
+        WCHAR *NetworkInstanceId = NULL, *NetSetupInstanceId = NULL;
         WCHAR RegPath[MAX_REG_PATH];
         WCHAR RequestedGUIDStr[MAX_GUID_STRING_LEN];
         int GuidStrLen = StringFromGUID2(RequestedGUID, RequestedGUIDStr, _countof(RequestedGUIDStr)) * sizeof(WCHAR);
@@ -1441,32 +1442,48 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
         HKEY Key;
         if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, RegPath, 0, KEY_QUERY_VALUE, &Key) != ERROR_SUCCESS)
             goto guidIsFresh;
-        WCHAR *InstanceID = RegistryQueryString(Key, L"PnPInstanceId", FALSE);
+        NetworkInstanceId = RegistryQueryString(Key, L"PnPInstanceId", FALSE);
         RegCloseKey(Key);
-        if (!InstanceID)
+        if (!NetworkInstanceId)
             goto guidIsFresh;
-        int Ret = _snwprintf_s(RegPath, MAX_REG_PATH, _TRUNCATE, L"SYSTEM\\CurrentControlSet\\Enum\\%s", InstanceID);
-        Free(InstanceID);
+        int Ret = _snwprintf_s(RegPath, MAX_REG_PATH, _TRUNCATE, L"SYSTEM\\CurrentControlSet\\Enum\\%s", NetworkInstanceId);
         if (Ret == -1)
             goto guidIsFresh;
+        BOOL MightExist = FALSE;
         if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, RegPath, 0, KEY_QUERY_VALUE, &Key) == ERROR_SUCCESS)
         {
             RegCloseKey(Key);
-            NET_LUID Luid;
-            if (ConvertInterfaceGuidToLuid(RequestedGUID, &Luid) == NO_ERROR)
-            {
-                SetLastError(
-                    LOG_ERROR(ERROR_ALREADY_EXISTS, L"Requested GUID is already in use: %s", RequestedGUIDStr));
-                return NULL;
-            }
+            MightExist = TRUE;
         }
-        LOG(WINTUN_LOG_WARN, L"Requested GUID %s has leftover residue", RequestedGUIDStr);
+        if (MightExist && _snwprintf_s(
+                RegPath,
+                MAX_REG_PATH,
+                _TRUNCATE,
+                L"SYSTEM\\CurrentControlSet\\Control\\NetworkSetup2\\Interfaces\\%.*s\\Properties\\{a111f1f4-5923-47c0-9a68-d0bafb577901}\\0032",
+                GuidStrLen,
+                RequestedGUIDStr) == -1)
+            goto guidIsFresh;
         HANDLE OriginalToken;
         if (!ImpersonateService(L"NetSetupSvc", &OriginalToken))
         {
             LOG_LAST_ERROR(L"Unable to impersonate NetSetupSvc");
             goto guidIsFresh; // non-fatal
         }
+        if (MightExist && RegOpenKeyExW(HKEY_LOCAL_MACHINE, RegPath, 0, KEY_QUERY_VALUE, &Key) == ERROR_SUCCESS)
+        {
+            NetSetupInstanceId = RegistryQueryString(Key, NULL, FALSE);
+            RegCloseKey(Key);
+            if (NetSetupInstanceId && !_wcsicmp(NetSetupInstanceId, NetworkInstanceId))
+            {
+                Free(NetSetupInstanceId);
+                Free(NetworkInstanceId);
+                RestoreToken(OriginalToken);
+                SetLastError(
+                    LOG_ERROR(ERROR_ALREADY_EXISTS, L"Requested GUID is already in use: %s", RequestedGUIDStr));
+                return NULL;
+            }
+        }
+        LOG(WINTUN_LOG_WARN, L"Requested GUID %s has leftover residue", RequestedGUIDStr);
         if (_snwprintf_s(
                 RegPath,
                 MAX_REG_PATH,
@@ -1477,7 +1494,9 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
             !RegistryDeleteKeyRecursive(HKEY_LOCAL_MACHINE, RegPath))
             LOG_LAST_ERROR(L"Unable to delete NetworkSetup2 registry key"); // non-fatal
         RestoreToken(OriginalToken);
-    guidIsFresh:;
+    guidIsFresh:
+        Free(NetworkInstanceId);
+        Free(NetSetupInstanceId);
     }
 
     HDEVINFO DevInfo = SetupDiCreateDeviceInfoListExW(&GUID_DEVCLASS_NET, NULL, NULL, NULL);

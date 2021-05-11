@@ -237,6 +237,7 @@ _Return_type_success_(
         return NULL;
     switch (ValueType)
     {
+    case 0xffff0012:
     case REG_SZ:
     case REG_EXPAND_SZ:
     case REG_MULTI_SZ:
