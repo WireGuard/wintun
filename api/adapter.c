@@ -3,6 +3,22 @@
  * Copyright (C) 2018-2021 WireGuard LLC. All Rights Reserved.
  */
 
+#include <WinSock2.h>
+#include <Windows.h>
+#include <winternl.h>
+#define _NTDEF_ /* TODO: figure out how to include ntsecapi and winternal together without requiring this */
+#include <cfgmgr32.h>
+#include <devguid.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
+#include <ndisguid.h>
+#include <NTSecAPI.h>
+#include <SetupAPI.h>
+#include <Shlwapi.h>
+#include <wchar.h>
+#include <initguid.h> /* Keep these two at bottom in this order, so that we only generate extra GUIDs for devpkey. The other keys we'll get from uuid.lib like usual. */
+#include <devpkey.h>
+
 #include "adapter.h"
 #include "elevate.h"
 #include "entry.h"
@@ -13,20 +29,6 @@
 #include "registry.h"
 #include "resource.h"
 #include "wintun-inf.h"
-
-#include <Windows.h>
-#include <winternl.h>
-#define _NTDEF_ /* TODO: figure out how to include ntsecapi and winternal together without requiring this */
-#include <cfgmgr32.h>
-#include <devguid.h>
-#include <iphlpapi.h>
-#include <ndisguid.h>
-#include <NTSecAPI.h>
-#include <SetupAPI.h>
-#include <Shlwapi.h>
-#include <wchar.h>
-#include <initguid.h> /* Keep these two at bottom in this order, so that we only generate extra GUIDs for devpkey. The other keys we'll get from uuid.lib like usual. */
-#include <devpkey.h>
 
 #pragma warning(disable : 4221) /* nonstandard: address of automatic in initializer */
 
@@ -1452,8 +1454,9 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
         if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, RegPath, 0, KEY_QUERY_VALUE, &Key) == ERROR_SUCCESS)
         {
             RegCloseKey(Key);
-            NET_LUID Luid;
-            if (ConvertInterfaceGuidToLuid(RequestedGUID, &Luid) == NO_ERROR)
+            MIB_IF_ROW2 IfRow = { 0 };
+            if (ConvertInterfaceGuidToLuid(RequestedGUID, &IfRow.InterfaceLuid) == NO_ERROR &&
+                GetIfEntry2(&IfRow) == NO_ERROR && IfRow.OperStatus != IfOperStatusNotPresent)
             {
                 SetLastError(
                     LOG_ERROR(ERROR_ALREADY_EXISTS, L"Requested GUID is already in use: %s", RequestedGUIDStr));
