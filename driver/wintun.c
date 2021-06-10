@@ -1098,6 +1098,7 @@ TunInitializeEx(
         .RcvLinkSpeed = TUN_LINK_SPEED,
         .XmitLinkSpeed = TUN_LINK_SPEED,
         .MediaConnectState = MediaConnectStateDisconnected,
+        .MediaDuplexState = MediaDuplexStateFull,
         .LookaheadSize = TUN_MAX_IP_PACKET_SIZE,
         .MacOptions =
             NDIS_MAC_OPTION_TRANSFERS_NOT_PEND | NDIS_MAC_OPTION_COPY_LOOKAHEAD_DATA | NDIS_MAC_OPTION_NO_LOOPBACK,
@@ -1123,10 +1124,6 @@ TunInitializeEx(
             MiniportAdapterHandle, (PNDIS_MINIPORT_ADAPTER_ATTRIBUTES)&AdapterGeneralAttributes)))
         goto cleanupFreeNblPool;
 
-    /* A miniport driver can call NdisMIndicateStatusEx after setting its
-     * registration attributes even if the driver is still in the context
-     * of the MiniportInitializeEx function. */
-    TunIndicateStatus(Ctx->MiniportAdapterHandle, MediaConnectStateDisconnected);
     return NDIS_STATUS_SUCCESS;
 
 cleanupFreeNblPool:
