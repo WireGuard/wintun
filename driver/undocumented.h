@@ -44,3 +44,23 @@ NTSYSAPI
 NTSTATUS
 NTAPI
 ZwYieldExecution(VOID);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlSetSaclSecurityDescriptor(
+    _In_ PSECURITY_DESCRIPTOR SecurityDescriptor,
+    _In_ BOOLEAN SaclPresent,
+    _In_opt_ PACL Sacl,
+    _In_opt_ BOOLEAN SaclDefaulted);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlAddMandatoryAce(
+    _Inout_ PACL Acl,
+    _In_ ULONG AceRevision,
+    _In_ ULONG AceFlags,
+    _In_ PSID Sid,
+    _In_ UCHAR AceType,
+    _In_ ULONG AccessMask);

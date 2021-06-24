@@ -845,27 +845,69 @@ _Use_decl_annotations_
 static NTSTATUS TunInitializeDispatchSecurityDescriptor(VOID)
 {
     NTSTATUS Status;
-    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
-    SID LocalSystem = { 0 };
-    if (!NT_SUCCESS(Status = RtlInitializeSid(&LocalSystem, &NtAuthority, 1)))
+    struct
+    {
+        SID Sid;
+    } LocalSystem;
+    struct
+    {
+        SID Sid;
+        ULONG ExtraAuthority;
+    } BuiltinAdministrators;
+    struct
+    {
+        SID Sid;
+    } HighLabel;
+    ULONG SidSize = sizeof(LocalSystem);
+    if (!NT_SUCCESS(Status = SecLookupWellKnownSid(WinLocalSystemSid, &LocalSystem.Sid, SidSize, &SidSize)))
         return Status;
-    *RtlSubAuthoritySid(&LocalSystem, 0) = SECURITY_LOCAL_SYSTEM_RID;
+    SidSize = sizeof(BuiltinAdministrators);
+    if (!NT_SUCCESS(
+            Status = SecLookupWellKnownSid(WinBuiltinAdministratorsSid, &BuiltinAdministrators.Sid, SidSize, &SidSize)))
+        return Status;
+    SidSize = sizeof(HighLabel);
+    if (!NT_SUCCESS(Status = SecLookupWellKnownSid(WinHighLabelSid, &HighLabel.Sid, SidSize, &SidSize)))
+        return Status;
     struct
     {
         ACL Dacl;
-        ACCESS_ALLOWED_ACE AceFiller;
-        SID SidFiller;
+        ACCESS_ALLOWED_ACE Ace1;
+        SID Sid1;
+        ACCESS_ALLOWED_ACE Ace2;
+        SID Sid2;
     } DaclStorage = { 0 };
+    struct
+    {
+        ACL Sacl;
+        SYSTEM_MANDATORY_LABEL_ACE Ace;
+        SID Sid;
+    } SaclStorage = { 0 };
     if (!NT_SUCCESS(Status = RtlCreateAcl(&DaclStorage.Dacl, sizeof(DaclStorage), ACL_REVISION)))
+        return Status;
+    if (!NT_SUCCESS(Status = RtlCreateAcl(&SaclStorage.Sacl, sizeof(SaclStorage), ACL_REVISION)))
         return Status;
     ACCESS_MASK AccessMask = GENERIC_ALL;
     RtlMapGenericMask(&AccessMask, IoGetFileObjectGenericMapping());
-    if (!NT_SUCCESS(Status = RtlAddAccessAllowedAce(&DaclStorage.Dacl, ACL_REVISION, AccessMask, &LocalSystem)))
+    if (!NT_SUCCESS(Status = RtlAddAccessAllowedAce(&DaclStorage.Dacl, ACL_REVISION, AccessMask, &LocalSystem.Sid)))
+        return Status;
+    if (!NT_SUCCESS(
+            Status = RtlAddAccessAllowedAce(&DaclStorage.Dacl, ACL_REVISION, AccessMask, &BuiltinAdministrators.Sid)))
+        return Status;
+    if (!NT_SUCCESS(RtlAddMandatoryAce(
+            &SaclStorage.Sacl,
+            ACL_REVISION,
+            0,
+            &HighLabel.Sid,
+            SYSTEM_MANDATORY_LABEL_ACE_TYPE,
+            SYSTEM_MANDATORY_LABEL_NO_READ_UP | SYSTEM_MANDATORY_LABEL_NO_WRITE_UP |
+                SYSTEM_MANDATORY_LABEL_NO_EXECUTE_UP)))
         return Status;
     SECURITY_DESCRIPTOR SecurityDescriptor = { 0 };
     if (!NT_SUCCESS(Status = RtlCreateSecurityDescriptor(&SecurityDescriptor, SECURITY_DESCRIPTOR_REVISION)))
         return Status;
     if (!NT_SUCCESS(Status = RtlSetDaclSecurityDescriptor(&SecurityDescriptor, TRUE, &DaclStorage.Dacl, FALSE)))
+        return Status;
+    if (!NT_SUCCESS(Status = RtlSetSaclSecurityDescriptor(&SecurityDescriptor, TRUE, &SaclStorage.Sacl, FALSE)))
         return Status;
     SecurityDescriptor.Control |= SE_DACL_PROTECTED;
     ULONG RequiredBytes = 0;
