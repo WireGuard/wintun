@@ -8,6 +8,7 @@ Class = Net
 ClassGUID = {4D36E972-E325-11CE-BFC1-08002BE10318}
 Provider = %Wintun.CompanyName%
 CatalogFile.NT = wintun.cat
+PnpLockdown = 1
 
 [Manufacturer]
 %Wintun.CompanyName% = %Wintun.Name%, NT$ARCH$
