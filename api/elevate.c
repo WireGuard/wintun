@@ -9,19 +9,19 @@
 #include <Windows.h>
 #include <TlHelp32.h>
 
-_Return_type_success_(return != FALSE) BOOL ElevateToSystem(void)
+static _Return_type_success_(return != FALSE) BOOL ElevateToSystem(void)
 {
     HANDLE CurrentProcessToken, ThreadToken, ProcessSnapshot, WinlogonProcess, WinlogonToken, DuplicatedToken;
     PROCESSENTRY32W ProcessEntry = { .dwSize = sizeof(PROCESSENTRY32W) };
     BOOL Ret;
     DWORD LastError = ERROR_SUCCESS;
     TOKEN_PRIVILEGES Privileges = { .PrivilegeCount = 1, .Privileges = { { .Attributes = SE_PRIVILEGE_ENABLED } } };
-    CHAR LocalSystemSid[0x400];
+    CHAR LocalSystemSid[MAX_SID_SIZE];
     DWORD RequiredBytes = sizeof(LocalSystemSid);
     struct
     {
         TOKEN_USER MaybeLocalSystem;
-        CHAR LargeEnoughForLocalSystem[0x400];
+        CHAR LargeEnoughForLocalSystem[MAX_SID_SIZE];
     } TokenUserBuffer;
 
     Ret = CreateWellKnownSid(WinLocalSystemSid, NULL, &LocalSystemSid, &RequiredBytes);
@@ -46,7 +46,7 @@ _Return_type_success_(return != FALSE) BOOL ElevateToSystem(void)
         goto cleanup;
     }
     if (EqualSid(TokenUserBuffer.MaybeLocalSystem.User.Sid, LocalSystemSid))
-        return TRUE;
+        return ImpersonateSelf(SecurityImpersonation);
     Ret = LookupPrivilegeValueW(NULL, SE_DEBUG_NAME, &Privileges.Privileges[0].Luid);
     if (!Ret)
     {
@@ -122,81 +122,6 @@ cleanup:
     return FALSE;
 }
 
-_Return_type_success_(return != NULL) HANDLE GetPrimarySystemTokenFromThread(void)
-{
-    HANDLE CurrentToken, DuplicatedToken;
-    BOOL Ret;
-    DWORD LastError;
-    TOKEN_PRIVILEGES Privileges = { .PrivilegeCount = 1, .Privileges = { { .Attributes = SE_PRIVILEGE_ENABLED } } };
-    CHAR LocalSystemSid[0x400];
-    DWORD RequiredBytes = sizeof(LocalSystemSid);
-    struct
-    {
-        TOKEN_USER MaybeLocalSystem;
-        CHAR LargeEnoughForLocalSystem[0x400];
-    } TokenUserBuffer;
-
-    Ret = CreateWellKnownSid(WinLocalSystemSid, NULL, &LocalSystemSid, &RequiredBytes);
-    if (!Ret)
-    {
-        LastError = LOG_LAST_ERROR(L"Failed to create SID");
-        return NULL;
-    }
-    Ret = OpenThreadToken(
-        GetCurrentThread(), TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES | TOKEN_DUPLICATE, FALSE, &CurrentToken);
-    if (!Ret && GetLastError() == ERROR_NO_TOKEN)
-        Ret = OpenProcessToken(
-            GetCurrentProcess(), TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES | TOKEN_DUPLICATE, &CurrentToken);
-    if (!Ret)
-    {
-        LastError = LOG_LAST_ERROR(L"Failed to open token");
-        return NULL;
-    }
-    Ret = GetTokenInformation(CurrentToken, TokenUser, &TokenUserBuffer, sizeof(TokenUserBuffer), &RequiredBytes);
-    if (!Ret)
-    {
-        LastError = LOG_LAST_ERROR(L"Failed to get token information");
-        goto cleanup;
-    }
-    if (!EqualSid(TokenUserBuffer.MaybeLocalSystem.User.Sid, LocalSystemSid))
-    {
-        LOG(WINTUN_LOG_ERR, L"Not SYSTEM");
-        LastError = ERROR_ACCESS_DENIED;
-        goto cleanup;
-    }
-    Ret = LookupPrivilegeValueW(NULL, SE_ASSIGNPRIMARYTOKEN_NAME, &Privileges.Privileges[0].Luid);
-    if (!Ret)
-    {
-        LastError = LOG_LAST_ERROR(L"Failed to lookup privilege value");
-        goto cleanup;
-    }
-    Ret = AdjustTokenPrivileges(CurrentToken, FALSE, &Privileges, 0, NULL, NULL);
-    if (!Ret)
-    {
-        LastError = LOG_LAST_ERROR(L"Failed to adjust token privileges");
-        goto cleanup;
-    }
-    Ret = DuplicateTokenEx(
-        CurrentToken,
-        TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
-        NULL,
-        SecurityImpersonation,
-        TokenPrimary,
-        &DuplicatedToken);
-    if (!Ret)
-    {
-        LastError = LOG_LAST_ERROR(L"Failed to duplicate token");
-        goto cleanup;
-    }
-    CloseHandle(CurrentToken);
-    return DuplicatedToken;
-
-cleanup:
-    CloseHandle(CurrentToken);
-    SetLastError(LastError);
-    return NULL;
-}
-
 _Return_type_success_(return != FALSE) BOOL ImpersonateService(_In_z_ WCHAR *ServiceName, _In_ HANDLE *OriginalToken)
 {
     HANDLE ThreadToken, ServiceProcess, ServiceToken, DuplicatedToken;
@@ -212,19 +137,13 @@ _Return_type_success_(return != FALSE) BOOL ImpersonateService(_In_z_ WCHAR *Ser
         GetLastError() != ERROR_NO_TOKEN)
         return FALSE;
 
+    if (!ElevateToSystem())
+        goto cleanup;
+
     if (!LookupPrivilegeValueW(NULL, SE_DEBUG_NAME, &Privileges.Privileges[0].Luid))
     {
         LastError = LOG_LAST_ERROR(L"Failed to lookup privilege value");
         goto cleanup;
-    }
-    if (!*OriginalToken)
-    {
-        RevertToSelf();
-        if (!ImpersonateSelf(SecurityImpersonation))
-        {
-            LastError = LOG_LAST_ERROR(L"Failed to impersonate self");
-            goto cleanup;
-        }
     }
     if (!OpenThreadToken(GetCurrentThread(), TOKEN_ADJUST_PRIVILEGES, FALSE, &ThreadToken))
     {

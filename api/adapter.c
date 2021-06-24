@@ -668,18 +668,13 @@ WintunFreeAdapter(_In_ WINTUN_ADAPTER *Adapter)
 _Return_type_success_(return != NULL) WINTUN_ADAPTER *WINAPI
     WintunOpenAdapter(_In_z_ const WCHAR *Pool, _In_z_ const WCHAR *Name)
 {
-    if (!ElevateToSystem())
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user");
-        return NULL;
-    }
     DWORD LastError;
     WINTUN_ADAPTER *Adapter = NULL;
     HANDLE Mutex = NamespaceTakePoolMutex(Pool);
     if (!Mutex)
     {
         LastError = LOG(WINTUN_LOG_ERR, L"Failed to take %s pool mutex", Pool);
-        goto cleanupToken;
+        goto cleanup;
     }
 
     HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
@@ -759,8 +754,7 @@ cleanupDevInfo:
     SetupDiDestroyDeviceInfoList(DevInfo);
 cleanupMutex:
     NamespaceReleaseMutex(Mutex);
-cleanupToken:
-    RevertToSelf();
+cleanup:
     SetLastError(LastError);
     return Adapter;
 }
@@ -1840,11 +1834,6 @@ _Return_type_success_(return != NULL) WINTUN_ADAPTER *WINAPI WintunCreateAdapter
     _In_opt_ const GUID *RequestedGUID,
     _Out_opt_ BOOL *RebootRequired)
 {
-    if (!ElevateToSystem())
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user");
-        return NULL;
-    }
     BOOL DummyRebootRequired;
     if (!RebootRequired)
         RebootRequired = &DummyRebootRequired;
@@ -1855,12 +1844,11 @@ _Return_type_success_(return != NULL) WINTUN_ADAPTER *WINAPI WintunCreateAdapter
     {
         Adapter = CreateAdapterViaRundll32(Pool, Name, RequestedGUID, RebootRequired);
         LastError = Adapter ? ERROR_SUCCESS : GetLastError();
-        goto cleanupToken;
+        goto cleanup;
     }
     Adapter = CreateAdapter(Pool, Name, RequestedGUID, RebootRequired);
     LastError = Adapter ? ERROR_SUCCESS : GetLastError();
-cleanupToken:
-    RevertToSelf();
+cleanup:
     return RET_ERROR(Adapter, LastError);
 }
 
@@ -1869,11 +1857,6 @@ _Return_type_success_(return != FALSE) BOOL WINAPI WintunDeleteAdapter(
     _In_ BOOL ForceCloseSessions,
     _Out_opt_ BOOL *RebootRequired)
 {
-    if (!ElevateToSystem())
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user");
-        return FALSE;
-    }
     BOOL DummyRebootRequired;
     if (!RebootRequired)
         RebootRequired = &DummyRebootRequired;
@@ -1883,14 +1866,14 @@ _Return_type_success_(return != FALSE) BOOL WINAPI WintunDeleteAdapter(
     {
         LastError =
             DeleteAdapterViaRundll32(Adapter, ForceCloseSessions, RebootRequired) ? ERROR_SUCCESS : GetLastError();
-        goto cleanupToken;
+        goto cleanup;
     }
 
     HANDLE Mutex = NamespaceTakePoolMutex(Adapter->Pool);
     if (!Mutex)
     {
         LastError = LOG(WINTUN_LOG_ERR, L"Failed to take %s pool mutex", Adapter->Pool);
-        goto cleanupToken;
+        goto cleanup;
     }
 
     HDEVINFO DevInfo;
@@ -1930,8 +1913,7 @@ cleanupDevInfo:
     SetupDiDestroyDeviceInfoList(DevInfo);
 cleanupMutex:
     NamespaceReleaseMutex(Mutex);
-cleanupToken:
-    RevertToSelf();
+cleanup:
     return RET_ERROR(TRUE, LastError);
 }
 
@@ -1990,12 +1972,6 @@ cleanupMutex:
 _Return_type_success_(return != FALSE) BOOL WINAPI
     WintunDeletePoolDriver(_In_z_ const WCHAR *Pool, _Out_opt_ BOOL *RebootRequired)
 {
-    if (!ElevateToSystem())
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user");
-        return FALSE;
-    }
-
     BOOL DummyRebootRequired;
     if (!RebootRequired)
         RebootRequired = &DummyRebootRequired;
@@ -2005,20 +1981,20 @@ _Return_type_success_(return != FALSE) BOOL WINAPI
     if (MAYBE_WOW64 && NativeMachine != IMAGE_FILE_PROCESS)
     {
         LastError = DeletePoolDriverViaRundll32(Pool, RebootRequired) ? ERROR_SUCCESS : GetLastError();
-        goto cleanupToken;
+        goto cleanup;
     }
 
     if (!DeleteAllOurAdapters(Pool, RebootRequired))
     {
         LastError = GetLastError();
-        goto cleanupToken;
+        goto cleanup;
     }
 
     HANDLE DriverInstallationLock = NamespaceTakeDriverInstallationMutex();
     if (!DriverInstallationLock)
     {
         LastError = LOG(WINTUN_LOG_ERR, L"Failed to take driver installation mutex");
-        goto cleanupToken;
+        goto cleanup;
     }
     HDEVINFO DeviceInfoSet = SetupDiGetClassDevsW(&GUID_DEVCLASS_NET, NULL, NULL, 0);
     if (!DeviceInfoSet)
@@ -2060,25 +2036,19 @@ cleanupDeviceInfoSet:
     SetupDiDestroyDeviceInfoList(DeviceInfoSet);
 cleanupDriverInstallationLock:
     NamespaceReleaseMutex(DriverInstallationLock);
-cleanupToken:
-    RevertToSelf();
+cleanup:
     return RET_ERROR(TRUE, LastError);
 }
 
 _Return_type_success_(return != FALSE) BOOL WINAPI
     WintunEnumAdapters(_In_z_ const WCHAR *Pool, _In_ WINTUN_ENUM_CALLBACK Func, _In_ LPARAM Param)
 {
-    if (!ElevateToSystem())
-    {
-        LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user");
-        return FALSE;
-    }
     DWORD LastError = ERROR_SUCCESS;
     HANDLE Mutex = NamespaceTakePoolMutex(Pool);
     if (!Mutex)
     {
         LastError = LOG(WINTUN_LOG_ERR, L"Failed to take %s pool mutex", Pool);
-        goto cleanupToken;
+        goto cleanup;
     }
     HDEVINFO DevInfo = SetupDiGetClassDevsExW(&GUID_DEVCLASS_NET, NULL, NULL, DIGCF_PRESENT, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)
@@ -2112,7 +2082,6 @@ _Return_type_success_(return != FALSE) BOOL WINAPI
     SetupDiDestroyDeviceInfoList(DevInfo);
 cleanupMutex:
     NamespaceReleaseMutex(Mutex);
-cleanupToken:
-    RevertToSelf();
+cleanup:
     return RET_ERROR(TRUE, LastError);
 }

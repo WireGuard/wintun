@@ -77,7 +77,7 @@ _Return_type_success_(return != NULL) TUN_SESSION *WINAPI
     if (!Session)
     {
         LastError = GetLastError();
-        goto out;
+        goto cleanup;
     }
     const ULONG RingSize = TUN_RING_SIZE(Capacity);
     BYTE *AllocatedRegion = VirtualAlloc(0, (size_t)RingSize * 2, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
@@ -86,18 +86,13 @@ _Return_type_success_(return != NULL) TUN_SESSION *WINAPI
         LastError = LOG_LAST_ERROR(L"Failed to allocate ring memory (requested size: 0x%zx)", (size_t)RingSize * 2);
         goto cleanupRings;
     }
-    if (!ElevateToSystem())
-    {
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to impersonate SYSTEM user");
-        goto cleanupAllocatedRegion;
-    }
     Session->Descriptor.Send.RingSize = RingSize;
     Session->Descriptor.Send.Ring = (TUN_RING *)AllocatedRegion;
     Session->Descriptor.Send.TailMoved = CreateEventW(&SecurityAttributes, FALSE, FALSE, NULL);
     if (!Session->Descriptor.Send.TailMoved)
     {
         LastError = LOG_LAST_ERROR(L"Failed to create send event");
-        goto cleanupToken;
+        goto cleanupAllocatedRegion;
     }
 
     Session->Descriptor.Receive.RingSize = RingSize;
@@ -129,7 +124,6 @@ _Return_type_success_(return != NULL) TUN_SESSION *WINAPI
         LastError = LOG_LAST_ERROR(L"Failed to register rings");
         goto cleanupHandle;
     }
-    RevertToSelf();
     Session->Capacity = Capacity;
     (void)InitializeCriticalSectionAndSpinCount(&Session->Receive.Lock, LOCK_SPIN_COUNT);
     (void)InitializeCriticalSectionAndSpinCount(&Session->Send.Lock, LOCK_SPIN_COUNT);
@@ -140,13 +134,11 @@ cleanupReceiveTailMoved:
     CloseHandle(Session->Descriptor.Receive.TailMoved);
 cleanupSendTailMoved:
     CloseHandle(Session->Descriptor.Send.TailMoved);
-cleanupToken:
-    RevertToSelf();
 cleanupAllocatedRegion:
     VirtualFree(AllocatedRegion, 0, MEM_RELEASE);
 cleanupRings:
     Free(Session);
-out:
+cleanup:
     SetLastError(LastError);
     return NULL;
 }

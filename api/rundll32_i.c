@@ -176,23 +176,15 @@ static _Return_type_success_(return != FALSE) BOOL ExecuteRunDll32(
                         .hStdOutput = StreamWStdout,
                         .hStdError = StreamWStderr };
     PROCESS_INFORMATION pi;
-    HANDLE ProcessToken = GetPrimarySystemTokenFromThread();
-    if (!ProcessToken)
-    {
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get primary system token from thread");
-        goto cleanupThreads;
-    }
-    if (!CreateProcessAsUserW(ProcessToken, RunDll32Path, CommandLine, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
+    if (!CreateProcessW(RunDll32Path, CommandLine, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
     {
         LastError = LOG_LAST_ERROR(L"Failed to create process: %s", CommandLine);
-        goto cleanupToken;
+        goto cleanupThreads;
     }
     LastError = ERROR_SUCCESS;
     WaitForSingleObject(pi.hProcess, INFINITE);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
-cleanupToken:
-    CloseHandle(ProcessToken);
 cleanupThreads:
     if (ThreadStderr)
     {

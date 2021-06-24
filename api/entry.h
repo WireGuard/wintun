@@ -29,3 +29,4 @@
 extern HINSTANCE ResourceModule;
 extern HANDLE ModuleHeap;
 extern SECURITY_ATTRIBUTES SecurityAttributes;
+extern BOOL IsLocalSystem;

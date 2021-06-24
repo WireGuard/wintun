@@ -59,8 +59,8 @@ static _Return_type_success_(return != FALSE) BOOL NamespaceRuntimeInit(void)
     }
 
     BYTE Sid[MAX_SID_SIZE];
-    DWORD SidSize = MAX_SID_SIZE;
-    if (!CreateWellKnownSid(WinLocalSystemSid, NULL, Sid, &SidSize))
+    DWORD SidSize = sizeof(Sid);
+    if (!CreateWellKnownSid(IsLocalSystem ? WinLocalSystemSid : WinBuiltinAdministratorsSid, NULL, Sid, &SidSize))
     {
         LastError = LOG_LAST_ERROR(L"Failed to create SID");
         goto cleanupBCryptCloseAlgorithmProvider;
