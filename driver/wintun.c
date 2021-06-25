@@ -184,7 +184,15 @@ static NDIS_HANDLE NdisMiniportDriverHandle;
 static DRIVER_DISPATCH *NdisDispatchDeviceControl, *NdisDispatchClose;
 static ERESOURCE TunDispatchCtxGuard, TunDispatchDeviceListLock;
 static RTL_STATIC_LIST_HEAD(TunDispatchDeviceList);
-static SECURITY_DESCRIPTOR *TunDispatchSecurityDescriptor;
+/* Binary representation of O:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)S:(ML;;NWNRNX;;;HI) */
+static SECURITY_DESCRIPTOR *TunDispatchSecurityDescriptor = (SECURITY_DESCRIPTOR *)(__declspec(align(8)) UCHAR[]){
+    0x01, 0x00, 0x14, 0x90, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x30, 0x00, 0x00,
+    0x00, 0x02, 0x00, 0x1c, 0x00, 0x01, 0x00, 0x00, 0x00, 0x11, 0x00, 0x14, 0x00, 0x07, 0x00, 0x00, 0x00, 0x01, 0x01,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x30, 0x00, 0x00, 0x02, 0x00, 0x34, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x14, 0x00, 0xff, 0x01, 0x1f, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x12, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x18, 0x00, 0xff, 0x01, 0x1f, 0x00, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x20, 0x00, 0x00,
+    0x00, 0x20, 0x02, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x12, 0x00, 0x00, 0x00
+};
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 static VOID
@@ -836,19 +844,6 @@ cleanup:
     return DidClose;
 }
 
-_Must_inspect_result_
-static NTSTATUS TunInitializeDispatchSecurityDescriptor(VOID);
-#ifdef ALLOC_PRAGMA
-#    pragma alloc_text(INIT, TunInitializeDispatchSecurityDescriptor)
-#endif
-_Use_decl_annotations_
-static NTSTATUS TunInitializeDispatchSecurityDescriptor(VOID)
-{
-    UNICODE_STRING Sddl;
-    RtlInitUnicodeString(&Sddl, L"O:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)S:(ML;;NWNRNX;;;HI)");
-    return SeSddlSecurityDescriptorFromSDDL(&Sddl, FALSE, &TunDispatchSecurityDescriptor);
-}
-
 _IRQL_requires_max_(PASSIVE_LEVEL)
 static VOID
 TunProcessNotification(HANDLE ParentId, HANDLE ProcessId, BOOLEAN Create)
@@ -1416,7 +1411,6 @@ TunUnload(PDRIVER_OBJECT DriverObject)
     NdisMDeregisterMiniportDriver(NdisMiniportDriverHandle);
     ExDeleteResourceLite(&TunDispatchCtxGuard);
     ExDeleteResourceLite(&TunDispatchDeviceListLock);
-    ExFreePool(TunDispatchSecurityDescriptor);
 }
 
 DRIVER_INITIALIZE DriverEntry;
@@ -1435,8 +1429,6 @@ DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
     if (NdisVersion > NDIS_MINIPORT_VERSION_MAX)
         NdisVersion = NDIS_MINIPORT_VERSION_MAX;
 
-    if (!NT_SUCCESS(Status = TunInitializeDispatchSecurityDescriptor()))
-        return Status;
     ExInitializeResourceLite(&TunDispatchCtxGuard);
     ExInitializeResourceLite(&TunDispatchDeviceListLock);
 
@@ -1492,6 +1484,5 @@ cleanupNotifier:
 cleanupResources:
     ExDeleteResourceLite(&TunDispatchCtxGuard);
     ExDeleteResourceLite(&TunDispatchDeviceListLock);
-    ExFreePool(TunDispatchSecurityDescriptor);
     return Status;
 }
