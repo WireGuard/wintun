@@ -522,11 +522,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         MDL *Mdl = IoAllocateMdl(PacketAddr, PacketSize, FALSE, FALSE, NULL);
         if (!Mdl)
             goto skipNbl;
-        IoBuildPartialMdl(
-            Ctx->Device.Receive.Mdl,
-            Mdl,
-            PacketAddr,
-            PacketSize);
+        IoBuildPartialMdl(Ctx->Device.Receive.Mdl, Mdl, PacketAddr, PacketSize);
         NET_BUFFER_LIST *Nbl = NdisAllocateNetBufferAndNetBufferList(Ctx->NblPool, 0, 0, Mdl, 0, PacketSize);
         if (!Nbl)
             goto cleanupMdl;
