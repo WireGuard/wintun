@@ -4,7 +4,6 @@
  */
 
 #include "adapter.h"
-#include "elevate.h"
 #include "entry.h"
 #include "logger.h"
 #include "wintun.h"

@@ -49,9 +49,6 @@
     <ClInclude Include="wintun.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="elevate.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="entry.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -82,9 +79,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="session.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="elevate.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="entry.c">

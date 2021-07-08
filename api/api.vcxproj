@@ -156,7 +156,6 @@
   <ItemGroup>
     <ClInclude Include="entry.h" />
     <ClInclude Include="adapter.h" />
-    <ClInclude Include="elevate.h" />
     <ClInclude Include="rundll32_i.c">
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </ClInclude>
@@ -171,7 +170,6 @@
   <ItemGroup>
     <ClCompile Include="entry.c" />
     <ClCompile Include="adapter.c" />
-    <ClCompile Include="elevate.c" />
     <ClCompile Include="logger.c" />
     <ClCompile Include="namespace.c" />
     <ClCompile Include="registry.c" />
