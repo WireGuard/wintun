@@ -1747,10 +1747,10 @@ static _Return_type_success_(return != NULL) WINTUN_ADAPTER *CreateAdapter(
                         0) ||
                     PropertyType != DEVPROP_TYPE_INT32)
                     ProblemCode = 0;
-                LOG_ERROR(LastError, L"Failed to setup adapter (code: 0x%x, status: 0x%x)", ProblemCode, ProblemStatus);
                 LastError = RtlNtStatusToDosError(ProblemStatus);
                 if (LastError == ERROR_SUCCESS)
                     LastError = ERROR_NOT_READY;
+                LOG_ERROR(LastError, L"Failed to setup adapter (code: 0x%x, status: 0x%x)", ProblemCode, ProblemStatus);
                 goto cleanupTcpipAdapterRegKey;
             }
             Sleep(10);
