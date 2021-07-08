@@ -228,7 +228,7 @@ static _Return_type_success_(return != NULL) WCHAR *GetDeviceObjectFileName(_In_
     }
     if (!Interfaces[0])
     {
-        LOG(WINTUN_LOG_ERR, L"Received empty adapter object file name");
+        LOG(WINTUN_LOG_ERR, L"Received empty adapter %s object file name", InstanceId);
         Free(Interfaces);
         SetLastError(ERROR_DEVICE_NOT_AVAILABLE);
         return NULL;
