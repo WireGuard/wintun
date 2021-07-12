@@ -79,19 +79,20 @@
     <_ProjectFileVersion>15.0.28127.55</_ProjectFileVersion>
     <IntDir>..\$(Configuration)\$(WintunPlatform)\$(ProjectName)-intermediate\</IntDir>
     <OutDir>..\$(ConfigurationName)\$(WintunPlatform)\</OutDir>
-    <RunCodeAnalysis>true</RunCodeAnalysis>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)'=='Release'">
-    <CodeAnalysisRuleSet>$(WDKContentRoot)CodeAnalysis\DriverMustFixRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <RunCodeAnalysis>true</RunCodeAnalysis>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RunCodeAnalysis)'=='true'">
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <ClCompile>
+      <EnablePREfast>true</EnablePREfast>
+    </ClCompile>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <PreprocessorDefinitions>NDIS_MINIPORT_DRIVER=1;NDIS620_MINIPORT=1;NDIS683_MINIPORT=1;NDIS_WDM=1;POOL_ZERO_DOWN_LEVEL_SUPPORT;POOL_NX_OPTIN=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:iso %(AdditionalOptions)</AdditionalOptions>
-      <EnablePREfast>true</EnablePREfast>
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>NDIS_MINIPORT_DRIVER=1;NDIS620_MINIPORT=1;NDIS683_MINIPORT=1;NDIS_WDM=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
