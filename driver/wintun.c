@@ -988,10 +988,10 @@ TunInitializeEx(
 
 /* Leaking memory 'Ctx'. Note: 'Ctx' is freed in TunHaltEx or on failure. */
 #pragma warning(suppress : 6014)
-    TUN_CTX *Ctx = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(*Ctx), TUN_MEMORY_TAG);
+#pragma warning(suppress : 28160)
+    TUN_CTX *Ctx = ExAllocatePoolZero(NonPagedPool, sizeof(*Ctx), TUN_MEMORY_TAG);
     if (!Ctx)
         return NDIS_STATUS_FAILURE;
-    NdisZeroMemory(Ctx, sizeof(*Ctx));
 
     Ctx->MiniportAdapterHandle = MiniportAdapterHandle;
 
@@ -1419,6 +1419,8 @@ NTSTATUS
 DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
 {
     NTSTATUS Status;
+
+    ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
 
     NdisVersion = NdisGetVersion();
     if (NdisVersion < NDIS_MINIPORT_VERSION_MIN)
