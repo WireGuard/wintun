@@ -8,6 +8,7 @@
 #include <Windows.h>
 #include <winternl.h>
 #include <wchar.h>
+#include <stdlib.h>
 
 static BOOL CALLBACK
 NopLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)

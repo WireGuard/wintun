@@ -6,18 +6,19 @@
 #include <WinSock2.h>
 #include <Windows.h>
 #include <winternl.h>
-#define _NTDEF_ /* TODO: figure out how to include ntsecapi and winternal together without requiring this */
+#include <wincrypt.h>
 #include <cfgmgr32.h>
 #include <devguid.h>
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
 #include <ndisguid.h>
-#include <NTSecAPI.h>
 #include <SetupAPI.h>
 #include <Shlwapi.h>
+#include <shellapi.h>
 #include <wchar.h>
 #include <initguid.h> /* Keep these two at bottom in this order, so that we only generate extra GUIDs for devpkey. The other keys we'll get from uuid.lib like usual. */
 #include <devpkey.h>
+#include <devioctl.h>
 
 #include "adapter.h"
 #include "entry.h"

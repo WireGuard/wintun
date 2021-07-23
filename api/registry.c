@@ -8,6 +8,7 @@
 #include "registry.h"
 #include <Windows.h>
 #include <wchar.h>
+#include <stdlib.h>
 #include <strsafe.h>
 
 static _Return_type_success_(return != NULL) HKEY

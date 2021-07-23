@@ -4,6 +4,7 @@
  */
 
 #include "entry.h"
+#include <shellapi.h>
 
 #if ACCEPT_WOW64 == 1
 

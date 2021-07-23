@@ -17,6 +17,8 @@
 #include <delayimp.h>
 #pragma warning(pop)
 #include <sddl.h>
+#include <winefs.h>
+#include <stdlib.h>
 
 HINSTANCE ResourceModule;
 HANDLE ModuleHeap;

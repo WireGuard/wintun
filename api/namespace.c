@@ -10,7 +10,9 @@
 #include <Windows.h>
 #include <winternl.h>
 #include <bcrypt.h>
+#include <winefs.h>
 #include <wchar.h>
+#include <stdlib.h>
 
 static HANDLE PrivateNamespace = NULL;
 static HANDLE BoundaryDescriptor = NULL;

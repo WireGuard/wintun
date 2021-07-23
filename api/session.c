@@ -8,6 +8,8 @@
 #include "logger.h"
 #include "wintun.h"
 #include <Windows.h>
+#include <devioctl.h>
+#include <stdlib.h>
 
 #pragma warning(disable : 4200) /* nonstandard: zero-sized array in struct/union */
 

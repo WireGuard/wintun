@@ -61,3 +61,9 @@ NtQueryKey(
     _Out_bytecap_post_bytecount_(Length, *ResultLength) PVOID KeyInformation,
     _In_ ULONG Length,
     _Out_ PULONG ResultLength);
+
+/* This is documented in NTSecAPI.h, which we can't include, due to header conflicts. It actually lives in advapi32.dll. */
+#define RtlGenRandom SystemFunction036
+BOOLEAN
+NTAPI
+RtlGenRandom(_Out_writes_bytes_all_(RandomBufferLength) PVOID RandomBuffer, _In_ ULONG RandomBufferLength);
