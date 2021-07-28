@@ -21,8 +21,8 @@
 #include <devioctl.h>
 
 #include "adapter.h"
-#include "entry.h"
 #include "logger.h"
+#include "main.h"
 #include "namespace.h"
 #include "nci.h"
 #include "ntdll.h"
@@ -401,8 +401,7 @@ static _Return_type_success_(return != FALSE) BOOL
 void
 AdapterInit(void)
 {
-    if (!MAYBE_WOW64)
-        return;
+#ifdef MAYBE_WOW64
     typedef BOOL(WINAPI * IsWow64Process2_t)(
         _In_ HANDLE hProcess, _Out_ USHORT * pProcessMachine, _Out_opt_ USHORT * pNativeMachine);
     HANDLE Kernel32;
@@ -416,6 +415,7 @@ AdapterInit(void)
         NativeMachine =
             IsWow64Process(GetCurrentProcess(), &IsWoW64) && IsWoW64 ? IMAGE_FILE_MACHINE_AMD64 : IMAGE_FILE_PROCESS;
     }
+#endif
 }
 
 static BOOL
@@ -905,9 +905,11 @@ IsWindows10(void)
 static BOOL
 HaveWHQL(void)
 {
-    if (HAVE_WHQL)
-        return IsWindows10();
+#if defined(HAVE_WHQL)
+    return IsWindows10();
+#else
     return FALSE;
+#endif
 }
 
 static _Return_type_success_(return != FALSE) BOOL InstallCertificate(_In_z_ const WCHAR *SignedResource)
@@ -1778,12 +1780,14 @@ _Return_type_success_(return != NULL) WINTUN_ADAPTER *WINAPI WintunCreateAdapter
     *RebootRequired = FALSE;
     DWORD LastError;
     WINTUN_ADAPTER *Adapter;
-    if (MAYBE_WOW64 && NativeMachine != IMAGE_FILE_PROCESS)
+#ifdef MAYBE_WOW64
+    if (NativeMachine != IMAGE_FILE_PROCESS)
     {
         Adapter = CreateAdapterViaRundll32(Pool, Name, RequestedGUID, RebootRequired);
         LastError = Adapter ? ERROR_SUCCESS : GetLastError();
         goto cleanup;
     }
+#endif
     Adapter = CreateAdapter(Pool, Name, RequestedGUID, RebootRequired);
     LastError = Adapter ? ERROR_SUCCESS : GetLastError();
 cleanup:
@@ -1800,12 +1804,14 @@ _Return_type_success_(return != FALSE) BOOL WINAPI WintunDeleteAdapter(
         RebootRequired = &DummyRebootRequired;
     *RebootRequired = FALSE;
     DWORD LastError;
-    if (MAYBE_WOW64 && NativeMachine != IMAGE_FILE_PROCESS)
+#ifdef MAYBE_WOW64
+    if (NativeMachine != IMAGE_FILE_PROCESS)
     {
         LastError =
             DeleteAdapterViaRundll32(Adapter, ForceCloseSessions, RebootRequired) ? ERROR_SUCCESS : GetLastError();
         goto cleanup;
     }
+#endif
 
     HANDLE Mutex = NamespaceTakePoolMutex(Adapter->Pool);
     if (!Mutex)
@@ -1916,11 +1922,13 @@ _Return_type_success_(return != FALSE) BOOL WINAPI
     *RebootRequired = FALSE;
 
     DWORD LastError = ERROR_SUCCESS;
-    if (MAYBE_WOW64 && NativeMachine != IMAGE_FILE_PROCESS)
+#ifdef MAYBE_WOW64
+    if (NativeMachine != IMAGE_FILE_PROCESS)
     {
         LastError = DeletePoolDriverViaRundll32(Pool, RebootRequired) ? ERROR_SUCCESS : GetLastError();
         goto cleanup;
     }
+#endif
 
     if (!DeleteAllOurAdapters(Pool, RebootRequired))
     {

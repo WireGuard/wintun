@@ -8,9 +8,9 @@
 
 #pragma code_page(1252)
 
-wintun.cat RCDATA "wintun\\wintun.cat"
-wintun.inf RCDATA "wintun\\wintun.inf"
-wintun.sys RCDATA "wintun\\wintun.sys"
+wintun.cat RCDATA "driver\\wintun.cat"
+wintun.inf RCDATA "driver\\wintun.inf"
+wintun.sys RCDATA "driver\\wintun.sys"
 
 #ifdef HAVE_WHQL
 wintun-whql.cat RCDATA "whql\\wintun.cat"
@@ -18,11 +18,19 @@ wintun-whql.inf RCDATA "whql\\wintun.inf"
 wintun-whql.sys RCDATA "whql\\wintun.sys"
 #endif
 
-#if defined(_M_IX86)
+#if defined(WANT_AMD64_WOW64)
+#    if defined(BUILT_AMD64_WOW64)
 wintun-amd64.dll RCDATA "amd64\\wintun.dll"
+#    else
+#        pragma message("AMD64 wintun.dll was not built, so this will not work from WOW64")
+#    endif
 #endif
-#if defined(_M_IX86) || defined(_M_AMD64) || defined(_M_ARM)
+#if defined(WANT_ARM64_WOW64)
+#    if defined(BUILT_ARM64_WOW64)
 wintun-arm64.dll RCDATA "arm64\\wintun.dll"
+#    else
+#        pragma message("ARM64 wintun.dll was not built, so this will not work from WOW64")
+#    endif
 #endif
 
 #define STRINGIZE(x) #x

@@ -3,19 +3,17 @@
  * Copyright (C) 2018-2021 WireGuard LLC. All Rights Reserved.
  */
 
-#include "entry.h"
+#include "adapter.h"
+#include "logger.h"
+#include "wintun.h"
+
+#include <Windows.h>
 #include <shellapi.h>
+#include <cfgmgr32.h>
+#include <objbase.h>
+#include <assert.h>
 
-#if ACCEPT_WOW64 == 1
-
-#    include "adapter.h"
-#    include "logger.h"
-#    include "wintun.h"
-
-#    include <Windows.h>
-#    include <cfgmgr32.h>
-#    include <objbase.h>
-#    include <assert.h>
+#ifdef ACCEPT_WOW64
 
 #    define EXPORT comment(linker, "/EXPORT:" __FUNCTION__ "=" __FUNCDNAME__)
 

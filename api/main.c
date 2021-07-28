@@ -4,7 +4,6 @@
  */
 
 #include "adapter.h"
-#include "entry.h"
 #include "logger.h"
 #include "registry.h"
 #include "namespace.h"

@@ -7,9 +7,11 @@
 #include <Windows.h>
 #include <ws2ipdef.h>
 #include <iphlpapi.h>
+#include <mstcpip.h>
 #include <ip2string.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "wintun.h"
 
 static WINTUN_CREATE_ADAPTER_FUNC WintunCreateAdapter;

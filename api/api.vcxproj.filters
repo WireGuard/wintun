@@ -49,7 +49,7 @@
     <ClInclude Include="wintun.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="entry.h">
+    <ClInclude Include="main.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ntdll.h">
@@ -81,7 +81,7 @@
     <ClCompile Include="session.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="entry.c">
+    <ClCompile Include="main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -6,7 +6,7 @@
 #pragma once
 
 #include "wintun.h"
-#include "entry.h"
+#include "main.h"
 #include "registry.h"
 #include <Windows.h>
 #include <stdarg.h>

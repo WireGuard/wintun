@@ -13,9 +13,10 @@
     General Properties
   -->
   <Import Project="wintun.props" />
-  <Import Project="wintun.vcxproj.user" Condition="exists('wintun.vcxproj.user')" />
+  <Import Project="wintun.props.user" Condition="exists('wintun.props.user')" />
 
-  <Target Name="Build" DependsOnTargets="Driver-x86;Driver-amd64;Driver-arm;Driver-arm64" />
+  <Target Name="Driver" DependsOnTargets="Driver-x86;Driver-amd64;Driver-arm;Driver-arm64" />
+  <Target Name="Dll"    DependsOnTargets="Dll-x86;Dll-amd64;Dll-arm;Dll-arm64" />
   <Target Name="Clean">
     <RemoveDir Directories="$(Configuration)\amd64\" />
     <RemoveDir Directories="$(Configuration)\arm\" />
@@ -24,7 +25,6 @@
     <RemoveDir Directories="driver\sdv\;dist\" />
     <Delete Files="driver\smvbuild.log;driver\smvstats.txt;driver\wintun.DVL.XML" />
   </Target>
-  <Target Name="Rebuild" DependsOnTargets="Clean;Build" />
 
   <!--
     Driver Building
@@ -34,22 +34,22 @@
     <DriverInputs>driver\undocumented.h;driver\wintun.c;driver\wintun.inf;wintun.props;driver\wintun.rc;driver\driver.vcxproj;$(DriverInputs)</DriverInputs>
   </PropertyGroup>
   <Target Name="Driver-x86"
-    Outputs="$(Configuration)\x86\wintun\wintun.sys;$(Configuration)\x86\wintun\wintun.inf;$(Configuration)\x86\wintun\wintun.cat"
+    Outputs="$(Configuration)\x86\driver\wintun.sys;$(Configuration)\x86\driver\wintun.inf;$(Configuration)\x86\driver\wintun.cat"
     Inputs="$(DriverInputs)">
     <MSBuild Projects="driver\driver.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=Win32" />
   </Target>
   <Target Name="Driver-amd64"
-    Outputs="$(Configuration)\amd64\wintun\wintun.sys;$(Configuration)\amd64\wintun\wintun.inf;$(Configuration)\amd64\wintun\wintun.cat"
+    Outputs="$(Configuration)\amd64\driver\wintun.sys;$(Configuration)\amd64\driver\wintun.inf;$(Configuration)\amd64\driver\wintun.cat"
     Inputs="$(DriverInputs)">
     <MSBuild Projects="driver\driver.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=x64" />
   </Target>
   <Target Name="Driver-arm"
-    Outputs="$(Configuration)\arm\wintun\wintun.sys;$(Configuration)\arm\wintun\wintun.inf;$(Configuration)\arm\wintun\wintun.cat"
+    Outputs="$(Configuration)\arm\driver\wintun.sys;$(Configuration)\arm\driver\wintun.inf;$(Configuration)\arm\driver\wintun.cat"
     Inputs="$(DriverInputs)">
     <MSBuild Projects="driver\driver.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=ARM" />
   </Target>
   <Target Name="Driver-arm64"
-    Outputs="$(Configuration)\arm64\wintun\wintun.sys;$(Configuration)\arm64\wintun\wintun.inf;$(Configuration)\arm64\wintun\wintun.cat"
+    Outputs="$(Configuration)\arm64\driver\wintun.sys;$(Configuration)\arm64\driver\wintun.inf;$(Configuration)\arm64\driver\wintun.cat"
     Inputs="$(DriverInputs)">
     <MSBuild Projects="driver\driver.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=ARM64" />
   </Target>
@@ -102,7 +102,7 @@
   -->
   <PropertyGroup>
     <ZipTargetPath>dist\wintun-$(WintunVersion).zip</ZipTargetPath>
-    <ZipIntDir>dist\.tmp\</ZipIntDir>
+    <ZipIntDir>dist\zip-intermediate\</ZipIntDir>
   </PropertyGroup>
   <ItemGroup>
     <ZipFilesSrc Include="prebuilt-binaries-license.txt"     /><ZipFilesDst Include="$(ZipIntDir)wintun\LICENSE.txt"          />
@@ -116,7 +116,7 @@
   <Target Name="Zip"
     Inputs="@(ZipFilesSrc)"
     Outputs="$(ZipTargetPath)"
-    DependsOnTargets="Dll-x86;Dll-amd64;Dll-arm;Dll-arm64">
+    DependsOnTargets="Dll">
     <RemoveDir Directories="$(ZipIntDir)" />
     <Copy SourceFiles="@(ZipFilesSrc)" DestinationFiles="@(ZipFilesDst)" />
     <ZipDirectory DestinationFile="$(ZipTargetPath)" Overwrite="true" SourceDirectory="$(ZipIntDir)" />

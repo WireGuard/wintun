@@ -3,7 +3,6 @@
  * Copyright (C) 2018-2021 WireGuard LLC. All Rights Reserved.
  */
 
-#include "entry.h"
 #include "logger.h"
 #include "registry.h"
 #include <Windows.h>

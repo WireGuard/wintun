@@ -4,8 +4,8 @@
  */
 
 #include "adapter.h"
-#include "entry.h"
 #include "logger.h"
+#include "main.h"
 #include "wintun.h"
 #include <Windows.h>
 #include <devioctl.h>

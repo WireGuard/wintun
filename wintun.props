@@ -5,6 +5,74 @@
   Copyright (C) 2019 WireGuard LLC. All Rights Reserved.
 -->
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|ARM">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|ARM64">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM">
+      <Configuration>Release</Configuration>
+      <Platform>ARM</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64">
+      <Configuration>Release</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <WindowsTargetPlatformVersion>$(LatestTargetPlatformVersion)</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <CharacterSet>Unicode</CharacterSet>
+    <Driver_SpectreMitigation>false</Driver_SpectreMitigation>
+    <Inf2CatUseLocalTime Condition="'$(ConfigurationType)'=='Driver'">true</Inf2CatUseLocalTime>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)'=='Win32'" Label="Configuration">
+    <TargetVersion Condition="'$(TargetVersion)'==''">Windows7</TargetVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)'=='ARM'" Label="Configuration">
+    <TargetVersion Condition="'$(TargetVersion)'==''">Windows8</TargetVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)'=='x64'" Label="Configuration">
+    <TargetVersion Condition="'$(TargetVersion)'==''">Windows7</TargetVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)'=='ARM64'" Label="Configuration">
+    <TargetVersion Condition="'$(TargetVersion)'==''">Windows10</TargetVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
     <WintunVersionMaj>0</WintunVersionMaj>
     <WintunVersionMin>12</WintunVersionMin>
@@ -19,6 +87,20 @@
     <WintunPlatform Condition="'$(Platform)'=='ARM64'">arm64</WintunPlatform>
     <WintunPlatform Condition="'$(Platform)'=='Win32'">x86</WintunPlatform>
     <WintunPlatform Condition="'$(Platform)'=='x64'">amd64</WintunPlatform>
+
+    <IntDir>..\$(Configuration)\$(WintunPlatform)\$(ProjectName)-intermediate\</IntDir>
+    <OutDir>..\$(Configuration)\$(WintunPlatform)\</OutDir>
+    <OutDir Condition="'$(ConfigurationType)'=='Driver'">$(IntDir)</OutDir>
+    <PackageDir>..\$(Configuration)\$(WintunPlatform)\$(ProjectName)\</PackageDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <RunCodeAnalysis>true</RunCodeAnalysis>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RunCodeAnalysis)'=='true'">
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <ClCompile>
+      <EnablePREfast>true</EnablePREfast>
+    </ClCompile>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -28,6 +110,13 @@
     <ResourceCompile>
       <PreprocessorDefinitions>WINTUN_VERSION_MAJ=$(WintunVersionMaj);WINTUN_VERSION_MIN=$(WintunVersionMin);WINTUN_VERSION_REL=$(WintunVersionRel);WINTUN_VERSION="$(WintunVersion)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
+    <Link>
+      <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
+      <ProgramDatabaseFile Condition="'$(ConfigurationType)'=='Driver'">$(PackageDir)$(TargetName).pdb</ProgramDatabaseFile>
+    </Link>
+    <DriverSign>
+      <FileDigestAlgorithm>sha256</FileDigestAlgorithm>
+    </DriverSign>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
     <ClCompile>
@@ -35,18 +124,33 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
     </ClCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
     </ClCompile>
-    <Link>
-      <ProgramDatabaseFile>$(IntDir)$(TargetName).pdb</ProgramDatabaseFile>
-    </Link>
   </ItemDefinitionGroup>
-  <PropertyGroup>
-    <WindowsSdkToolchainPlatform>$(PROCESSOR_ARCHITECTURE)</WindowsSdkToolchainPlatform>
-    <WindowsSdkToolchainPlatform Condition="'$(PROCESSOR_ARCHITECTURE)'=='AMD64'">x64</WindowsSdkToolchainPlatform>
-    <SignToolPath>$(WindowsSdkDir)bin\$(TargetPlatformVersion)\$(WindowsSdkToolchainPlatform)\signtool.exe</SignToolPath>
-  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(PlatformToolset)|$(Configuration)'=='WindowsApplicationForDrivers10.0|Release'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(PlatformToolset)|$(Configuration)'=='WindowsApplicationForDrivers10.0|Debug'">
+    <ClCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
 </Project>
