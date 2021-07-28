@@ -9,19 +9,23 @@
 
 #ifdef GENERATE_LIB
 #    define DECLSPEC __declspec(dllexport)
-#    define STUB { return 0; }
+#    define STUB \
+        { \
+            return 0; \
+        }
 #else
 #    define DECLSPEC __declspec(dllimport)
 #    define STUB ;
 #endif
 
+EXTERN_C
+DECLSPEC DWORD WINAPI
+NciSetConnectionName(_In_ const GUID *Guid, _In_z_ LPCWSTR NewName) STUB
 
-EXTERN_C DECLSPEC DWORD WINAPI
-NciSetConnectionName(_In_ const GUID *Guid, _In_z_ const WCHAR *NewName) STUB
-
-EXTERN_C DECLSPEC DWORD WINAPI
+    EXTERN_C
+DECLSPEC DWORD WINAPI
 NciGetConnectionName(
     _In_ const GUID *Guid,
-    _Out_z_bytecap_(InDestNameBytes) WCHAR *Name,
+    _Out_z_bytecap_(InDestNameBytes) LPWSTR Name,
     _In_ DWORD InDestNameBytes,
     _Out_opt_ DWORD *OutDestNameBytes) STUB

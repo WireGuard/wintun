@@ -11,25 +11,40 @@
 /**
  * Locates RT_RCDATA resource memory address and size.
  *
- * ResourceName         Name of the RT_RCDATA resource. Use MAKEINTRESOURCEW to locate resource by ID.
+ * @param ResourceName         Name of the RT_RCDATA resource. Use MAKEINTRESOURCEW to locate resource by ID.
  *
- * Size                 Pointer to a variable to receive resource size.
+ * @param Size                 Pointer to a variable to receive resource size.
  *
  * @return Resource address on success. If the function fails, the return value is NULL. To get extended error
  *         information, call GetLastError.
  */
-_Return_type_success_(return != NULL) _Ret_bytecount_(*Size) const
-    void *ResourceGetAddress(_In_z_ const WCHAR *ResourceName, _Out_ DWORD *Size);
+_Must_inspect_result_
+_Return_type_success_(return != NULL)
+_Post_maybenull_
+_Post_readable_byte_size_(*Size) const VOID *ResourceGetAddress(_In_z_ LPCWSTR ResourceName, _Out_ DWORD *Size);
 
 /**
  * Copies resource to a file.
  *
- * DestinationPath      File path
+ * @param DestinationPath   File path
  *
- * ResourceName         Name of the RT_RCDATA resource. Use MAKEINTRESOURCEW to locate resource by ID.
+ * @param ResourceName      Name of the RT_RCDATA resource. Use MAKEINTRESOURCEW to locate resource by ID.
  *
  * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
  *         get extended error information, call GetLastError.
  */
-_Return_type_success_(return != FALSE) BOOL
-    ResourceCopyToFile(_In_z_ const WCHAR *DestinationPath, _In_z_ const WCHAR *ResourceName);
+_Return_type_success_(return != FALSE)
+BOOL
+ResourceCopyToFile(_In_z_ LPCWSTR DestinationPath, _In_z_ LPCWSTR ResourceName);
+
+/**
+ * Creates a temporary directory.
+ *
+ * @param RandomTempSubDirectory    Name of random temporary directory.
+ *
+ * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
+ *         get extended error information, call GetLastError.
+ */
+_Return_type_success_(return != FALSE)
+BOOL
+ResourceCreateTemporaryDirectory(_Out_writes_z_(MAX_PATH) LPWSTR RandomTempSubDirectory);

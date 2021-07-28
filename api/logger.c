@@ -4,6 +4,7 @@
  */
 
 #include "logger.h"
+#include "adapter.h"
 #include "ntdll.h"
 #include <Windows.h>
 #include <winternl.h>
@@ -11,17 +12,16 @@
 #include <stdlib.h>
 
 static BOOL CALLBACK
-NopLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
+NopLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ LPCWSTR LogLine)
 {
-    UNREFERENCED_PARAMETER(Level);
-    UNREFERENCED_PARAMETER(LogLine);
     return TRUE;
 }
 
 WINTUN_LOGGER_CALLBACK Logger = NopLogger;
 
-void CALLBACK
-WintunSetLogger(_In_ WINTUN_LOGGER_CALLBACK NewLogger)
+_Use_decl_annotations_
+VOID WINAPI
+WintunSetLogger(WINTUN_LOGGER_CALLBACK NewLogger)
 {
     if (!NewLogger)
         NewLogger = NopLogger;
@@ -29,14 +29,15 @@ WintunSetLogger(_In_ WINTUN_LOGGER_CALLBACK NewLogger)
 }
 
 static VOID
-StrTruncate(_Inout_count_(StrChars) WCHAR *Str, _In_ SIZE_T StrChars)
+StrTruncate(_Inout_count_(StrChars) LPWSTR Str, _In_ SIZE_T StrChars)
 {
     Str[StrChars - 2] = L'\u2026'; /* Horizontal Ellipsis */
     Str[StrChars - 1] = 0;
 }
 
-_Post_equals_last_error_ DWORD
-LoggerLog(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Function, _In_z_ const WCHAR *LogLine)
+_Use_decl_annotations_
+DWORD
+LoggerLog(WINTUN_LOGGER_LEVEL Level, LPCWSTR Function, LPCWSTR LogLine)
 {
     DWORD LastError = GetLastError();
     if (Function)
@@ -52,12 +53,9 @@ LoggerLog(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Function, _In_z_ c
     return LastError;
 }
 
-_Post_equals_last_error_ DWORD
-LoggerLogV(
-    _In_ WINTUN_LOGGER_LEVEL Level,
-    _In_z_ const WCHAR *Function,
-    _In_z_ _Printf_format_string_ const WCHAR *Format,
-    _In_ va_list Args)
+_Use_decl_annotations_
+DWORD
+LoggerLogV(WINTUN_LOGGER_LEVEL Level, LPCWSTR Function, LPCWSTR Format, va_list Args)
 {
     DWORD LastError = GetLastError();
     WCHAR LogLine[0x400];
@@ -71,16 +69,17 @@ LoggerLogV(
     return LastError;
 }
 
-_Post_equals_last_error_ DWORD
-LoggerError(_In_ DWORD Error, _In_z_ const WCHAR *Function, _In_z_ const WCHAR *Prefix)
+_Use_decl_annotations_
+DWORD
+LoggerError(DWORD Error, LPCWSTR Function, LPCWSTR Prefix)
 {
-    WCHAR *SystemMessage = NULL, *FormattedMessage = NULL;
+    LPWSTR SystemMessage = NULL, FormattedMessage = NULL;
     FormatMessageW(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_MAX_WIDTH_MASK,
         NULL,
         HRESULT_FROM_SETUPAPI(Error),
         MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-        (void *)&SystemMessage,
+        (VOID *)&SystemMessage,
         0,
         NULL);
     FormatMessageW(
@@ -89,7 +88,7 @@ LoggerError(_In_ DWORD Error, _In_z_ const WCHAR *Function, _In_z_ const WCHAR *
         SystemMessage ? L"%4: %1: %3(Code 0x%2!08X!)" : L"%4: %1: Code 0x%2!08X!",
         0,
         0,
-        (void *)&FormattedMessage,
+        (VOID *)&FormattedMessage,
         0,
         (va_list *)(DWORD_PTR[]){ (DWORD_PTR)Prefix, (DWORD_PTR)Error, (DWORD_PTR)SystemMessage, (DWORD_PTR)Function });
     if (FormattedMessage)
@@ -99,12 +98,9 @@ LoggerError(_In_ DWORD Error, _In_z_ const WCHAR *Function, _In_z_ const WCHAR *
     return Error;
 }
 
-_Post_equals_last_error_ DWORD
-LoggerErrorV(
-    _In_ DWORD Error,
-    _In_z_ const WCHAR *Function,
-    _In_z_ _Printf_format_string_ const WCHAR *Format,
-    _In_ va_list Args)
+_Use_decl_annotations_
+DWORD
+LoggerErrorV(DWORD Error, LPCWSTR Function, LPCWSTR Format, va_list Args)
 {
     WCHAR Prefix[0x400];
     if (_vsnwprintf_s(Prefix, _countof(Prefix), _TRUNCATE, Format, Args) == -1)
@@ -112,13 +108,14 @@ LoggerErrorV(
     return LoggerError(Error, Function, Prefix);
 }
 
+_Use_decl_annotations_
 VOID
-LoggerGetRegistryKeyPath(_In_ HKEY Key, _Out_cap_c_(MAX_REG_PATH) WCHAR *Path)
+LoggerGetRegistryKeyPath(HKEY Key, LPWSTR Path)
 {
     DWORD LastError = GetLastError();
     if (Key == NULL)
     {
-        wcscpy_s(Path, MAX_REG_PATH, L"<null>");
+        wcsncpy_s(Path, MAX_REG_PATH, L"<null>", _TRUNCATE);
         goto out;
     }
     if (_snwprintf_s(Path, MAX_REG_PATH, _TRUNCATE, L"0x%p", Key) == -1)

@@ -53,15 +53,13 @@
   <ItemGroup>
     <ClInclude Include="main.h" />
     <ClInclude Include="adapter.h" />
-    <ClInclude Include="rundll32_i.c">
-      <ExcludedFromBuild>true</ExcludedFromBuild>
-    </ClInclude>
     <ClInclude Include="logger.h" />
     <ClInclude Include="namespace.h" />
     <ClInclude Include="nci.h" />
     <ClInclude Include="ntdll.h" />
     <ClInclude Include="registry.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="rundll32.h" />
     <ClInclude Include="wintun.h" />
   </ItemGroup>
   <ItemGroup>

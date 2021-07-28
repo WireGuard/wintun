@@ -19,13 +19,16 @@ static HANDLE BoundaryDescriptor = NULL;
 static CRITICAL_SECTION Initializing;
 static BCRYPT_ALG_HANDLE AlgProvider;
 
-static _Return_type_success_(
-    return != NULL) WCHAR *NormalizeStringAlloc(_In_ NORM_FORM NormForm, _In_z_ const WCHAR *Source)
+_Must_inspect_result_
+static _Return_type_success_(return != NULL)
+_Post_maybenull_
+LPWSTR
+NormalizeStringAlloc(_In_ NORM_FORM NormForm, _In_z_ LPCWSTR Source)
 {
     int Len = NormalizeString(NormForm, Source, -1, NULL, 0);
     for (;;)
     {
-        WCHAR *Str = Alloc(sizeof(WCHAR) * Len);
+        LPWSTR Str = AllocArray(Len, sizeof(*Str));
         if (!Str)
             return NULL;
         Len = NormalizeString(NormForm, Source, -1, Str, Len);
@@ -41,7 +44,8 @@ static _Return_type_success_(
     }
 }
 
-static _Return_type_success_(return != FALSE) BOOL NamespaceRuntimeInit(void)
+static _Return_type_success_(return != FALSE)
+BOOL NamespaceRuntimeInit(VOID)
 {
     DWORD LastError;
 
@@ -110,8 +114,9 @@ cleanupLeaveCriticalSection:
     return FALSE;
 }
 
-_Check_return_
-_Return_type_success_(return != NULL) HANDLE NamespaceTakePoolMutex(_In_z_ const WCHAR *Pool)
+_Use_decl_annotations_
+HANDLE
+NamespaceTakePoolMutex(LPCWSTR Pool)
 {
     if (!NamespaceRuntimeInit())
         return NULL;
@@ -133,7 +138,7 @@ _Return_type_success_(return != NULL) HANDLE NamespaceTakePoolMutex(_In_z_ const
         LastError = RtlNtStatusToDosError(Status);
         goto cleanupSha256;
     }
-    WCHAR *PoolNorm = NormalizeStringAlloc(NormalizationC, Pool);
+    LPWSTR PoolNorm = NormalizeStringAlloc(NormalizationC, Pool);
     if (!PoolNorm)
     {
         LastError = GetLastError();
@@ -184,8 +189,9 @@ cleanupSha256:
     return NULL;
 }
 
-_Check_return_
-_Return_type_success_(return != NULL) HANDLE NamespaceTakeDriverInstallationMutex(void)
+_Use_decl_annotations_
+HANDLE
+NamespaceTakeDriverInstallationMutex(VOID)
 {
     if (!NamespaceRuntimeInit())
         return NULL;
@@ -208,21 +214,20 @@ _Return_type_success_(return != NULL) HANDLE NamespaceTakeDriverInstallationMute
     return NULL;
 }
 
-void
-NamespaceReleaseMutex(_In_ HANDLE Mutex)
+_Use_decl_annotations_
+VOID
+NamespaceReleaseMutex(HANDLE Mutex)
 {
     ReleaseMutex(Mutex);
     CloseHandle(Mutex);
 }
 
-void
-NamespaceInit(void)
+VOID NamespaceInit(VOID)
 {
     InitializeCriticalSection(&Initializing);
 }
 
-void
-NamespaceDone(void)
+VOID NamespaceDone(VOID)
 {
     EnterCriticalSection(&Initializing);
     if (PrivateNamespace)

@@ -3,18 +3,15 @@
  * Copyright (C) 2018-2021 WireGuard LLC. All Rights Reserved.
  */
 
-#include "adapter.h"
 #include "logger.h"
-#include "registry.h"
+#include "adapter.h"
+#include "main.h"
 #include "namespace.h"
-#include "wintun.h"
+#include "registry.h"
+#include "ntdll.h"
 
 #include <Windows.h>
-#pragma warning(push)
-#pragma warning(disable : 4201)
-/* nonstandard extension used: nameless struct/union */
 #include <delayimp.h>
-#pragma warning(pop)
 #include <sddl.h>
 #include <winefs.h>
 #include <stdlib.h>
@@ -23,6 +20,8 @@ HINSTANCE ResourceModule;
 HANDLE ModuleHeap;
 SECURITY_ATTRIBUTES SecurityAttributes = { .nLength = sizeof(SECURITY_ATTRIBUTES) };
 BOOL IsLocalSystem;
+USHORT NativeMachine = IMAGE_FILE_PROCESS;
+BOOL IsWindows10;
 
 static FARPROC WINAPI
 DelayedLoadLibraryHook(unsigned dliNotify, PDelayLoadInfo pdli)
@@ -37,8 +36,7 @@ DelayedLoadLibraryHook(unsigned dliNotify, PDelayLoadInfo pdli)
 
 const PfnDliHook __pfnDliNotifyHook2 = DelayedLoadLibraryHook;
 
-static BOOL
-InitializeSecurityObjects(void)
+static BOOL InitializeSecurityObjects(VOID)
 {
     BYTE LocalSystemSid[MAX_SID_SIZE];
     DWORD RequiredBytes = sizeof(LocalSystemSid);
@@ -72,11 +70,32 @@ cleanupProcessToken:
     return Ret;
 }
 
+static VOID EnvInit(VOID)
+{
+    DWORD MajorVersion;
+    RtlGetNtVersionNumbers(&MajorVersion, NULL, NULL);
+    IsWindows10 = MajorVersion >= 10;
+
+#ifdef MAYBE_WOW64
+    typedef BOOL(WINAPI * IsWow64Process2_t)(
+        _In_ HANDLE hProcess, _Out_ USHORT * pProcessMachine, _Out_opt_ USHORT * pNativeMachine);
+    HANDLE Kernel32;
+    IsWow64Process2_t IsWow64Process2;
+    USHORT ProcessMachine;
+    if ((Kernel32 = GetModuleHandleW(L"kernel32.dll")) == NULL ||
+        (IsWow64Process2 = (IsWow64Process2_t)GetProcAddress(Kernel32, "IsWow64Process2")) == NULL ||
+        !IsWow64Process2(GetCurrentProcess(), &ProcessMachine, &NativeMachine))
+    {
+        BOOL IsWoW64;
+        NativeMachine =
+            IsWow64Process(GetCurrentProcess(), &IsWoW64) && IsWoW64 ? IMAGE_FILE_MACHINE_AMD64 : IMAGE_FILE_PROCESS;
+    }
+#endif
+}
+
 BOOL APIENTRY
 DllMain(_In_ HINSTANCE hinstDLL, _In_ DWORD fdwReason, _In_ LPVOID lpvReserved)
 {
-    UNREFERENCED_PARAMETER(lpvReserved);
-
     switch (fdwReason)
     {
     case DLL_PROCESS_ATTACH:
@@ -89,7 +108,7 @@ DllMain(_In_ HINSTANCE hinstDLL, _In_ DWORD fdwReason, _In_ LPVOID lpvReserved)
             HeapDestroy(ModuleHeap);
             return FALSE;
         }
-        AdapterInit();
+        EnvInit();
         NamespaceInit();
         break;
 

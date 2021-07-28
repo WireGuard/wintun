@@ -10,11 +10,14 @@
 #include <stdlib.h>
 #include <strsafe.h>
 
-static _Return_type_success_(return != NULL) HKEY
-    OpenKeyWait(_In_ HKEY Key, _Inout_z_ WCHAR *Path, _In_ DWORD Access, _In_ ULONGLONG Deadline)
+_Must_inspect_result_
+static _Return_type_success_(return != NULL)
+_Post_maybenull_
+HKEY
+OpenKeyWait(_In_ HKEY Key, _Inout_z_ LPWSTR Path, _In_ DWORD Access, _In_ ULONGLONG Deadline)
 {
     DWORD LastError;
-    WCHAR *PathNext = wcschr(Path, L'\\');
+    LPWSTR PathNext = wcschr(Path, L'\\');
     if (PathNext)
         *PathNext = 0;
 
@@ -87,8 +90,9 @@ static _Return_type_success_(return != NULL) HKEY
     return NULL;
 }
 
-_Return_type_success_(return != NULL) HKEY
-    RegistryOpenKeyWait(_In_ HKEY Key, _In_z_ const WCHAR *Path, _In_ DWORD Access, _In_ DWORD Timeout)
+_Use_decl_annotations_
+HKEY
+RegistryOpenKeyWait(HKEY Key, LPCWSTR Path, DWORD Access, DWORD Timeout)
 {
     WCHAR Buf[MAX_REG_PATH];
     if (wcsncpy_s(Buf, _countof(Buf), Path, _TRUNCATE) == STRUNCATE)
@@ -100,17 +104,17 @@ _Return_type_success_(return != NULL) HKEY
     return OpenKeyWait(Key, Buf, Access, GetTickCount64() + Timeout);
 }
 
-_Return_type_success_(return != FALSE) BOOL RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
+_Use_decl_annotations_
+BOOL
+RegistryGetString(LPWSTR *Buf, DWORD Len, DWORD ValueType)
 {
     if (wcsnlen(*Buf, Len) >= Len)
     {
         /* String is missing zero-terminator. */
-        WCHAR *BufZ = Alloc(((size_t)Len + 1) * sizeof(WCHAR));
+        LPWSTR BufZ = ReZallocArray(*Buf, (SIZE_T)Len + 1, sizeof(*BufZ));
         if (!BufZ)
             return FALSE;
-        wmemcpy(BufZ, *Buf, Len);
-        BufZ[Len] = 0;
-        Free(*Buf);
+        _Analysis_assume_((wmemset(BufZ, L'A', (SIZE_T)Len + 1), TRUE));
         *Buf = BufZ;
     }
 
@@ -122,10 +126,9 @@ _Return_type_success_(return != FALSE) BOOL RegistryGetString(_Inout_ WCHAR **Bu
     if (!(*Buf)[0])
         return TRUE;
 
-    Len = Len * 2 + 64;
     for (;;)
     {
-        WCHAR *Expanded = Alloc(Len * sizeof(WCHAR));
+        LPWSTR Expanded = AllocArray(Len, sizeof(*Expanded));
         if (!Expanded)
             return FALSE;
         DWORD Result = ExpandEnvironmentStringsW(*Buf, Expanded, Len);
@@ -147,8 +150,9 @@ _Return_type_success_(return != FALSE) BOOL RegistryGetString(_Inout_ WCHAR **Bu
     }
 }
 
-_Return_type_success_(return != FALSE) BOOL
-    RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType)
+_Use_decl_annotations_
+BOOL
+RegistryGetMultiString(PZZWSTR *Buf, DWORD Len, DWORD ValueType)
 {
     if (ValueType == REG_MULTI_SZ)
     {
@@ -157,25 +161,18 @@ _Return_type_success_(return != FALSE) BOOL
             if (i > Len)
             {
                 /* Missing string and list terminators. */
-                WCHAR *BufZ = Alloc(((size_t)Len + 2) * sizeof(WCHAR));
+                PZZWSTR BufZ = ReZallocArray(*Buf, (SIZE_T)Len + 2, sizeof(*BufZ));
                 if (!BufZ)
                     return FALSE;
-                wmemcpy(BufZ, *Buf, Len);
-                BufZ[Len] = 0;
-                BufZ[Len + 1] = 0;
-                Free(*Buf);
                 *Buf = BufZ;
                 return TRUE;
             }
             if (i == Len)
             {
                 /* Missing list terminator. */
-                WCHAR *BufZ = Alloc(((size_t)Len + 1) * sizeof(WCHAR));
+                PZZWSTR BufZ = ReZallocArray(*Buf, (SIZE_T)Len + 1, sizeof(*BufZ));
                 if (!BufZ)
                     return FALSE;
-                wmemcpy(BufZ, *Buf, Len);
-                BufZ[Len] = 0;
-                Free(*Buf);
                 *Buf = BufZ;
                 return TRUE;
             }
@@ -188,22 +185,19 @@ _Return_type_success_(return != FALSE) BOOL
     if (!RegistryGetString(Buf, Len, ValueType))
         return FALSE;
     Len = (DWORD)wcslen(*Buf) + 1;
-    WCHAR *BufZ = Alloc(((size_t)Len + 1) * sizeof(WCHAR));
+    PZZWSTR BufZ = ReZallocArray(*Buf, (SIZE_T)Len + 1, sizeof(WCHAR));
     if (!BufZ)
         return FALSE;
-    wmemcpy(BufZ, *Buf, Len);
-    BufZ[Len] = 0;
-    Free(*Buf);
     *Buf = BufZ;
     return TRUE;
 }
 
-static _Return_type_success_(return != NULL) void *RegistryQuery(
-    _In_ HKEY Key,
-    _In_opt_z_ const WCHAR *Name,
-    _Out_opt_ DWORD *ValueType,
-    _Inout_ DWORD *BufLen,
-    _In_ BOOL Log)
+_Must_inspect_result_
+static _Return_type_success_(return != NULL)
+_Post_maybenull_
+_Post_writable_byte_size_(*BufLen)
+VOID *
+RegistryQuery(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_opt_ DWORD *ValueType, _Inout_ DWORD *BufLen, _In_ BOOL Log)
 {
     for (;;)
     {
@@ -220,7 +214,7 @@ static _Return_type_success_(return != NULL) void *RegistryQuery(
             {
                 WCHAR RegPath[MAX_REG_PATH];
                 LoggerGetRegistryKeyPath(Key, RegPath);
-                LOG_ERROR(LastError, L"Querying registry value %.*s\\%s failed", MAX_REG_PATH, RegPath, Name);
+                LOG_ERROR(LastError, L"Failed to query registry value %.*s\\%s", MAX_REG_PATH, RegPath, Name);
             }
             SetLastError(LastError);
             return NULL;
@@ -228,11 +222,12 @@ static _Return_type_success_(return != NULL) void *RegistryQuery(
     }
 }
 
-_Return_type_success_(
-    return != NULL) WCHAR *RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ BOOL Log)
+_Use_decl_annotations_
+LPWSTR
+RegistryQueryString(HKEY Key, LPCWSTR Name, BOOL Log)
 {
     DWORD LastError, ValueType, Size = 256 * sizeof(WCHAR);
-    WCHAR *Value = RegistryQuery(Key, Name, &ValueType, &Size, Log);
+    LPWSTR Value = RegistryQuery(Key, Name, &ValueType, &Size, Log);
     if (!Value)
         return NULL;
     switch (ValueType)
@@ -240,7 +235,7 @@ _Return_type_success_(
     case REG_SZ:
     case REG_EXPAND_SZ:
     case REG_MULTI_SZ:
-        if (RegistryGetString(&Value, Size / sizeof(WCHAR), ValueType))
+        if (RegistryGetString(&Value, Size / sizeof(*Value), ValueType))
             return Value;
         LastError = GetLastError();
         break;
@@ -261,8 +256,9 @@ _Return_type_success_(
     return NULL;
 }
 
-_Return_type_success_(
-    return != NULL) WCHAR *RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout)
+_Use_decl_annotations_
+LPWSTR
+RegistryQueryStringWait(HKEY Key, LPCWSTR Name, DWORD Timeout)
 {
     DWORD LastError;
     ULONGLONG Deadline = GetTickCount64() + Timeout;
@@ -282,7 +278,7 @@ _Return_type_success_(
             LOG_ERROR(LastError, L"Failed to setup registry key %.*s notification", MAX_REG_PATH, RegPath);
             break;
         }
-        WCHAR *Value = RegistryQueryString(Key, Name, FALSE);
+        LPWSTR Value = RegistryQueryString(Key, Name, FALSE);
         if (Value)
         {
             CloseHandle(Event);
@@ -313,8 +309,9 @@ _Return_type_success_(
     return NULL;
 }
 
-_Return_type_success_(return != FALSE) BOOL
-    RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ DWORD *Value, _In_ BOOL Log)
+_Use_decl_annotations_
+BOOL
+RegistryQueryDWORD(HKEY Key, LPCWSTR Name, DWORD *Value, BOOL Log)
 {
     DWORD ValueType, Size = sizeof(DWORD);
     DWORD LastError = RegQueryValueExW(Key, Name, NULL, &ValueType, (BYTE *)Value, &Size);
@@ -324,7 +321,7 @@ _Return_type_success_(return != FALSE) BOOL
         {
             WCHAR RegPath[MAX_REG_PATH];
             LoggerGetRegistryKeyPath(Key, RegPath);
-            LOG_ERROR(LastError, L"Querying registry value %.*s\\%s failed", MAX_REG_PATH, RegPath, Name);
+            LOG_ERROR(LastError, L"Failed to query registry value %.*s\\%s", MAX_REG_PATH, RegPath, Name);
         }
         SetLastError(LastError);
         return FALSE;
@@ -348,8 +345,9 @@ _Return_type_success_(return != FALSE) BOOL
     return TRUE;
 }
 
-_Return_type_success_(return != FALSE) BOOL
-    RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout, _Out_ DWORD *Value)
+_Use_decl_annotations_
+BOOL
+RegistryQueryDWORDWait(HKEY Key, LPCWSTR Name, DWORD Timeout, DWORD *Value)
 {
     DWORD LastError;
     ULONGLONG Deadline = GetTickCount64() + Timeout;
@@ -397,74 +395,4 @@ _Return_type_success_(return != FALSE) BOOL
     CloseHandle(Event);
     SetLastError(LastError);
     return FALSE;
-}
-
-_Return_type_success_(return != FALSE) static BOOL
-    DeleteNodeRecurse(_In_ HKEY Key, _In_z_ WCHAR *Name)
-{
-    LSTATUS Ret;
-    DWORD Size;
-    SIZE_T Len;
-    WCHAR SubName[MAX_REG_PATH], *End;
-    HKEY SubKey;
-
-    Len = wcslen(Name);
-    if (Len >= MAX_REG_PATH || !Len)
-        return TRUE;
-
-    if (RegDeleteKeyW(Key, Name) == ERROR_SUCCESS)
-        return TRUE;
-
-    Ret = RegOpenKeyEx(Key, Name, 0, KEY_READ, &SubKey);
-    if (Ret != ERROR_SUCCESS)
-    {
-        if (Ret == ERROR_FILE_NOT_FOUND)
-            return TRUE;
-        SetLastError(Ret);
-        return FALSE;
-    }
-
-    End = Name + Len;
-    if (End[-1] != L'\\')
-    {
-        *(End++) = L'\\';
-        *End = L'\0';
-    }
-    Size = MAX_REG_PATH;
-    Ret = RegEnumKeyEx(SubKey, 0, SubName, &Size, NULL, NULL, NULL, NULL);
-    if (Ret == ERROR_SUCCESS)
-    {
-        do
-        {
-            End[0] = L'\0';
-            StringCchCatW(Name, MAX_REG_PATH * 2, SubName);
-            if (!DeleteNodeRecurse(Key, Name))
-                break;
-            Size = MAX_REG_PATH;
-            Ret = RegEnumKeyEx(SubKey, 0, SubName, &Size, NULL, NULL, NULL, NULL);
-        } while (Ret == ERROR_SUCCESS);
-    }
-    else
-    {
-        SetLastError(Ret);
-        *(--End) = L'\0';
-        RegCloseKey(SubKey);
-        return FALSE;
-    }
-    *(--End) = L'\0';
-    RegCloseKey(SubKey);
-
-    Ret = RegDeleteKey(Key, Name);
-    if (Ret == ERROR_SUCCESS)
-        return TRUE;
-    SetLastError(Ret);
-    return FALSE;
-}
-
-_Return_type_success_(return != FALSE) BOOL
-RegistryDeleteKeyRecursive(_In_ HKEY Key, _In_z_ const WCHAR *Name)
-{
-    WCHAR NameBuf[(MAX_REG_PATH + 2) * 2] = { 0 };
-    StringCchCopyW(NameBuf, MAX_REG_PATH * 2, Name);
-    return DeleteNodeRecurse(Key, NameBuf);
 }

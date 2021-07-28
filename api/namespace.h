@@ -7,17 +7,24 @@
 
 #include <Windows.h>
 
-_Check_return_
-_Return_type_success_(return != NULL) HANDLE NamespaceTakePoolMutex(_In_z_ const WCHAR *Pool);
+_Must_inspect_result_
+_Return_type_success_(return != NULL)
+_Post_maybenull_
+_Acquires_lock_(_Curr_)
+HANDLE
+NamespaceTakePoolMutex(_In_z_ LPCWSTR Pool);
 
-_Check_return_
-_Return_type_success_(return != NULL) HANDLE NamespaceTakeDriverInstallationMutex(void);
+_Must_inspect_result_
+_Return_type_success_(return != NULL)
+_Post_maybenull_
+_Acquires_lock_(_Curr_)
+HANDLE
+NamespaceTakeDriverInstallationMutex(VOID);
 
-void
+_Releases_lock_(Mutex)
+VOID
 NamespaceReleaseMutex(_In_ HANDLE Mutex);
 
-void
-NamespaceInit(void);
+VOID NamespaceInit(VOID);
 
-void
-NamespaceDone(void);
+VOID NamespaceDone(VOID);

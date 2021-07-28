@@ -70,8 +70,10 @@ typedef struct _TUN_SESSION
     HANDLE Handle;
 } TUN_SESSION;
 
-_Return_type_success_(return != NULL) TUN_SESSION *WINAPI
-    WintunStartSession(_In_ const WINTUN_ADAPTER *Adapter, _In_ DWORD Capacity)
+WINTUN_START_SESSION_FUNC_IMPL WintunStartSession;
+_Use_decl_annotations_
+TUN_SESSION *WINAPI
+WintunStartSession(WINTUN_ADAPTER *Adapter, DWORD Capacity)
 {
     DWORD LastError;
     TUN_SESSION *Session = Zalloc(sizeof(TUN_SESSION));
@@ -126,8 +128,8 @@ _Return_type_success_(return != NULL) TUN_SESSION *WINAPI
         goto cleanupHandle;
     }
     Session->Capacity = Capacity;
-    (void)InitializeCriticalSectionAndSpinCount(&Session->Receive.Lock, LOCK_SPIN_COUNT);
-    (void)InitializeCriticalSectionAndSpinCount(&Session->Send.Lock, LOCK_SPIN_COUNT);
+    (VOID) InitializeCriticalSectionAndSpinCount(&Session->Receive.Lock, LOCK_SPIN_COUNT);
+    (VOID) InitializeCriticalSectionAndSpinCount(&Session->Send.Lock, LOCK_SPIN_COUNT);
     return Session;
 cleanupHandle:
     CloseHandle(Session->Handle);
@@ -144,8 +146,10 @@ cleanup:
     return NULL;
 }
 
-void WINAPI
-WintunEndSession(_In_ TUN_SESSION *Session)
+WINTUN_END_SESSION_FUNC_IMPL WintunEndSession;
+_Use_decl_annotations_
+VOID WINAPI
+WintunEndSession(TUN_SESSION *Session)
 {
     DeleteCriticalSection(&Session->Send.Lock);
     DeleteCriticalSection(&Session->Receive.Lock);
@@ -156,14 +160,18 @@ WintunEndSession(_In_ TUN_SESSION *Session)
     Free(Session);
 }
 
+WINTUN_GET_READ_WAIT_EVENT_FUNC_IMPL WintunGetReadWaitEvent;
+_Use_decl_annotations_
 HANDLE WINAPI
-WintunGetReadWaitEvent(_In_ TUN_SESSION *Session)
+WintunGetReadWaitEvent(TUN_SESSION *Session)
 {
     return Session->Descriptor.Send.TailMoved;
 }
 
-_Return_type_success_(return != NULL) _Ret_bytecount_(*PacketSize) BYTE *WINAPI
-    WintunReceivePacket(_In_ TUN_SESSION *Session, _Out_ DWORD *PacketSize)
+WINTUN_RECEIVE_PACKET_FUNC_IMPL WintunReceivePacket;
+_Use_decl_annotations_
+BYTE *WINAPI
+WintunReceivePacket(TUN_SESSION *Session, DWORD *PacketSize)
 {
     DWORD LastError;
     EnterCriticalSection(&Session->Send.Lock);
@@ -213,8 +221,10 @@ cleanup:
     return NULL;
 }
 
-void WINAPI
-WintunReleaseReceivePacket(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
+WINTUN_RELEASE_RECEIVE_PACKET_FUNC_IMPL WintunReleaseReceivePacket;
+_Use_decl_annotations_
+VOID WINAPI
+WintunReleaseReceivePacket(TUN_SESSION *Session, const BYTE *Packet)
 {
     EnterCriticalSection(&Session->Send.Lock);
     TUN_PACKET *ReleasedBuffPacket = (TUN_PACKET *)(Packet - offsetof(TUN_PACKET, Data));
@@ -232,8 +242,10 @@ WintunReleaseReceivePacket(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
     LeaveCriticalSection(&Session->Send.Lock);
 }
 
-_Return_type_success_(return != NULL) _Ret_bytecount_(PacketSize) BYTE *WINAPI
-    WintunAllocateSendPacket(_In_ TUN_SESSION *Session, _In_ DWORD PacketSize)
+WINTUN_ALLOCATE_SEND_PACKET_FUNC_IMPL WintunAllocateSendPacket;
+_Use_decl_annotations_
+BYTE *WINAPI
+WintunAllocateSendPacket(TUN_SESSION *Session, DWORD PacketSize)
 {
     DWORD LastError;
     EnterCriticalSection(&Session->Receive.Lock);
@@ -268,8 +280,10 @@ cleanup:
     return NULL;
 }
 
-void WINAPI
-WintunSendPacket(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
+WINTUN_SEND_PACKET_FUNC_IMPL WintunSendPacket;
+_Use_decl_annotations_
+VOID WINAPI
+WintunSendPacket(TUN_SESSION *Session, const BYTE *Packet)
 {
     EnterCriticalSection(&Session->Receive.Lock);
     TUN_PACKET *ReleasedBuffPacket = (TUN_PACKET *)(Packet - offsetof(TUN_PACKET, Data));
@@ -285,7 +299,8 @@ WintunSendPacket(_In_ TUN_SESSION *Session, _In_ const BYTE *Packet)
             TUN_RING_WRAP(Session->Receive.TailRelease + AlignedPacketSize, Session->Capacity);
         Session->Receive.PacketsToRelease--;
     }
-    if (Session->Descriptor.Receive.Ring->Tail != Session->Receive.TailRelease) {
+    if (Session->Descriptor.Receive.Ring->Tail != Session->Receive.TailRelease)
+    {
         WriteULongRelease(&Session->Descriptor.Receive.Ring->Tail, Session->Receive.TailRelease);
         if (ReadAcquire(&Session->Descriptor.Receive.Ring->Alertable))
             SetEvent(Session->Descriptor.Receive.TailMoved);

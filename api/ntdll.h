@@ -45,7 +45,7 @@ typedef struct _KEY_NAME_INFORMATION
  * when run from legacy contexts. So, we instead use the undocumented RtlGetNtVersionNumbers.
  *
  * Another way would be reading from the PEB directly:
- *   ((DWORD *)NtCurrentTeb()->ProcessEnvironmentBlock)[sizeof(void *) == 8 ? 70 : 41]
+ *   ((DWORD *)NtCurrentTeb()->ProcessEnvironmentBlock)[sizeof(VOID *) == 8 ? 70 : 41]
  * Or just read from KUSER_SHARED_DATA the same way on 32-bit and 64-bit:
  *    *(DWORD *)0x7FFE026C
  */
@@ -61,9 +61,3 @@ NtQueryKey(
     _Out_bytecap_post_bytecount_(Length, *ResultLength) PVOID KeyInformation,
     _In_ ULONG Length,
     _Out_ PULONG ResultLength);
-
-/* This is documented in NTSecAPI.h, which we can't include, due to header conflicts. It actually lives in advapi32.dll. */
-#define RtlGenRandom SystemFunction036
-BOOLEAN
-NTAPI
-RtlGenRandom(_Out_writes_bytes_all_(RandomBufferLength) PVOID RandomBuffer, _In_ ULONG RandomBufferLength);

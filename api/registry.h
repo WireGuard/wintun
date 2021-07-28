@@ -26,8 +26,11 @@
  * @return Key handle on success. If the function fails, the return value is zero. To get extended error information,
  *         call GetLastError.
  */
-_Return_type_success_(return != NULL) HKEY
-    RegistryOpenKeyWait(_In_ HKEY Key, _In_z_ const WCHAR *Path, _In_ DWORD Access, _In_ DWORD Timeout);
+_Must_inspect_result_
+_Return_type_success_(return != NULL)
+_Post_maybenull_
+HKEY
+RegistryOpenKeyWait(_In_ HKEY Key, _In_z_ LPCWSTR Path, _In_ DWORD Access, _In_ DWORD Timeout);
 
 /**
  * Validates and/or sanitizes string value read from registry.
@@ -44,8 +47,10 @@ _Return_type_success_(return != NULL) HKEY
  * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
  *         get extended error information, call GetLastError.
  */
-_Return_type_success_(return != FALSE) BOOL
-    RegistryGetString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType);
+_Must_inspect_result_
+_Return_type_success_(return != FALSE)
+BOOL
+RegistryGetString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType);
 
 /**
  * Validates and/or sanitizes multi-string value read from registry.
@@ -61,8 +66,10 @@ _Return_type_success_(return != FALSE) BOOL
  * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
  *         get extended error information, call GetLastError.
  */
-_Return_type_success_(return != FALSE) BOOL
-    RegistryGetMultiString(_Inout_ WCHAR **Buf, _In_ DWORD Len, _In_ DWORD ValueType);
+_Must_inspect_result_
+_Return_type_success_(return != FALSE)
+BOOL
+RegistryGetMultiString(_Inout_ PZZWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType);
 
 /**
  * Reads string value from registry key.
@@ -83,8 +90,11 @@ _Return_type_success_(return != FALSE) BOOL
  * @return String with registry value on success; If the function fails, the return value is zero. To get extended error
  *         information, call GetLastError.
  */
-_Return_type_success_(
-    return != NULL) WCHAR *RegistryQueryString(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ BOOL Log);
+_Must_inspect_result_
+_Return_type_success_(return != NULL)
+_Post_maybenull_
+LPWSTR
+RegistryQueryString(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _In_ BOOL Log);
 
 /**
  * Reads string value from registry key. It waits for the registry value to become available.
@@ -101,8 +111,11 @@ _Return_type_success_(
  *         get extended error information, call GetLastError. Possible errors include the following:
  *         ERROR_INVALID_DATATYPE when the registry value is not a string
  */
-_Return_type_success_(
-    return != NULL) WCHAR *RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout);
+_Must_inspect_result_
+_Return_type_success_(return != NULL)
+_Post_maybenull_
+LPWSTR
+RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _In_ DWORD Timeout);
 
 /**
  * Reads a 32-bit DWORD value from registry key.
@@ -120,8 +133,10 @@ _Return_type_success_(
  * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
  *         get extended error information, call GetLastError.
  */
-_Return_type_success_(return != FALSE) BOOL
-    RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _Out_ DWORD *Value, _In_ BOOL Log);
+_Must_inspect_result_
+_Return_type_success_(return != FALSE)
+BOOL
+RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ DWORD *Value, _In_ BOOL Log);
 
 /**
  * Reads a 32-bit DWORD value from registry key. It waits for the registry value to become available.
@@ -139,17 +154,7 @@ _Return_type_success_(return != FALSE) BOOL
  *         ERROR_INVALID_DATATYPE when registry value exist but not REG_DWORD type;
  *         ERROR_INVALID_DATA when registry value size is not 4 bytes
  */
-_Return_type_success_(return != FALSE) BOOL
-    RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ const WCHAR *Name, _In_ DWORD Timeout, _Out_ DWORD *Value);
-
-/**
- * Deletes the entire registry key subtree recursively.
- *
- * @param Key           Handle of the registry key to at which the subtree is rooted.
- *
- * @param Name          Name of the subtree to delete.
- *
- * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
- *         get extended error information, call GetLastError.
- */
-_Return_type_success_(return != FALSE) BOOL RegistryDeleteKeyRecursive(_In_ HKEY Key, _In_z_ const WCHAR *Name);
+_Must_inspect_result_
+_Return_type_success_(return != FALSE)
+BOOL
+RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _In_ DWORD Timeout, _Out_ DWORD *Value);
