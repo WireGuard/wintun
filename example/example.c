@@ -87,7 +87,7 @@ ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
     }
     fwprintf(
         stderr,
-        L"%04d-%02d-%02d %02d:%02d:%02d.%04d [%c] %s\n",
+        L"%04u-%02u-%02u %02u:%02u:%02u.%04u [%c] %s\n",
         SystemTime.wYear,
         SystemTime.wMonth,
         SystemTime.wDay,
