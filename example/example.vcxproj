@@ -8,7 +8,7 @@
   <PropertyGroup Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <PlatformToolset>WindowsApplicationForDrivers10.0</PlatformToolset>
-    <TargetVersion>Windows10</TargetVersion>
+    <ForcedTargetVersion>Windows10</ForcedTargetVersion>
   </PropertyGroup>
   <Import Project="..\wintun.props" />
   <ItemDefinitionGroup>

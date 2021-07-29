@@ -56,16 +56,19 @@
     <UseDebugLibraries>true</UseDebugLibraries>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Platform)'=='Win32'" Label="Configuration">
-    <TargetVersion Condition="'$(TargetVersion)'==''">Windows7</TargetVersion>
+    <TargetVersion>Windows7</TargetVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Platform)'=='ARM'" Label="Configuration">
-    <TargetVersion Condition="'$(TargetVersion)'==''">Windows8</TargetVersion>
+    <TargetVersion>Windows8</TargetVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Platform)'=='x64'" Label="Configuration">
-    <TargetVersion Condition="'$(TargetVersion)'==''">Windows7</TargetVersion>
+    <TargetVersion>Windows7</TargetVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Platform)'=='ARM64'" Label="Configuration">
-    <TargetVersion Condition="'$(TargetVersion)'==''">Windows10</TargetVersion>
+    <TargetVersion>Windows10</TargetVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(ForcedTargetVersion)'!=''">
+    <TargetVersion>$(ForcedTargetVersion)</TargetVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings" />
