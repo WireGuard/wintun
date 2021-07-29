@@ -2,6 +2,6 @@
 indent_style = space
 indent_size = 4
 
-[*.{proj,props,vcxproj,wixproj,wxs}]
+[*.{proj,props,vcxproj,filters}]
 indent_style = space
 indent_size = 2
