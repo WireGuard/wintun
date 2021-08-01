@@ -17,7 +17,6 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="Exists('$(OutDir)whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='Win32'">MAYBE_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='x64'">ACCEPT_WOW64;MAYBE_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='ARM'">MAYBE_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -28,7 +27,6 @@
     </ClCompile>
     <ResourceCompile>
       <AdditionalIncludeDirectories>..\$(Configuration)\$(WintunPlatform);..\$(Configuration);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions Condition="Exists('$(OutDir)whql\')">HAVE_WHQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="Exists('..\$(Configuration)\arm64\wintun.dll')">BUILT_ARM64_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="Exists('..\$(Configuration)\amd64\wintun.dll')">BUILT_AMD64_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='Win32'">WANT_ARM64_WOW64;WANT_AMD64_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -36,8 +34,8 @@
       <PreprocessorDefinitions Condition="'$(Platform)'=='ARM'">WANT_ARM64_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
-      <DelayLoadDLLs>advapi32.dll;bcrypt.dll;crypt32.dll;cfgmgr32.dll;iphlpapi.dll;ole32.dll;nci.dll;setupapi.dll;shell32.dll;shlwapi.dll;version.dll</DelayLoadDLLs>
-      <AdditionalDependencies>Bcrypt.lib;Crypt32.lib;Cfgmgr32.lib;Iphlpapi.lib;$(IntDir)nci.lib;ntdll.lib;Setupapi.lib;shlwapi.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <DelayLoadDLLs>advapi32.dll;bcrypt.dll;cfgmgr32.dll;iphlpapi.dll;ole32.dll;nci.dll;setupapi.dll;shell32.dll;shlwapi.dll;version.dll</DelayLoadDLLs>
+      <AdditionalDependencies>Bcrypt.lib;Cfgmgr32.lib;Iphlpapi.lib;$(IntDir)nci.lib;ntdll.lib;Setupapi.lib;shlwapi.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>exports.def</ModuleDefinitionFile>
       <SubSystem>Windows</SubSystem>
       <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>

@@ -12,12 +12,6 @@ wintun.cat RCDATA "driver\\wintun.cat"
 wintun.inf RCDATA "driver\\wintun.inf"
 wintun.sys RCDATA "driver\\wintun.sys"
 
-#ifdef HAVE_WHQL
-wintun-whql.cat RCDATA "whql\\wintun.cat"
-wintun-whql.inf RCDATA "whql\\wintun.inf"
-wintun-whql.sys RCDATA "whql\\wintun.sys"
-#endif
-
 #if defined(WANT_AMD64_WOW64)
 #    if defined(BUILT_AMD64_WOW64)
 wintun-amd64.dll RCDATA "amd64\\wintun.dll"
