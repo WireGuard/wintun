@@ -80,21 +80,21 @@
   <Target Name="Dll-x86"
     Outputs="$(Configuration)\x86\wintun.dll"
     DependsOnTargets="Dll-amd64;Dll-arm64">
-    <MSBuild Projects="api\api.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=Win32" />
+    <MSBuild Projects="downlevelshim\downlevelshim.vcxproj;api\api.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=Win32" />
   </Target>
   <Target Name="Dll-amd64"
     Outputs="$(Configuration)\amd64\wintun.dll"
     DependsOnTargets="Dll-arm64">
-    <MSBuild Projects="api\api.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=x64" />
+    <MSBuild Projects="downlevelshim\downlevelshim.vcxproj;api\api.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=x64" />
   </Target>
   <Target Name="Dll-arm"
     Outputs="$(Configuration)\arm\wintun.dll"
     DependsOnTargets="Dll-arm64">
-    <MSBuild Projects="api\api.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=ARM" />
+    <MSBuild Projects="downlevelshim\downlevelshim.vcxproj;api\api.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=ARM" />
   </Target>
   <Target Name="Dll-arm64"
     Outputs="$(Configuration)\arm64\wintun.dll">
-    <MSBuild Projects="api\api.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=ARM64" />
+    <MSBuild Projects="downlevelshim\downlevelshim.vcxproj;api\api.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=ARM64" />
   </Target>
 
   <!--

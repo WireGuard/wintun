@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{6E8213E6-5046-4DE8-A760-0932C7D6E33E}</ProjectGuid>
+    <RootNamespace>downlevelshim</RootNamespace>
+    <ProjectName>downlevelshim</ProjectName>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>WindowsApplicationForDrivers10.0</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="..\wintun.props" />
+  <PropertyGroup>
+    <TargetName>downlevelshim</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>/volatile:iso %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <ModuleDefinitionFile>exports.def</ModuleDefinitionFile>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <None Include="exports.def" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="shim.c" />
+  </ItemGroup>
+  <Import Project="..\wintun.props.user" Condition="exists('..\wintun.props.user')" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

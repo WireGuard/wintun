@@ -1126,6 +1126,8 @@ SelectDriver(
     WCHAR CatPath[MAX_PATH] = { 0 };
     WCHAR SysPath[MAX_PATH] = { 0 };
     WCHAR InfPath[MAX_PATH] = { 0 };
+    WCHAR DownlevelShimPath[MAX_PATH] = { 0 };
+
     if (!PathCombineW(CatPath, RandomTempSubDirectory, L"wintun.cat") ||
         !PathCombineW(SysPath, RandomTempSubDirectory, L"wintun.sys") ||
         !PathCombineW(InfPath, RandomTempSubDirectory, L"wintun.inf"))
@@ -1140,6 +1142,53 @@ SelectDriver(
     {
         LastError = LOG_LAST_ERROR(L"Failed to extract driver");
         goto cleanupDelete;
+    }
+
+    WCHAR *WintrustKeyOriginalValue = NULL;
+    HKEY WintrustKey = NULL;
+    if (!IsWindows10)
+    {
+        LOG(WINTUN_LOG_INFO, L"Shimming downlevel driver loader");
+        if (!PathCombineW(DownlevelShimPath, RandomTempSubDirectory, L"downlevelshim.dll"))
+        {
+            DownlevelShimPath[0] = L'\0';
+            LastError = ERROR_BUFFER_OVERFLOW;
+            goto cleanupDelete;
+        }
+        if (!ResourceCopyToFile(DownlevelShimPath, L"downlevelshim.dll"))
+        {
+            LastError = LOG_LAST_ERROR(L"Failed to extract downlevel shim");
+            goto cleanupDelete;
+        }
+        LastError = RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            L"SOFTWARE\\Microsoft\\Cryptography\\Providers\\Trust\\FinalPolicy\\{F750E6C3-38EE-11D1-85E5-00C04FC295EE}",
+            0,
+            KEY_QUERY_VALUE | KEY_SET_VALUE,
+            &WintrustKey);
+        if (LastError != ERROR_SUCCESS)
+        {
+            LOG_ERROR(LastError, L"Failed to open Wintrust FinalPolicy key");
+            goto cleanupDelete;
+        }
+        WintrustKeyOriginalValue = RegistryQueryString(WintrustKey, L"$DLL", TRUE);
+        if (!WintrustKeyOriginalValue)
+        {
+            LastError = LOG_LAST_ERROR(L"Failed to read current Wintrust FinalPolicy key");
+            goto cleanupWintrustKey;
+        }
+        LastError = RegSetValueExW(
+            WintrustKey,
+            L"$DLL",
+            0,
+            REG_SZ,
+            (BYTE *)DownlevelShimPath,
+            (DWORD)((wcslen(DownlevelShimPath) + 1) * sizeof(DownlevelShimPath[0])));
+        if (LastError != ERROR_SUCCESS)
+        {
+            LOG_ERROR(LastError, L"Failed to set Wintrust FinalPolicy key");
+            goto cleanupWintrustChangedKey;
+        }
     }
     LOG(WINTUN_LOG_INFO, L"Installing driver");
     WCHAR InfStorePath[MAX_PATH];
@@ -1185,10 +1234,26 @@ SelectDriver(
     LastError = ERROR_SUCCESS;
     DestroyDriverInfoListOnCleanup = FALSE;
 
+cleanupWintrustChangedKey:
+    if (WintrustKeyOriginalValue)
+        RegSetValueExW(
+            WintrustKey,
+            L"$DLL",
+            0,
+            REG_SZ,
+            (BYTE *)WintrustKeyOriginalValue,
+            (DWORD)((wcslen(WintrustKeyOriginalValue) + 1) * sizeof(WintrustKeyOriginalValue[0])));
+cleanupWintrustKey:
+    if (WintrustKey)
+        RegCloseKey(WintrustKey);
+    if (WintrustKeyOriginalValue)
+        Free(WintrustKeyOriginalValue);
 cleanupDelete:
     DeleteFileW(CatPath);
     DeleteFileW(SysPath);
     DeleteFileW(InfPath);
+    if (DownlevelShimPath[0])
+        DeleteFileW(DownlevelShimPath);
 cleanupDirectory:
     RemoveDirectoryW(RandomTempSubDirectory);
 cleanupExistingAdapters:

@@ -12,6 +12,8 @@ wintun.cat RCDATA "driver\\wintun.cat"
 wintun.inf RCDATA "driver\\wintun.inf"
 wintun.sys RCDATA "driver\\wintun.sys"
 
+downlevelshim.dll RCDATA "downlevelshim.dll"
+
 #if defined(WANT_AMD64_WOW64)
 #    if defined(BUILT_AMD64_WOW64)
 wintun-amd64.dll RCDATA "amd64\\wintun.dll"
