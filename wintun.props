@@ -96,7 +96,7 @@
     <OutDir Condition="'$(ConfigurationType)'=='Driver'">$(IntDir)</OutDir>
     <PackageDir>..\$(Configuration)\$(WintunPlatform)\$(ProjectName)\</PackageDir>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+  <PropertyGroup Condition="'$(SDVHacks)'!='true'">
     <RunCodeAnalysis>true</RunCodeAnalysis>
   </PropertyGroup>
   <PropertyGroup Condition="'$(RunCodeAnalysis)'=='true'">
