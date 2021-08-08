@@ -86,7 +86,7 @@ VOID __stdcall CreateAdapter(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int 
     WINTUN_ADAPTER *Adapter = WintunCreateAdapter(Argv[2], Argv[3], Argc > 4 ? &RequestedGUID : NULL, &RebootRequired);
     DWORD LastError = Adapter ? ERROR_SUCCESS : GetLastError();
     WriteFormatted(
-        STD_OUTPUT_HANDLE, L"%1!X! %2!s! %3!X!", LastError, Adapter ? Adapter->DevInstanceID : L"", RebootRequired);
+        STD_OUTPUT_HANDLE, L"%1!X! %2!s! %3!X!", LastError, Adapter ? Adapter->DevInstanceID : L"\"\"", RebootRequired);
     if (Adapter)
         WintunFreeAdapter(Adapter);
 
