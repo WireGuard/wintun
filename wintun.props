@@ -116,6 +116,7 @@
     <Link>
       <ProgramDatabaseFile>$(OutDir)$(TargetName).pdb</ProgramDatabaseFile>
       <ProgramDatabaseFile Condition="'$(ConfigurationType)'=='Driver'">$(PackageDir)$(TargetName).pdb</ProgramDatabaseFile>
+      <ImportLibrary Condition="'$(ConfigurationType)'=='DynamicLibrary'">$(IntDir)$(TargetName).lib</ImportLibrary>
     </Link>
     <DriverSign>
       <FileDigestAlgorithm>sha256</FileDigestAlgorithm>

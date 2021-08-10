@@ -38,7 +38,6 @@
       <AdditionalDependencies>Bcrypt.lib;Cfgmgr32.lib;Iphlpapi.lib;$(IntDir)nci.lib;ntdll.lib;Setupapi.lib;shlwapi.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>exports.def</ModuleDefinitionFile>
       <SubSystem>Windows</SubSystem>
-      <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
