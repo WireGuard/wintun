@@ -12,6 +12,10 @@
 /driver/smvbuild.log
 /driver/smvstats.txt
 
+# CodeQL Output
+/driver/driver.sarif
+/driver/vc140.pdb
+
 # Driver Verification Log
 /driver/wintun.DVL.XML
 
