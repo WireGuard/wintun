@@ -804,7 +804,7 @@ TunForceHandlesClosed(_Inout_ DEVICE_OBJECT *DeviceObject)
     {
         if (HandleTable)
             ExFreePoolWithTag(HandleTable, TUN_MEMORY_TAG);
-        HandleTable = ExAllocatePoolWithTag(PagedPool, RequestedSize, TUN_MEMORY_TAG);
+        HandleTable = ExAllocatePoolUninitialized(PagedPool, RequestedSize, TUN_MEMORY_TAG);
         if (!HandleTable)
             return FALSE;
     }
