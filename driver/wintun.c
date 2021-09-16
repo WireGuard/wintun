@@ -509,6 +509,8 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         if (AlignedPacketSize > RingContent)
             break;
 
+        RingHead = TUN_RING_WRAP(RingHead + AlignedPacketSize, RingCapacity);
+
         ULONG NblFlags;
         USHORT NblProto;
         if (PacketSize >= 20 && Packet->Data[0] >> 4 == 4)
@@ -522,9 +524,8 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
             NblProto = HTONS(NDIS_ETH_TYPE_IPV6);
         }
         else
-            break;
+            goto skipNbl;
 
-        RingHead = TUN_RING_WRAP(RingHead + AlignedPacketSize, RingCapacity);
         VOID *PacketAddr =
             (UCHAR *)MmGetMdlVirtualAddress(Ctx->Device.Receive.Mdl) + (ULONG)(Packet->Data - (UCHAR *)Ring);
         MDL *Mdl = IoAllocateMdl(PacketAddr, PacketSize, FALSE, FALSE, NULL);
