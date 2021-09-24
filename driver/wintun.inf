@@ -54,7 +54,6 @@ ServiceType = 1 ; SERVICE_KERNEL_DRIVER
 StartType = 3 ; SERVICE_DEMAND_START
 ErrorControl = 1 ; SERVICE_ERROR_NORMAL
 ServiceBinary = %12%\wintun.sys
-LoadOrderGroup = NDIS
 
 [Wintun.EventLog]
 HKR, , EventMessageFile, 0x00020000, "%11%\IoLogMsg.dll;%12%\wintun.sys"
