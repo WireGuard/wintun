@@ -1195,7 +1195,7 @@ SelectDriver(
     if (!SetupCopyOEMInfW(InfPath, NULL, SPOST_NONE, 0, InfStorePath, MAX_PATH, NULL, NULL))
     {
         LastError = LOG_LAST_ERROR(L"Could not install driver %s to store", InfPath);
-        goto cleanupDelete;
+        goto cleanupWintrustChangedKey;
     }
     _Analysis_assume_nullterminated_(InfStorePath);
 
@@ -1207,29 +1207,29 @@ SelectDriver(
     {
         LOG(WINTUN_LOG_ERR, L"Inf path too long: %s", InfStorePath);
         LastError = ERROR_INVALID_PARAMETER;
-        goto cleanupDelete;
+        goto cleanupWintrustChangedKey;
     }
     if (!SetupDiSetDeviceInstallParamsW(DevInfo, DevInfoData, DevInstallParams))
     {
         LastError = LOG_LAST_ERROR(L"Failed to set adapter %u device installation parameters", DevInfoData->DevInst);
-        goto cleanupDelete;
+        goto cleanupWintrustChangedKey;
     }
     if (!SetupDiBuildDriverInfoList(DevInfo, DevInfoData, SPDIT_COMPATDRIVER))
     {
         LastError = LOG_LAST_ERROR(L"Failed rebuilding adapter %u driver info list", DevInfoData->DevInst);
-        goto cleanupDelete;
+        goto cleanupWintrustChangedKey;
     }
     DestroyDriverInfoListOnCleanup = TRUE;
     SP_DRVINFO_DATA_W DrvInfoData = { .cbSize = sizeof(SP_DRVINFO_DATA_W) };
     if (!SetupDiEnumDriverInfoW(DevInfo, DevInfoData, SPDIT_COMPATDRIVER, 0, &DrvInfoData))
     {
         LastError = LOG_LAST_ERROR(L"Failed to get adapter %u driver", DevInfoData->DevInst);
-        goto cleanupDelete;
+        goto cleanupWintrustChangedKey;
     }
     if (!SetupDiSetSelectedDriverW(DevInfo, DevInfoData, &DrvInfoData))
     {
         LastError = LOG_LAST_ERROR(L"Failed to set adapter %u driver", DevInfoData->DevInst);
-        goto cleanupDelete;
+        goto cleanupWintrustChangedKey;
     }
     LastError = ERROR_SUCCESS;
     DestroyDriverInfoListOnCleanup = FALSE;
