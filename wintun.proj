@@ -22,8 +22,7 @@
     <RemoveDir Directories="$(Configuration)\arm\" />
     <RemoveDir Directories="$(Configuration)\arm64\" />
     <RemoveDir Directories="$(Configuration)\x86\" />
-    <RemoveDir Directories="driver\sdv\;dist\" />
-    <Delete Files="driver\smvbuild.log;driver\smvstats.txt;driver\wintun.DVL.XML" />
+    <RemoveDir Directories="dist\" />
   </Target>
 
   <!--
@@ -52,26 +51,6 @@
     Outputs="$(Configuration)\arm64\driver\wintun.sys;$(Configuration)\arm64\driver\wintun.inf;$(Configuration)\arm64\driver\wintun.cat"
     Inputs="$(DriverInputs)">
     <MSBuild Projects="driver\driver.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=ARM64" />
-  </Target>
-
-  <!--
-    Static Driver Verifier
-  -->
-  <Target Name="SDV" Outputs="driver\sdv\SDV.DVL.xml">
-    <Exec WorkingDirectory="driver" Command="msbuild.exe driver.vcxproj /t:sdv /p:Inputs=/check:*;Configuration=$(Configuration);Platform=x64;SDVHacks=true /nologo" />
-  </Target>
-  <Target Name="SDVView">
-    <Exec WorkingDirectory="driver" Command="msbuild.exe driver.vcxproj /t:sdv /p:Inputs=/view;Configuration=$(Configuration);Platform=x64;SDVHacks=true /nologo" />
-  </Target>
-
-  <!--
-    Driver Verification Log
-  -->
-  <Target Name="DVL" DependsOnTargets="SDV"
-    Outputs="driver\wintun.DVL.XML"
-    Inputs="driver\sdv\SDV.DVL.xml">
-    <MSBuild Projects="driver\driver.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=x64;RunCodeAnalysis=true" />
-    <Exec WorkingDirectory="driver" Command="msbuild.exe driver.vcxproj /t:dvl /p:Configuration=$(Configuration);Platform=x64 /nologo" />
   </Target>
 
   <!--
