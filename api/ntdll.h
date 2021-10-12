@@ -39,7 +39,6 @@ typedef struct _KEY_NAME_INFORMATION
 } KEY_NAME_INFORMATION, *PKEY_NAME_INFORMATION;
 
 #define STATUS_INFO_LENGTH_MISMATCH ((NTSTATUS)0xC0000004L) // TODO: #include <ntstatus.h> instead of this
-#define STATUS_PNP_DEVICE_CONFIGURATION_PENDING ((NTSTATUS)0xC0000495L)
 
 /* We can't use RtlGetVersion, because appcompat's aclayers.dll shims it to report Vista
  * when run from legacy contexts. So, we instead use the undocumented RtlGetNtVersionNumbers.

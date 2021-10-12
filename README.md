@@ -11,12 +11,12 @@ Wintun is deployed as a platform-specific `wintun.dll` file. Install the `wintun
 
 Include the [`wintun.h` file](https://git.zx2c4.com/wintun/tree/api/wintun.h) in your project simply by copying it there and dynamically load the `wintun.dll` using [`LoadLibraryEx()`](https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibraryexa) and [`GetProcAddress()`](https://docs.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getprocaddress) to resolve each function, using the typedefs provided in the header file. The [`InitializeWintun` function in the example.c code](https://git.zx2c4.com/wintun/tree/example/example.c) provides this in a function that you can simply copy and paste.
 
-With the library setup, Wintun can then be used by first creating an adapter, and then starting a tunnel session on that adapter. Adapters have names (e.g. "OfficeNet"), and each one belongs to a _pool_ (e.g. "WireGuard"). So, for example, the WireGuard application app creates multiple tunnels all inside of its "WireGuard" _pool_:
+With the library setup, Wintun can then be used by first creating an adapter, configuring it, and then setting its status to "up". Adapters have names (e.g. "OfficeNet") and types (e.g. "Wintun").
 
 ```C
-WINTUN_ADAPTER_HANDLE Adapter1 = WintunCreateAdapter(L"WireGuard", L"OfficeNet", &SomeFixedGUID1, NULL);
-WINTUN_ADAPTER_HANDLE Adapter2 = WintunCreateAdapter(L"WireGuard", L"HomeNet", &SomeFixedGUID2, NULL);
-WINTUN_ADAPTER_HANDLE Adapter3 = WintunCreateAdapter(L"WireGuard", L"Data Center", &SomeFixedGUID3, NULL);
+WINTUN_ADAPTER_HANDLE Adapter1 = WintunCreateAdapter(L"OfficeNet", L"Wintun", &SomeFixedGUID1);
+WINTUN_ADAPTER_HANDLE Adapter2 = WintunCreateAdapter(L"HomeNet", L"Wintun", &SomeFixedGUID2);
+WINTUN_ADAPTER_HANDLE Adapter3 = WintunCreateAdapter(L"Data Center", L"Wintun", &SomeFixedGUID3);
 ```
 
 After creating an adapter, we can use it by starting a session:
@@ -119,13 +119,14 @@ Non-zero to continue iterating adapters; zero to stop.
 
 #### WINTUN\_LOGGER\_CALLBACK
 
-`typedef void(* WINTUN_LOGGER_CALLBACK) (WINTUN_LOGGER_LEVEL Level, const WCHAR *Message)`
+`typedef void(* WINTUN_LOGGER_CALLBACK) (WINTUN_LOGGER_LEVEL Level, DWORD64 Timestamp, const WCHAR *Message)`
 
 Called by internal logger to report diagnostic messages
 
 **Parameters**
 
 - *Level*: Message level.
+- *Timestamp*: Message timestamp in in 100ns intervals since 1601-01-01 UTC.
 - *Message*: Message text.
 
 #### WINTUN\_SESSION\_HANDLE
@@ -152,88 +153,49 @@ Enumerator
 
 #### WintunCreateAdapter()
 
-`WINTUN_ADAPTER_HANDLE WintunCreateAdapter (const WCHAR * Pool, const WCHAR * Name, const GUID * RequestedGUID, BOOL * RebootRequired)`
+`WINTUN_ADAPTER_HANDLE WintunCreateAdapter (const WCHAR * Name, const WCHAR * TunnelType, const GUID * RequestedGUID)`
 
 Creates a new Wintun adapter.
 
 **Parameters**
 
-- *Pool*: Name of the adapter pool. Zero-terminated string of up to WINTUN\_MAX\_POOL-1 characters.
 - *Name*: The requested name of the adapter. Zero-terminated string of up to MAX\_ADAPTER\_NAME-1 characters.
+- *Name*: Name of the adapter tunnel type. Zero-terminated string of up to MAX\_ADAPTER\_NAME-1 characters.
 - *RequestedGUID*: The GUID of the created network adapter, which then influences NLA generation deterministically. If it is set to NULL, the GUID is chosen by the system at random, and hence a new NLA entry is created for each new adapter. It is called "requested" GUID because the API it uses is completely undocumented, and so there could be minor interesting complications with its usage.
-- *RebootRequired*: Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
 
 **Returns**
 
-If the function succeeds, the return value is the adapter handle. Must be released with WintunFreeAdapter. If the function fails, the return value is NULL. To get extended error information, call GetLastError.
+If the function succeeds, the return value is the adapter handle. Must be released with WintunCloseAdapter. If the function fails, the return value is NULL. To get extended error information, call GetLastError.
 
 #### WintunOpenAdapter()
 
-`WINTUN_ADAPTER_HANDLE WintunOpenAdapter (const WCHAR * Pool, const WCHAR * Name)`
+`WINTUN_ADAPTER_HANDLE WintunOpenAdapter (const WCHAR * Name)`
 
 Opens an existing Wintun adapter.
 
 **Parameters**
 
-- *Pool*: Name of the adapter pool. Zero-terminated string of up to WINTUN\_MAX\_POOL-1 characters.
-- *Name*: Adapter name. Zero-terminated string of up to MAX\_ADAPTER\_NAME-1 characters.
+- *Name*: The requested name of the adapter. Zero-terminated string of up to MAX\_ADAPTER\_NAME-1 characters.
 
 **Returns**
 
-If the function succeeds, the return value is adapter handle. Must be released with WintunFreeAdapter. If the function fails, the return value is NULL. To get extended error information, call GetLastError. Possible errors include the following: ERROR\_FILE\_NOT\_FOUND if adapter with given name is not found; ERROR\_ALREADY\_EXISTS if adapter is found but not a Wintun-class or not a member of the pool
+If the function succeeds, the return value is adapter handle. Must be released with WintunCloseAdapter. If the function fails, the return value is NULL. To get extended error information, call GetLastError.
 
-#### WintunDeleteAdapter()
+#### WintunCloseAdapter()
 
-`BOOL WintunDeleteAdapter (WINTUN_ADAPTER_HANDLE Adapter, BOOL ForceCloseSessions, BOOL * RebootRequired)`
+`void WintunCloseAdapter (WINTUN_ADAPTER_HANDLE Adapter)`
 
-Deletes a Wintun adapter.
-
-**Parameters**
-
-- *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter.
-- *ForceCloseSessions*: Force close adapter handles that may be in use by other processes. Only set this to TRUE with extreme care, as this is resource intensive and may put processes into an undefined or unpredictable state. Most users should set this to FALSE.
-- *RebootRequired*: Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
-
-**Returns**
-
-If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To get extended error information, call GetLastError.
-
-#### WintunEnumAdapters()
-
-`BOOL WintunEnumAdapters (const WCHAR * Pool, WINTUN_ENUM_CALLBACK Callback, LPARAM Param)`
-
-Enumerates all Wintun adapters.
+Releases Wintun adapter resources and, if adapter was created with WintunCreateAdapter, removes adapter.
 
 **Parameters**
 
-- *Pool*: Name of the adapter pool. Zero-terminated string of up to WINTUN\_MAX\_POOL-1 characters.
-- *Callback*: Callback function. To continue enumeration, the callback function must return TRUE; to stop enumeration, it must return FALSE.
-- *Param*: An application-defined value to be passed to the callback function.
+- *Adapter*: Adapter handle obtained with WintunCreateAdapter or WintunOpenAdapter.
 
-**Returns**
+#### WintunDeleteDriver()
 
-If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To get extended error information, call GetLastError.
+`BOOL WintunDeleteDriver ()`
 
-#### WintunFreeAdapter()
-
-`void WintunFreeAdapter (WINTUN_ADAPTER_HANDLE Adapter)`
-
-Releases Wintun adapter resources.
-
-**Parameters**
-
-- *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter.
-
-#### WintunDeletePoolDriver()
-
-`BOOL WintunDeletePoolDriver (const WCHAR * Pool, BOOL * RebootRequired)`
-
-Deletes all Wintun adapters in a pool and if there are no more adapters in any other pools, also removes Wintun from the driver store, usually called by uninstallers.
-
-**Parameters**
-
-- *Pool*: Name of the adapter pool. Zero-terminated string of up to WINTUN\_MAX\_POOL-1 characters.
-- *RebootRequired*: Optional pointer to a boolean flag to be set to TRUE in case SetupAPI suggests a reboot.
+Deletes the Wintun driver if there are no more adapters in use.
 
 **Returns**
 
@@ -249,36 +211,6 @@ Returns the LUID of the adapter.
 
 - *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
 - *Luid*: Pointer to LUID to receive adapter LUID.
-
-#### WintunGetAdapterName()
-
-`BOOL WintunGetAdapterName (WINTUN_ADAPTER_HANDLE Adapter, WCHAR * Name)`
-
-Returns the name of the Wintun adapter.
-
-**Parameters**
-
-- *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
-- *Name*: Pointer to a string to receive adapter name
-
-**Returns**
-
-If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To get extended error information, call GetLastError.
-
-#### WintunSetAdapterName()
-
-`BOOL WintunSetAdapterName (WINTUN_ADAPTER_HANDLE Adapter, const WCHAR * Name)`
-
-Sets name of the Wintun adapter.
-
-**Parameters**
-
-- *Adapter*: Adapter handle obtained with WintunOpenAdapter or WintunCreateAdapter
-- *Name*: Adapter name. Zero-terminated string of up to MAX\_ADAPTER\_NAME-1 characters.
-
-**Returns**
-
-If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To get extended error information, call GetLastError.
 
 #### WintunGetRunningDriverVersion()
 
@@ -397,10 +329,10 @@ Sends the packet and releases internal buffer. WintunSendPacket is thread-safe, 
 
 General requirements:
 
-- [Visual Studio 2019](https://visualstudio.microsoft.com/downloads/) with Windows SDK 10.0.18362.0
-- [Windows Driver Kit for Windows 10, version 1903](https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk)
+- [Visual Studio 2019](https://visualstudio.microsoft.com/downloads/) with Windows SDK
+- [Windows Driver Kit](https://docs.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk)
 
-`wintun.sln` may be opened in Visual Studio for development and building. Be sure to run `bcdedit /set testsigning on` before to enable unsigned driver loading. The default run sequence (F5) in Visual Studio will build the example project.
+`wireguard.sln` may be opened in Visual Studio for development and building. Be sure to run `bcdedit /set testsigning on` and then reboot before to enable unsigned driver loading. The default run sequence (F5) in Visual Studio will build the example project and its dependencies.
 
 ## License
 

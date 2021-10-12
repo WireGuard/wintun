@@ -58,15 +58,18 @@
     <ClInclude Include="rundll32.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="driver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="adapter_win7.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="namespace.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="rundll32.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="registry.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="logger.c">
@@ -82,6 +85,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="main.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="driver.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="registry.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

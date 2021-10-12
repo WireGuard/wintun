@@ -2,19 +2,15 @@ LIBRARY wintun.dll
 EXPORTS
 	WintunAllocateSendPacket
 	WintunCreateAdapter
-	WintunDeleteAdapter
-	WintunDeletePoolDriver
 	WintunEndSession
-	WintunEnumAdapters
-	WintunFreeAdapter
 	WintunOpenAdapter
+	WintunCloseAdapter
 	WintunGetAdapterLUID
-	WintunGetAdapterName
 	WintunGetReadWaitEvent
 	WintunGetRunningDriverVersion
 	WintunReceivePacket
 	WintunReleaseReceivePacket
 	WintunSendPacket
-	WintunSetAdapterName
+	WintunDeleteDriver
 	WintunSetLogger
 	WintunStartSession

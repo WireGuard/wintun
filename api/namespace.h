@@ -12,14 +12,14 @@ _Return_type_success_(return != NULL)
 _Post_maybenull_
 _Acquires_lock_(_Curr_)
 HANDLE
-NamespaceTakePoolMutex(_In_z_ LPCWSTR Pool);
+NamespaceTakeDriverInstallationMutex(VOID);
 
 _Must_inspect_result_
 _Return_type_success_(return != NULL)
 _Post_maybenull_
 _Acquires_lock_(_Curr_)
 HANDLE
-NamespaceTakeDriverInstallationMutex(VOID);
+NamespaceTakeDeviceInstallationMutex(VOID);
 
 _Releases_lock_(Mutex)
 VOID

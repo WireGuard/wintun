@@ -13,26 +13,6 @@
            https://support.microsoft.com/en-us/help/256986/windows-registry-information-for-advanced-users */
 
 /**
- * Opens the specified registry key. It waits for the registry key to become available.
- *
- * @param Key           Handle of the parent registry key. Must be opened with notify access.
- *
- * @param Path          Subpath of the registry key to open. Zero-terminated string of up to MAX_REG_PATH-1 characters.
- *
- * @param Access        A mask that specifies the desired access rights to the key to be opened.
- *
- * @param Timeout       Timeout to wait for the value in milliseconds.
- *
- * @return Key handle on success. If the function fails, the return value is zero. To get extended error information,
- *         call GetLastError.
- */
-_Must_inspect_result_
-_Return_type_success_(return != NULL)
-_Post_maybenull_
-HKEY
-RegistryOpenKeyWait(_In_ HKEY Key, _In_z_ LPCWSTR Path, _In_ DWORD Access, _In_ DWORD Timeout);
-
-/**
  * Validates and/or sanitizes string value read from registry.
  *
  * @param Buf           On input, it contains a pointer to pointer where the data is stored. The data must be allocated
@@ -51,25 +31,6 @@ _Must_inspect_result_
 _Return_type_success_(return != FALSE)
 BOOL
 RegistryGetString(_Inout_ LPWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType);
-
-/**
- * Validates and/or sanitizes multi-string value read from registry.
- *
- * @param Buf           On input, it contains a pointer to pointer where the data is stored. The data must be allocated
- *                      using HeapAlloc(ModuleHeap, 0). On output, it contains a pointer to pointer where the sanitized
- *                      data is stored. It must be released with HeapFree(ModuleHeap, 0, *Buf) after use.
- *
- * @param Len           Length of data string in wide characters.
- *
- * @param ValueType     Type of data. Must be one of REG_MULTI_SZ, REG_SZ or REG_EXPAND_SZ.
- *
- * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
- *         get extended error information, call GetLastError.
- */
-_Must_inspect_result_
-_Return_type_success_(return != FALSE)
-BOOL
-RegistryGetMultiString(_Inout_ PZZWSTR *Buf, _In_ DWORD Len, _In_ DWORD ValueType);
 
 /**
  * Reads string value from registry key.
@@ -97,27 +58,6 @@ LPWSTR
 RegistryQueryString(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _In_ BOOL Log);
 
 /**
- * Reads string value from registry key. It waits for the registry value to become available.
- *
- * @param Key           Handle of the registry key to read from. Must be opened with read and notify access.
- *
- * @param Name          Name of the value to read.
- *
- * @param Timeout       Timeout to wait for the value in milliseconds.
- *
- * @return Registry value. If the value type is REG_EXPAND_SZ the value is expanded using ExpandEnvironmentStrings(). If
- *         the value type is REG_MULTI_SZ, only the first string from the multi-string is returned. The string must be
- *         released with HeapFree(ModuleHeap, 0, Value) after use. If the function fails, the return value is zero. To
- *         get extended error information, call GetLastError. Possible errors include the following:
- *         ERROR_INVALID_DATATYPE when the registry value is not a string
- */
-_Must_inspect_result_
-_Return_type_success_(return != NULL)
-_Post_maybenull_
-LPWSTR
-RegistryQueryStringWait(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _In_ DWORD Timeout);
-
-/**
  * Reads a 32-bit DWORD value from registry key.
  *
  * @param Key           Handle of the registry key to read from. Must be opened with read access.
@@ -137,24 +77,3 @@ _Must_inspect_result_
 _Return_type_success_(return != FALSE)
 BOOL
 RegistryQueryDWORD(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _Out_ DWORD *Value, _In_ BOOL Log);
-
-/**
- * Reads a 32-bit DWORD value from registry key. It waits for the registry value to become available.
- *
- * @param Key           Handle of the registry key to read from. Must be opened with read access.
- *
- * @param Name          Name of the value to read.
- *
- * @param Timeout       Timeout to wait for the value in milliseconds.
- *
- * @param Value         Pointer to DWORD to retrieve registry value.
- *
- * @return If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To
- *         get extended error information, call GetLastError. Possible errors include the following:
- *         ERROR_INVALID_DATATYPE when registry value exist but not REG_DWORD type;
- *         ERROR_INVALID_DATA when registry value size is not 4 bytes
- */
-_Must_inspect_result_
-_Return_type_success_(return != FALSE)
-BOOL
-RegistryQueryDWORDWait(_In_ HKEY Key, _In_opt_z_ LPCWSTR Name, _In_ DWORD Timeout, _Out_ DWORD *Value);

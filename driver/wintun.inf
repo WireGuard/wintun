@@ -32,17 +32,20 @@ wintun.sys, , , 0x00004002 ; COPYFLG_IN_USE_RENAME | COPYFLG_NOSKIP
 [Wintun.Install]
 Characteristics = 0x1 ; NCF_VIRTUAL
 AddReg = Wintun.Ndi
+AddProperty = Wintun.Properties
 CopyFiles = Wintun.CopyFiles.Sys
 *IfType = 53 ; IF_TYPE_PROP_VIRTUAL
 *MediaType = 19 ; NdisMediumIP
 *PhysicalMediaType = 0 ; NdisPhysicalMediumUnspecified
 EnableDhcp = 0 ; Disable DHCP
 
+[Wintun.Properties]
+DeviceVendorWebsite,,,,"https://www.wintun.net/"
+
 [Wintun.Install.Services]
 AddService = wintun, 2, Wintun.Service, Wintun.EventLog ; 2=SPSVCINST_ASSOCSERVICE
 
 [Wintun.Ndi]
-HKR, , DeviceVxDs, , wintun.sys
 HKR, Ndi, Service, 0, wintun
 HKR, Ndi\Interfaces, UpperRange, , "ndis5"
 HKR, Ndi\Interfaces, LowerRange, , "nolower"

@@ -18,24 +18,25 @@
     <ClCompile>
       <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='Win32'">MAYBE_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Platform)'=='x64'">ACCEPT_WOW64;MAYBE_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='x64'">MAYBE_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='ARM'">MAYBE_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Platform)'=='ARM64'">ACCEPT_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='ARM64'">%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:iso %(AdditionalOptions)</AdditionalOptions>
       <DisableSpecificWarnings>4100;4201;$(DisableSpecificWarnings)</DisableSpecificWarnings>
       <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ResourceCompile>
       <AdditionalIncludeDirectories>..\$(Configuration)\$(WintunPlatform);..\$(Configuration);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions Condition="Exists('..\$(Configuration)\arm64\wintun.dll')">BUILT_ARM64_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="Exists('..\$(Configuration)\amd64\wintun.dll')">BUILT_AMD64_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="Exists('..\$(Configuration)\arm64\driver\wintun.sys') And Exists('..\$(Configuration)\arm64\setupapihost.dll')">BUILT_ARM64_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="Exists('..\$(Configuration)\amd64\driver\wintun.sys') And Exists('..\$(Configuration)\amd64\setupapihost.dll')">BUILT_AMD64_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='Win32'">WANT_ARM64_WOW64;WANT_AMD64_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='x64'">WANT_ARM64_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Platform)'=='ARM'">WANT_ARM64_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
-      <DelayLoadDLLs>advapi32.dll;bcrypt.dll;cfgmgr32.dll;iphlpapi.dll;ole32.dll;nci.dll;setupapi.dll;shell32.dll;shlwapi.dll;version.dll</DelayLoadDLLs>
-      <AdditionalDependencies>Bcrypt.lib;Cfgmgr32.lib;Iphlpapi.lib;$(IntDir)nci.lib;ntdll.lib;Setupapi.lib;shlwapi.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <DelayLoadDLLs>advapi32.dll;api-ms-win-devices-query-l1-1-0.dll;api-ms-win-devices-swdevice-l1-1-0.dll;cfgmgr32.dll;iphlpapi.dll;ole32.dll;nci.dll;setupapi.dll;shlwapi.dll;version.dll</DelayLoadDLLs>
+      <DelayLoadDLLs Condition="'$(Platform)'!='ARM64'">shell32.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
+      <AdditionalDependencies>Cfgmgr32.lib;Iphlpapi.lib;onecore.lib;$(IntDir)nci.lib;ntdll.lib;Setupapi.lib;shlwapi.lib;swdevice.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>exports.def</ModuleDefinitionFile>
       <SubSystem>Windows</SubSystem>
     </Link>
@@ -48,8 +49,10 @@
     <None Include="nci.def" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="adapter_win7.h" />
     <ClInclude Include="main.h" />
     <ClInclude Include="adapter.h" />
+    <ClInclude Include="driver.h" />
     <ClInclude Include="logger.h" />
     <ClInclude Include="namespace.h" />
     <ClInclude Include="nci.h" />
@@ -62,6 +65,7 @@
   <ItemGroup>
     <ClCompile Include="main.c" />
     <ClCompile Include="adapter.c" />
+    <ClCompile Include="driver.c" />
     <ClCompile Include="logger.c" />
     <ClCompile Include="namespace.c" />
     <ClCompile Include="registry.c" />

@@ -70,7 +70,7 @@ typedef struct _TUN_SESSION
     HANDLE Handle;
 } TUN_SESSION;
 
-WINTUN_START_SESSION_FUNC_IMPL WintunStartSession;
+WINTUN_START_SESSION_FUNC WintunStartSession;
 _Use_decl_annotations_
 TUN_SESSION *WINAPI
 WintunStartSession(WINTUN_ADAPTER *Adapter, DWORD Capacity)
@@ -146,7 +146,7 @@ cleanup:
     return NULL;
 }
 
-WINTUN_END_SESSION_FUNC_IMPL WintunEndSession;
+WINTUN_END_SESSION_FUNC WintunEndSession;
 _Use_decl_annotations_
 VOID WINAPI
 WintunEndSession(TUN_SESSION *Session)
@@ -160,7 +160,7 @@ WintunEndSession(TUN_SESSION *Session)
     Free(Session);
 }
 
-WINTUN_GET_READ_WAIT_EVENT_FUNC_IMPL WintunGetReadWaitEvent;
+WINTUN_GET_READ_WAIT_EVENT_FUNC WintunGetReadWaitEvent;
 _Use_decl_annotations_
 HANDLE WINAPI
 WintunGetReadWaitEvent(TUN_SESSION *Session)
@@ -168,7 +168,7 @@ WintunGetReadWaitEvent(TUN_SESSION *Session)
     return Session->Descriptor.Send.TailMoved;
 }
 
-WINTUN_RECEIVE_PACKET_FUNC_IMPL WintunReceivePacket;
+WINTUN_RECEIVE_PACKET_FUNC WintunReceivePacket;
 _Use_decl_annotations_
 BYTE *WINAPI
 WintunReceivePacket(TUN_SESSION *Session, DWORD *PacketSize)
@@ -221,7 +221,7 @@ cleanup:
     return NULL;
 }
 
-WINTUN_RELEASE_RECEIVE_PACKET_FUNC_IMPL WintunReleaseReceivePacket;
+WINTUN_RELEASE_RECEIVE_PACKET_FUNC WintunReleaseReceivePacket;
 _Use_decl_annotations_
 VOID WINAPI
 WintunReleaseReceivePacket(TUN_SESSION *Session, const BYTE *Packet)
@@ -242,7 +242,7 @@ WintunReleaseReceivePacket(TUN_SESSION *Session, const BYTE *Packet)
     LeaveCriticalSection(&Session->Send.Lock);
 }
 
-WINTUN_ALLOCATE_SEND_PACKET_FUNC_IMPL WintunAllocateSendPacket;
+WINTUN_ALLOCATE_SEND_PACKET_FUNC WintunAllocateSendPacket;
 _Use_decl_annotations_
 BYTE *WINAPI
 WintunAllocateSendPacket(TUN_SESSION *Session, DWORD PacketSize)
@@ -280,7 +280,7 @@ cleanup:
     return NULL;
 }
 
-WINTUN_SEND_PACKET_FUNC_IMPL WintunSendPacket;
+WINTUN_SEND_PACKET_FUNC WintunSendPacket;
 _Use_decl_annotations_
 VOID WINAPI
 WintunSendPacket(TUN_SESSION *Session, const BYTE *Packet)

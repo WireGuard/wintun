@@ -12,71 +12,46 @@
 
 #define MAX_INSTANCE_ID MAX_PATH /* TODO: Is MAX_PATH always enough? */
 #define WINTUN_HWID L"Wintun"
+#define WINTUN_ENUMERATOR (IsWindows7 ? L"ROOT\\" WINTUN_HWID : L"SWD\\" WINTUN_HWID)
+
+extern const DEVPROPKEY DEVPKEY_Wintun_Name;
+
+typedef struct HSWDEVICE__ *HSWDEVICE;
 
 /**
  * Wintun adapter descriptor.
  */
 typedef struct _WINTUN_ADAPTER
 {
+    HSWDEVICE SwDevice;
     HDEVINFO DevInfo;
     SP_DEVINFO_DATA DevInfoData;
+    WCHAR *InterfaceFilename;
     GUID CfgInstanceID;
     WCHAR DevInstanceID[MAX_INSTANCE_ID];
     DWORD LuidIndex;
     DWORD IfType;
     DWORD IfIndex;
-    WCHAR Pool[WINTUN_MAX_POOL];
 } WINTUN_ADAPTER;
-
-/**
- * @copydoc WINTUN_FREE_ADAPTER_FUNC
- */
-WINTUN_FREE_ADAPTER_FUNC_IMPL WintunFreeAdapter;
-
 /**
  * @copydoc WINTUN_CREATE_ADAPTER_FUNC
  */
-WINTUN_CREATE_ADAPTER_FUNC_IMPL WintunCreateAdapter;
+WINTUN_CREATE_ADAPTER_FUNC WintunCreateAdapter;
 
 /**
  * @copydoc WINTUN_OPEN_ADAPTER_FUNC
  */
-WINTUN_OPEN_ADAPTER_FUNC_IMPL WintunOpenAdapter;
+WINTUN_OPEN_ADAPTER_FUNC WintunOpenAdapter;
 
 /**
- * @copydoc WINTUN_DELETE_ADAPTER_FUNC
+ * @copydoc WINTUN_CLOSE_ADAPTER_FUNC
  */
-WINTUN_DELETE_ADAPTER_FUNC_IMPL WintunDeleteAdapter;
-
-/**
- * @copydoc WINTUN_ENUM_ADAPTERS_FUNC
- */
-WINTUN_ENUM_ADAPTERS_FUNC_IMPL WintunEnumAdapters;
-
-/**
- * @copydoc WINTUN_DELETE_POOL_DRIVER_FUNC
- */
-WINTUN_DELETE_POOL_DRIVER_FUNC_IMPL WintunDeletePoolDriver;
+WINTUN_CLOSE_ADAPTER_FUNC WintunCloseAdapter;
 
 /**
  * @copydoc WINTUN_GET_ADAPTER_LUID_FUNC
  */
-WINTUN_GET_ADAPTER_LUID_FUNC_IMPL WintunGetAdapterLUID;
-
-/**
- * @copydoc WINTUN_GET_ADAPTER_NAME_FUNC
- */
-WINTUN_GET_ADAPTER_NAME_FUNC_IMPL WintunGetAdapterName;
-
-/**
- * @copydoc WINTUN_SET_ADAPTER_NAME_FUNC
- */
-WINTUN_SET_ADAPTER_NAME_FUNC_IMPL WintunSetAdapterName;
-
-/**
- * @copydoc WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC
- */
-WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC_IMPL WintunGetRunningDriverVersion;
+WINTUN_GET_ADAPTER_LUID_FUNC WintunGetAdapterLUID;
 
 /**
  * Returns a handle to the adapter device object.
@@ -90,19 +65,88 @@ WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC_IMPL WintunGetRunningDriverVersion;
 _Return_type_success_(return != INVALID_HANDLE_VALUE)
 HANDLE WINAPI
 AdapterOpenDeviceObject(_In_ const WINTUN_ADAPTER *Adapter);
+
 /**
- * Returns an adapter object based on a devnode instance ID.
+ * Returns the device object file name for an adapter instance ID.
  *
- * @param Pool          Pool name of adapter object to be opened.
+ * @param InstanceID       The device instance ID of the adapter.
  *
- * @param DevInstanceID Instance ID of devnode for opening adapter.
- *
- * @return If the function succeeds, the return value is adapter object..
- *         If the function fails, the return value is NULL. To get extended error
- *         information, call GetLastError.
+ * @return If the function succeeds, the return value is the filename of the device object, which
+ *         must be freed with Free(). If the function fails, the return value is INVALID_HANDLE_VALUE.
+ *         To get extended error information, call GetLastError.
  */
 _Must_inspect_result_
 _Return_type_success_(return != NULL)
 _Post_maybenull_
-WINTUN_ADAPTER *
-AdapterOpenFromDevInstanceId(_In_z_ LPCWSTR Pool, _In_z_ LPCWSTR DevInstanceID);
+LPWSTR
+AdapterGetDeviceObjectFileName(_In_z_ LPCWSTR InstanceId);
+
+/**
+ * Cleans up adapters with no attached process.
+ */
+VOID AdapterCleanupOrphanedDevices(VOID);
+
+/**
+ * Cleans up adapters that use the old enumerator.
+ */
+VOID AdapterCleanupLegacyDevices(VOID);
+
+/**
+ * Removes the specified device instance.
+ *
+ * @param DevInfo      Device info handle from SetupAPI.
+ * @param DevInfoData  Device info data specifying which device.
+ *
+ * @return If the function succeeds, the return value is TRUE. If the
+ *         function fails, the return value is FALSE. To get extended
+ *         error information, call GetLastError.
+ */
+
+_Return_type_success_(return != FALSE)
+BOOL
+AdapterRemoveInstance(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData);
+
+/**
+ * Enables the specified device instance.
+ *
+ * @param DevInfo      Device info handle from SetupAPI.
+ * @param DevInfoData  Device info data specifying which device.
+ *
+ * @return If the function succeeds, the return value is TRUE. If the
+ *         function fails, the return value is FALSE. To get extended
+ *         error information, call GetLastError.
+ */
+
+_Return_type_success_(return != FALSE)
+BOOL
+AdapterEnableInstance(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData);
+
+/**
+ * Disables the specified device instance.
+ *
+ * @param DevInfo      Device info handle from SetupAPI.
+ * @param DevInfoData  Device info data specifying which device.
+ *
+ * @return If the function succeeds, the return value is TRUE. If the
+ *         function fails, the return value is FALSE. To get extended
+ *         error information, call GetLastError.
+ */
+
+_Return_type_success_(return != FALSE)
+BOOL
+AdapterDisableInstance(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData);
+
+/**
+ * Force closes all device handles of the specified device instance.
+ *
+ * @param DevInfo      Device info handle from SetupAPI.
+ * @param DevInfoData  Device info data specifying which device.
+ *
+ * @return If the function succeeds, the return value is TRUE. If the
+ *         function fails, the return value is FALSE. To get extended
+ *         error information, call GetLastError.
+ */
+
+_Return_type_success_(return != FALSE)
+BOOL
+AdapterForceCloseHandles(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData);

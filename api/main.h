@@ -24,4 +24,15 @@ extern HANDLE ModuleHeap;
 extern SECURITY_ATTRIBUTES SecurityAttributes;
 extern BOOL IsLocalSystem;
 extern USHORT NativeMachine;
+
+#if NTDDI_VERSION > NTDDI_WIN7
+#    define IsWindows7 FALSE
+#else
+extern BOOL IsWindows7;
+#endif
+
+#if NTDDI_VERSION >= NTDDI_WIN10
+#    define IsWindows10 TRUE
+#else
 extern BOOL IsWindows10;
+#endif

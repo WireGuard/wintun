@@ -21,7 +21,13 @@ HANDLE ModuleHeap;
 SECURITY_ATTRIBUTES SecurityAttributes = { .nLength = sizeof(SECURITY_ATTRIBUTES) };
 BOOL IsLocalSystem;
 USHORT NativeMachine = IMAGE_FILE_PROCESS;
+
+#if NTDDI_VERSION == NTDDI_WIN7
+BOOL IsWindows7;
+#endif
+#if NTDDI_VERSION < NTDDI_WIN10
 BOOL IsWindows10;
+#endif
 
 static FARPROC WINAPI
 DelayedLoadLibraryHook(unsigned dliNotify, PDelayLoadInfo pdli)
@@ -70,11 +76,17 @@ cleanupProcessToken:
     return Ret;
 }
 
-static VOID EnvInit(VOID)
+static void EnvInit(VOID)
 {
-    DWORD MajorVersion;
-    RtlGetNtVersionNumbers(&MajorVersion, NULL, NULL);
+    DWORD MajorVersion, MinorVersion;
+    RtlGetNtVersionNumbers(&MajorVersion, &MinorVersion, NULL);
+
+#if NTDDI_VERSION == NTDDI_WIN7
+    IsWindows7 = MajorVersion == 6 && MinorVersion == 1;
+#endif
+#if NTDDI_VERSION < NTDDI_WIN10
     IsWindows10 = MajorVersion >= 10;
+#endif
 
 #ifdef MAYBE_WOW64
     typedef BOOL(WINAPI * IsWow64Process2_t)(
@@ -110,6 +122,7 @@ DllMain(_In_ HINSTANCE hinstDLL, _In_ DWORD fdwReason, _In_ LPVOID lpvReserved)
         }
         EnvInit();
         NamespaceInit();
+        AdapterCleanupLegacyDevices();
         break;
 
     case DLL_PROCESS_DETACH:

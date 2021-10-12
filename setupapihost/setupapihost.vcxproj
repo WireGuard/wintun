@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{9911D673-CF5F-4B41-B190-807AA1BE445B}</ProjectGuid>
+    <RootNamespace>setupapihost</RootNamespace>
+    <ProjectName>setupapihost</ProjectName>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>WindowsApplicationForDrivers10.0</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="..\wintun.props" />
+  <PropertyGroup>
+    <TargetName>setupapihost</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>/volatile:iso %(AdditionalOptions)</AdditionalOptions>
+      <DisableSpecificWarnings>4100;4201;$(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
+    <Link>
+      <DelayLoadDLLs>setupapi.dll;shell32.dll</DelayLoadDLLs>
+      <AdditionalDependencies>Setupapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="host.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="host_win7.h" />
+  </ItemGroup>
+  <Import Project="..\wintun.props.user" Condition="exists('..\wintun.props.user')" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

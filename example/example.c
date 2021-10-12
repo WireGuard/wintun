@@ -9,29 +9,26 @@
 #include <iphlpapi.h>
 #include <mstcpip.h>
 #include <ip2string.h>
+#include <winternl.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "wintun.h"
 
-static WINTUN_CREATE_ADAPTER_FUNC WintunCreateAdapter;
-static WINTUN_DELETE_ADAPTER_FUNC WintunDeleteAdapter;
-static WINTUN_DELETE_POOL_DRIVER_FUNC WintunDeletePoolDriver;
-static WINTUN_ENUM_ADAPTERS_FUNC WintunEnumAdapters;
-static WINTUN_FREE_ADAPTER_FUNC WintunFreeAdapter;
-static WINTUN_OPEN_ADAPTER_FUNC WintunOpenAdapter;
-static WINTUN_GET_ADAPTER_LUID_FUNC WintunGetAdapterLUID;
-static WINTUN_GET_ADAPTER_NAME_FUNC WintunGetAdapterName;
-static WINTUN_SET_ADAPTER_NAME_FUNC WintunSetAdapterName;
-static WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC WintunGetRunningDriverVersion;
-static WINTUN_SET_LOGGER_FUNC WintunSetLogger;
-static WINTUN_START_SESSION_FUNC WintunStartSession;
-static WINTUN_END_SESSION_FUNC WintunEndSession;
-static WINTUN_GET_READ_WAIT_EVENT_FUNC WintunGetReadWaitEvent;
-static WINTUN_RECEIVE_PACKET_FUNC WintunReceivePacket;
-static WINTUN_RELEASE_RECEIVE_PACKET_FUNC WintunReleaseReceivePacket;
-static WINTUN_ALLOCATE_SEND_PACKET_FUNC WintunAllocateSendPacket;
-static WINTUN_SEND_PACKET_FUNC WintunSendPacket;
+static WINTUN_CREATE_ADAPTER_FUNC *WintunCreateAdapter;
+static WINTUN_CLOSE_ADAPTER_FUNC *WintunCloseAdapter;
+static WINTUN_OPEN_ADAPTER_FUNC *WintunOpenAdapter;
+static WINTUN_GET_ADAPTER_LUID_FUNC *WintunGetAdapterLUID;
+static WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC *WintunGetRunningDriverVersion;
+static WINTUN_DELETE_DRIVER_FUNC *WintunDeleteDriver;
+static WINTUN_SET_LOGGER_FUNC *WintunSetLogger;
+static WINTUN_START_SESSION_FUNC *WintunStartSession;
+static WINTUN_END_SESSION_FUNC *WintunEndSession;
+static WINTUN_GET_READ_WAIT_EVENT_FUNC *WintunGetReadWaitEvent;
+static WINTUN_RECEIVE_PACKET_FUNC *WintunReceivePacket;
+static WINTUN_RELEASE_RECEIVE_PACKET_FUNC *WintunReleaseReceivePacket;
+static WINTUN_ALLOCATE_SEND_PACKET_FUNC *WintunAllocateSendPacket;
+static WINTUN_SEND_PACKET_FUNC *WintunSendPacket;
 
 static HMODULE
 InitializeWintun(void)
@@ -40,16 +37,13 @@ InitializeWintun(void)
         LoadLibraryExW(L"wintun.dll", NULL, LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!Wintun)
         return NULL;
-#define X(Name, Type) ((Name = (Type)GetProcAddress(Wintun, #Name)) == NULL)
-    if (X(WintunCreateAdapter, WINTUN_CREATE_ADAPTER_FUNC) || X(WintunDeleteAdapter, WINTUN_DELETE_ADAPTER_FUNC) ||
-        X(WintunDeletePoolDriver, WINTUN_DELETE_POOL_DRIVER_FUNC) || X(WintunEnumAdapters, WINTUN_ENUM_ADAPTERS_FUNC) ||
-        X(WintunFreeAdapter, WINTUN_FREE_ADAPTER_FUNC) || X(WintunOpenAdapter, WINTUN_OPEN_ADAPTER_FUNC) ||
-        X(WintunGetAdapterLUID, WINTUN_GET_ADAPTER_LUID_FUNC) ||
-        X(WintunGetAdapterName, WINTUN_GET_ADAPTER_NAME_FUNC) ||
-        X(WintunSetAdapterName, WINTUN_SET_ADAPTER_NAME_FUNC) ||
+#define X(Name, Type) ((Name = (Type *)GetProcAddress(Wintun, #Name)) == NULL)
+    if (X(WintunCreateAdapter, WINTUN_CREATE_ADAPTER_FUNC) || X(WintunCloseAdapter, WINTUN_CLOSE_ADAPTER_FUNC) ||
+        X(WintunOpenAdapter, WINTUN_OPEN_ADAPTER_FUNC) || X(WintunGetAdapterLUID, WINTUN_GET_ADAPTER_LUID_FUNC) ||
         X(WintunGetRunningDriverVersion, WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC) ||
-        X(WintunSetLogger, WINTUN_SET_LOGGER_FUNC) || X(WintunStartSession, WINTUN_START_SESSION_FUNC) ||
-        X(WintunEndSession, WINTUN_END_SESSION_FUNC) || X(WintunGetReadWaitEvent, WINTUN_GET_READ_WAIT_EVENT_FUNC) ||
+        X(WintunDeleteDriver, WINTUN_DELETE_DRIVER_FUNC) || X(WintunSetLogger, WINTUN_SET_LOGGER_FUNC) ||
+        X(WintunStartSession, WINTUN_START_SESSION_FUNC) || X(WintunEndSession, WINTUN_END_SESSION_FUNC) ||
+        X(WintunGetReadWaitEvent, WINTUN_GET_READ_WAIT_EVENT_FUNC) ||
         X(WintunReceivePacket, WINTUN_RECEIVE_PACKET_FUNC) ||
         X(WintunReleaseReceivePacket, WINTUN_RELEASE_RECEIVE_PACKET_FUNC) ||
         X(WintunAllocateSendPacket, WINTUN_ALLOCATE_SEND_PACKET_FUNC) || X(WintunSendPacket, WINTUN_SEND_PACKET_FUNC))
@@ -64,12 +58,10 @@ InitializeWintun(void)
 }
 
 static void CALLBACK
-ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
+ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_ DWORD64 Timestamp, _In_z_ const WCHAR *LogLine)
 {
-    FILETIME Timestamp;
-    GetSystemTimePreciseAsFileTime(&Timestamp);
     SYSTEMTIME SystemTime;
-    FileTimeToSystemTime(&Timestamp, &SystemTime);
+    FileTimeToSystemTime((FILETIME *)&Timestamp, &SystemTime);
     WCHAR LevelMarker;
     switch (Level)
     {
@@ -99,6 +91,13 @@ ConsoleLogger(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *LogLine)
         LogLine);
 }
 
+static DWORD64 Now(VOID)
+{
+    LARGE_INTEGER Timestamp;
+    NtQuerySystemTime(&Timestamp);
+    return Timestamp.QuadPart;
+}
+
 static DWORD
 LogError(_In_z_ const WCHAR *Prefix, _In_ DWORD Error)
 {
@@ -121,7 +120,7 @@ LogError(_In_z_ const WCHAR *Prefix, _In_ DWORD Error)
         0,
         (va_list *)(DWORD_PTR[]){ (DWORD_PTR)Prefix, (DWORD_PTR)Error, (DWORD_PTR)SystemMessage });
     if (FormattedMessage)
-        ConsoleLogger(WINTUN_LOG_ERR, FormattedMessage);
+        ConsoleLogger(WINTUN_LOG_ERR, Now(), FormattedMessage);
     LocalFree(FormattedMessage);
     LocalFree(SystemMessage);
     return Error;
@@ -144,7 +143,7 @@ Log(_In_ WINTUN_LOGGER_LEVEL Level, _In_z_ const WCHAR *Format, ...)
     va_start(args, Format);
     _vsnwprintf_s(LogLine, _countof(LogLine), _TRUNCATE, Format, args);
     va_end(args);
-    ConsoleLogger(Level, LogLine);
+    ConsoleLogger(Level, Now(), LogLine);
 }
 
 static HANDLE QuitEvent;
@@ -295,25 +294,13 @@ SendPackets(_Inout_ DWORD_PTR SessionPtr)
     return ERROR_SUCCESS;
 }
 
-static BOOL CALLBACK
-PrintAdapter(_In_ WINTUN_ADAPTER_HANDLE Adapter, _In_ LPARAM Param)
-{
-    UNREFERENCED_PARAMETER(Param);
-    WCHAR szAdapterName[MAX_ADAPTER_NAME];
-    if (WintunGetAdapterName(Adapter, szAdapterName))
-        Log(WINTUN_LOG_INFO, L"Existing Wintun adapter: %s", szAdapterName);
-    return TRUE;
-}
-
-int
-main(void)
+int __cdecl main(void)
 {
     HMODULE Wintun = InitializeWintun();
     if (!Wintun)
         return LogError(L"Failed to initialize Wintun", GetLastError());
     WintunSetLogger(ConsoleLogger);
     Log(WINTUN_LOG_INFO, L"Wintun library loaded");
-    WintunEnumAdapters(L"Example", PrintAdapter, 0);
 
     DWORD LastError;
     HaveQuit = FALSE;
@@ -330,16 +317,12 @@ main(void)
     }
 
     GUID ExampleGuid = { 0xdeadbabe, 0xcafe, 0xbeef, { 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef } };
-    WINTUN_ADAPTER_HANDLE Adapter = WintunOpenAdapter(L"Example", L"Demo");
+    WINTUN_ADAPTER_HANDLE Adapter = WintunCreateAdapter(L"Demo", L"Example", &ExampleGuid);
     if (!Adapter)
     {
-        Adapter = WintunCreateAdapter(L"Example", L"Demo", &ExampleGuid, NULL);
-        if (!Adapter)
-        {
-            LastError = GetLastError();
-            LogError(L"Failed to create adapter", LastError);
-            goto cleanupQuit;
-        }
+        LastError = GetLastError();
+        LogError(L"Failed to create adapter", LastError);
+        goto cleanupQuit;
     }
 
     DWORD Version = WintunGetRunningDriverVersion();
@@ -391,8 +374,7 @@ cleanupWorkers:
     }
     WintunEndSession(Session);
 cleanupAdapter:
-    WintunDeleteAdapter(Adapter, FALSE, NULL);
-    WintunFreeAdapter(Adapter);
+    WintunCloseAdapter(Adapter);
 cleanupQuit:
     SetConsoleCtrlHandler(CtrlHandler, FALSE);
     CloseHandle(QuitEvent);
