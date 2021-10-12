@@ -69,10 +69,6 @@ DisableAllOurAdapters(_In_ HDEVINFO DevInfo, _Inout_ SP_DEVINFO_DATA_LIST **Disa
             ((Status & DN_HAS_PROBLEM) && ProblemCode == CM_PROB_DISABLED))
             goto cleanupDeviceNode;
 
-        LOG(WINTUN_LOG_INFO, L"Force closing adapter \"%s\" open handles", Name);
-        if (!AdapterForceCloseHandles(DevInfo, &DeviceNode->Data))
-            LOG(WINTUN_LOG_WARN, L"Failed to force close adapter \"%s\" open handles", Name);
-
         LOG(WINTUN_LOG_INFO, L"Disabling adapter \"%s\"", Name);
         if (!AdapterDisableInstance(DevInfo, &DeviceNode->Data))
         {

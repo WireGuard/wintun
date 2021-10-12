@@ -122,8 +122,6 @@ typedef struct _TUN_REGISTER_RINGS_32
  * The lpInBuffer and nInBufferSize parameters of DeviceIoControl() must point to an TUN_REGISTER_RINGS struct.
  * Client must wait for this IOCTL to finish before adding packets to the ring. */
 #define TUN_IOCTL_REGISTER_RINGS CTL_CODE(51820U, 0x970U, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
-/* Force close all open handles to allow for updating. */
-#define TUN_IOCTL_FORCE_CLOSE_HANDLES CTL_CODE(51820U, 0x971U, METHOD_NEITHER, FILE_READ_DATA | FILE_WRITE_DATA)
 
 typedef struct _TUN_CTX
 {
@@ -181,7 +179,7 @@ typedef struct _TUN_CTX
 
 static UINT NdisVersion;
 static NDIS_HANDLE NdisMiniportDriverHandle;
-static DRIVER_DISPATCH *NdisDispatchDeviceControl, *NdisDispatchClose;
+static DRIVER_DISPATCH *NdisDispatchDeviceControl, *NdisDispatchClose, *NdisDispatchPnp;
 static ERESOURCE TunDispatchCtxGuard, TunDispatchDeviceListLock;
 static RTL_STATIC_LIST_HEAD(TunDispatchDeviceList);
 /* Binary representation of O:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)S:(ML;;NWNRNX;;;HI) */
@@ -784,68 +782,6 @@ TunUnregisterBuffers(_Inout_ TUN_CTX *Ctx, _In_ FILE_OBJECT *Owner)
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
-static BOOLEAN
-TunForceHandlesClosed(_Inout_ DEVICE_OBJECT *DeviceObject)
-{
-    NTSTATUS Status;
-    PEPROCESS Process;
-    KAPC_STATE ApcState;
-    PVOID Object = NULL;
-    ULONG VerifierFlags = 0;
-    OBJECT_HANDLE_INFORMATION HandleInfo;
-    SYSTEM_HANDLE_INFORMATION_EX *HandleTable = NULL;
-    BOOLEAN DidClose = FALSE;
-
-    MmIsVerifierEnabled(&VerifierFlags);
-
-    for (ULONG Size = 0, RequestedSize;
-         (Status = ZwQuerySystemInformation(SystemExtendedHandleInformation, HandleTable, Size, &RequestedSize)) ==
-         STATUS_INFO_LENGTH_MISMATCH;
-         Size = RequestedSize)
-    {
-        if (HandleTable)
-            ExFreePoolWithTag(HandleTable, TUN_MEMORY_TAG);
-        HandleTable = ExAllocatePoolUninitialized(PagedPool, RequestedSize, TUN_MEMORY_TAG);
-        if (!HandleTable)
-            return FALSE;
-    }
-    if (!NT_SUCCESS(Status) || !HandleTable)
-        goto cleanup;
-
-    HANDLE CurrentProcessId = PsGetCurrentProcessId();
-    for (ULONG_PTR Index = 0; Index < HandleTable->NumberOfHandles; ++Index)
-    {
-        FILE_OBJECT *FileObject = HandleTable->Handles[Index].Object;
-        if (!FileObject || FileObject->Type != 5 || FileObject->DeviceObject != DeviceObject)
-            continue;
-        HANDLE ProcessId = HandleTable->Handles[Index].UniqueProcessId;
-        if (ProcessId == CurrentProcessId)
-            continue;
-        Status = PsLookupProcessByProcessId(ProcessId, &Process);
-        if (!NT_SUCCESS(Status))
-            continue;
-        KeStackAttachProcess(Process, &ApcState);
-        if (!VerifierFlags)
-            Status = ObReferenceObjectByHandle(
-                HandleTable->Handles[Index].HandleValue, 0, NULL, UserMode, &Object, &HandleInfo);
-        if (NT_SUCCESS(Status))
-        {
-            if (VerifierFlags || Object == FileObject)
-                ObCloseHandle(HandleTable->Handles[Index].HandleValue, UserMode);
-            if (!VerifierFlags)
-                ObfDereferenceObject(Object);
-            DidClose = TRUE;
-        }
-        KeUnstackDetachProcess(&ApcState);
-        ObfDereferenceObject(Process);
-    }
-cleanup:
-    if (HandleTable)
-        ExFreePoolWithTag(HandleTable, TUN_MEMORY_TAG);
-    return DidClose;
-}
-
-_IRQL_requires_max_(PASSIVE_LEVEL)
 static VOID
 TunProcessNotification(HANDLE ParentId, HANDLE ProcessId, BOOLEAN Create)
 {
@@ -876,8 +812,7 @@ static NTSTATUS
 TunDispatchDeviceControl(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 {
     IO_STACK_LOCATION *Stack = IoGetCurrentIrpStackLocation(Irp);
-    if (Stack->Parameters.DeviceIoControl.IoControlCode != TUN_IOCTL_REGISTER_RINGS &&
-        Stack->Parameters.DeviceIoControl.IoControlCode != TUN_IOCTL_FORCE_CLOSE_HANDLES)
+    if (Stack->Parameters.DeviceIoControl.IoControlCode != TUN_IOCTL_REGISTER_RINGS)
         return NdisDispatchDeviceControl(DeviceObject, Irp);
 
     SECURITY_SUBJECT_CONTEXT SubjectContext;
@@ -912,9 +847,6 @@ TunDispatchDeviceControl(DEVICE_OBJECT *DeviceObject, IRP *Irp)
         KeLeaveCriticalRegion();
         break;
     }
-    case TUN_IOCTL_FORCE_CLOSE_HANDLES:
-        Status = TunForceHandlesClosed(Stack->FileObject->DeviceObject) ? STATUS_SUCCESS : STATUS_NOTHING_TO_TERMINATE;
-        break;
     }
 cleanup:
     Irp->IoStatus.Status = Status;
@@ -938,6 +870,79 @@ TunDispatchClose(DEVICE_OBJECT *DeviceObject, IRP *Irp)
     ExReleaseResourceLite(&TunDispatchCtxGuard);
     KeLeaveCriticalRegion();
     return NdisDispatchClose(DeviceObject, Irp);
+}
+
+_Dispatch_type_(IRP_MJ_PNP)
+static DRIVER_DISPATCH_PAGED DispatchPnp;
+_Use_decl_annotations_
+static NTSTATUS
+TunDispatchPnp(DEVICE_OBJECT *DeviceObject, IRP *Irp)
+{
+    IO_STACK_LOCATION *Stack = IoGetCurrentIrpStackLocation(Irp);
+    if (Stack->MinorFunction != IRP_MN_QUERY_REMOVE_DEVICE && Stack->MinorFunction != IRP_MN_SURPRISE_REMOVAL)
+        goto ndisDispatch;
+
+    TUN_CTX *Ctx = DeviceObject->Reserved;
+    if (!Ctx)
+        goto ndisDispatch;
+
+    ExAcquireResourceExclusiveLite(&Ctx->Device.RegistrationLock, TRUE);
+    if (!Ctx->Device.OwningFileObject || Ctx->Device.OwningFileObject == Stack->FileObject)
+        goto cleanupLock;
+
+    NTSTATUS Status;
+    PEPROCESS Process;
+    KAPC_STATE ApcState;
+    PVOID Object = NULL;
+    OBJECT_HANDLE_INFORMATION HandleInfo;
+    SYSTEM_HANDLE_INFORMATION_EX *HandleTable = NULL;
+    ULONG VerifierFlags = 0;
+
+    for (ULONG Size = 0, RequestedSize;
+         (Status = ZwQuerySystemInformation(SystemExtendedHandleInformation, HandleTable, Size, &RequestedSize)) ==
+         STATUS_INFO_LENGTH_MISMATCH;
+         Size = RequestedSize)
+    {
+        if (HandleTable)
+            ExFreePoolWithTag(HandleTable, TUN_MEMORY_TAG);
+        HandleTable = ExAllocatePoolUninitialized(PagedPool, RequestedSize, TUN_MEMORY_TAG);
+        if (!HandleTable)
+            break;
+    }
+    if (!NT_SUCCESS(Status) || !HandleTable)
+        goto cleanupHandleTable;
+
+    MmIsVerifierEnabled(&VerifierFlags);
+
+    for (ULONG_PTR Index = 0; Index < HandleTable->NumberOfHandles; ++Index)
+    {
+        FILE_OBJECT *FileObject = HandleTable->Handles[Index].Object;
+        if (FileObject != Ctx->Device.OwningFileObject)
+            continue;
+        Status = PsLookupProcessByProcessId(HandleTable->Handles[Index].UniqueProcessId, &Process);
+        if (!NT_SUCCESS(Status))
+            continue;
+        KeStackAttachProcess(Process, &ApcState);
+        if (!VerifierFlags)
+            Status = ObReferenceObjectByHandle(
+                HandleTable->Handles[Index].HandleValue, 0, NULL, UserMode, &Object, &HandleInfo);
+        if (NT_SUCCESS(Status))
+        {
+            if (VerifierFlags || Object == FileObject)
+                ObCloseHandle(HandleTable->Handles[Index].HandleValue, UserMode);
+            if (!VerifierFlags)
+                ObfDereferenceObject(Object);
+        }
+        KeUnstackDetachProcess(&ApcState);
+        ObfDereferenceObject(Process);
+    }
+cleanupHandleTable:
+    if (HandleTable)
+        ExFreePoolWithTag(HandleTable, TUN_MEMORY_TAG);
+cleanupLock:
+    ExReleaseResourceLite(&Ctx->Device.RegistrationLock);
+ndisDispatch:
+    return NdisDispatchPnp(DeviceObject, Irp);
 }
 
 static MINIPORT_RESTART TunRestart;
@@ -1474,8 +1479,10 @@ DriverEntry(DRIVER_OBJECT *DriverObject, UNICODE_STRING *RegistryPath)
 
     NdisDispatchDeviceControl = DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL];
     NdisDispatchClose = DriverObject->MajorFunction[IRP_MJ_CLOSE];
+    NdisDispatchPnp = DriverObject->MajorFunction[IRP_MJ_PNP];
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = TunDispatchDeviceControl;
     DriverObject->MajorFunction[IRP_MJ_CLOSE] = TunDispatchClose;
+    DriverObject->MajorFunction[IRP_MJ_PNP] = TunDispatchPnp;
 
     return STATUS_SUCCESS;
 

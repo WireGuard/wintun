@@ -191,8 +191,6 @@ WintunCloseAdapter(WINTUN_ADAPTER *Adapter)
     if (!Adapter)
         return;
     Free(Adapter->InterfaceFilename);
-    if (Adapter->DevInfo)
-        AdapterForceCloseHandles(Adapter->DevInfo, &Adapter->DevInfoData);
     if (Adapter->SwDevice)
         SwDeviceClose(Adapter->SwDevice);
     if (Adapter->DevInfo)
@@ -894,47 +892,6 @@ cleanupDeviceInstallationMutex:
 cleanup:
     QueueUpOrphanedDeviceCleanupRoutine();
     return RET_ERROR(Adapter, LastError);
-}
-
-#define TUN_IOCTL_FORCE_CLOSE_HANDLES CTL_CODE(51820U, 0x971U, METHOD_NEITHER, FILE_READ_DATA | FILE_WRITE_DATA)
-
-_Use_decl_annotations_
-BOOL
-AdapterForceCloseHandles(HDEVINFO DevInfo, SP_DEVINFO_DATA *DevInfoData)
-{
-    DWORD LastError = ERROR_SUCCESS;
-    WCHAR InstanceId[MAX_INSTANCE_ID];
-    DWORD RequiredChars = _countof(InstanceId);
-    if (!SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, InstanceId, RequiredChars, &RequiredChars))
-    {
-        LOG_LAST_ERROR(L"Failed to get adapter instance ID");
-        return FALSE;
-    }
-    WINTUN_ADAPTER Adapter = { .InterfaceFilename = AdapterGetDeviceObjectFileName(InstanceId) };
-    if (!Adapter.InterfaceFilename)
-    {
-        LOG_LAST_ERROR(L"Failed to get adapter file name");
-        return FALSE;
-    }
-    HANDLE Handle = AdapterOpenDeviceObject(&Adapter);
-    Free(Adapter.InterfaceFilename);
-    if (Handle == INVALID_HANDLE_VALUE)
-    {
-        LastError = LOG(WINTUN_LOG_ERR, L"Failed to get adapter file object");
-        return FALSE;
-    }
-    DWORD RequiredBytes;
-    if (DeviceIoControl(Handle, TUN_IOCTL_FORCE_CLOSE_HANDLES, NULL, 0, NULL, 0, &RequiredBytes, NULL))
-    {
-        LastError = ERROR_SUCCESS;
-        Sleep(200);
-    }
-    else if (GetLastError() == ERROR_NOTHING_TO_TERMINATE)
-        LastError = ERROR_SUCCESS;
-    else
-        LastError = LOG_LAST_ERROR(L"Failed to perform force close ioctl");
-    CloseHandle(Handle);
-    return RET_ERROR(TRUE, LastError);
 }
 
 _Use_decl_annotations_

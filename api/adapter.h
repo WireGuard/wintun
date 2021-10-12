@@ -135,18 +135,3 @@ AdapterEnableInstance(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData);
 _Return_type_success_(return != FALSE)
 BOOL
 AdapterDisableInstance(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData);
-
-/**
- * Force closes all device handles of the specified device instance.
- *
- * @param DevInfo      Device info handle from SetupAPI.
- * @param DevInfoData  Device info data specifying which device.
- *
- * @return If the function succeeds, the return value is TRUE. If the
- *         function fails, the return value is FALSE. To get extended
- *         error information, call GetLastError.
- */
-
-_Return_type_success_(return != FALSE)
-BOOL
-AdapterForceCloseHandles(_In_ HDEVINFO DevInfo, _In_ SP_DEVINFO_DATA *DevInfoData);
