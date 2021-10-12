@@ -78,7 +78,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
     <WintunVersionMaj>0</WintunVersionMaj>
-    <WintunVersionMin>13</WintunVersionMin>
+    <WintunVersionMin>14</WintunVersionMin>
     <WintunVersionRel>0</WintunVersionRel>
 
     <!-- Used for versioning, must be n.n[.n[.n]]. -->
