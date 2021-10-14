@@ -8,9 +8,9 @@
 #include "wintun.h"
 #include <IPExport.h>
 #include <SetupAPI.h>
+#include <cfgmgr32.h>
 #include <Windows.h>
 
-#define MAX_INSTANCE_ID MAX_PATH /* TODO: Is MAX_PATH always enough? */
 #define WINTUN_HWID L"Wintun"
 #define WINTUN_ENUMERATOR (IsWindows7 ? L"ROOT\\" WINTUN_HWID : L"SWD\\" WINTUN_HWID)
 
@@ -28,7 +28,7 @@ typedef struct _WINTUN_ADAPTER
     SP_DEVINFO_DATA DevInfoData;
     WCHAR *InterfaceFilename;
     GUID CfgInstanceID;
-    WCHAR DevInstanceID[MAX_INSTANCE_ID];
+    WCHAR DevInstanceID[MAX_DEVICE_ID_LEN];
     DWORD LuidIndex;
     DWORD IfType;
     DWORD IfIndex;

@@ -4,8 +4,8 @@
  */
 
 #include <devguid.h>
+#include <cfgmgr32.h>
 
-#define MAX_INSTANCE_ID MAX_PATH /* TODO: Is MAX_PATH always enough? */
 #define WINTUN_HWID L"Wintun"
 
 VOID __stdcall CreateInstanceWin7(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
@@ -13,7 +13,7 @@ VOID __stdcall CreateInstanceWin7(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine,
 #pragma EXPORT
 
     DWORD LastError = ERROR_SUCCESS;
-    WCHAR InstanceId[MAX_INSTANCE_ID] = { 0 };
+    WCHAR InstanceId[MAX_DEVICE_ID_LEN] = { 0 };
 
     HDEVINFO DevInfo = SetupDiCreateDeviceInfoListExW(&GUID_DEVCLASS_NET, NULL, NULL, NULL);
     if (DevInfo == INVALID_HANDLE_VALUE)

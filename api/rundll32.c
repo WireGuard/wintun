@@ -311,7 +311,7 @@ InvokeClassInstaller(_In_ LPCWSTR Action, _In_ LPCWSTR Function, _In_ HDEVINFO D
 {
     LOG(WINTUN_LOG_INFO, L"Spawning native process to %s instance", Action);
 
-    WCHAR InstanceId[MAX_INSTANCE_ID];
+    WCHAR InstanceId[MAX_DEVICE_ID_LEN];
     DWORD RequiredChars = _countof(InstanceId);
     if (!SetupDiGetDeviceInstanceIdW(DevInfo, DevInfoData, InstanceId, RequiredChars, &RequiredChars))
     {
@@ -374,7 +374,7 @@ CreateInstanceWin7ViaRundll32(LPWSTR InstanceId)
     LOG(WINTUN_LOG_INFO, L"Spawning native process to create instance");
 
     DWORD LastError;
-    WCHAR Response[MAX_INSTANCE_ID + 1];
+    WCHAR Response[MAX_DEVICE_ID_LEN + 1];
     if (!ExecuteRunDll32(L"CreateInstanceWin7", L"", Response, _countof(Response)))
     {
         LastError = LOG_LAST_ERROR(L"Error executing worker process");
@@ -389,7 +389,7 @@ CreateInstanceWin7ViaRundll32(LPWSTR InstanceId)
     }
     LastError = wcstoul(Argv[0], NULL, 16);
     if (LastError == ERROR_SUCCESS)
-        wcsncpy_s(InstanceId, MAX_INSTANCE_ID, Argv[1], _TRUNCATE);
+        wcsncpy_s(InstanceId, MAX_DEVICE_ID_LEN, Argv[1], _TRUNCATE);
 cleanupArgv:
     LocalFree(Argv);
 cleanup:

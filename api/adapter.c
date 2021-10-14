@@ -523,7 +523,7 @@ DeviceCreateCallback(
     SW_DEVICE_CREATE_CTX *Ctx = Context;
     Ctx->CreateResult = CreateResult;
     if (DeviceInstanceId)
-        wcsncpy_s(Ctx->DeviceInstanceId, MAX_INSTANCE_ID, DeviceInstanceId, _TRUNCATE);
+        wcsncpy_s(Ctx->DeviceInstanceId, MAX_DEVICE_ID_LEN, DeviceInstanceId, _TRUNCATE);
     SetEvent(Ctx->Triggered);
 }
 
