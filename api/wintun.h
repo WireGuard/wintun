@@ -44,7 +44,7 @@ typedef struct _WINTUN_ADAPTER *WINTUN_ADAPTER_HANDLE;
  * @param Name          The requested name of the adapter. Zero-terminated string of up to MAX_ADAPTER_NAME-1
  *                      characters.
  *
- * @param TunelType     Name of the adapter tunnel type. Zero-terminated string of up to MAX_ADAPTER_NAME-1
+ * @param TunnelType    Name of the adapter tunnel type. Zero-terminated string of up to MAX_ADAPTER_NAME-1
  *                      characters.
  *
  * @param RequestedGUID The GUID of the created network adapter, which then influences NLA generation deterministically.
