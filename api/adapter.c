@@ -418,15 +418,20 @@ WaitForInterfaceCallback(
     _In_ const DEV_QUERY_RESULT_ACTION_DATA *ActionData)
 {
     WAIT_FOR_INTERFACE_CTX *Ctx = Context;
-    Ctx->LastError = ERROR_SUCCESS;
-    if (ActionData->Action == DevQueryResultStateChange)
+    DWORD Ret = ERROR_SUCCESS;
+    switch (ActionData->Action)
     {
+    case DevQueryResultStateChange:
         if (ActionData->Data.State != DevQueryStateAborted)
             return;
-        Ctx->LastError = ERROR_DEVICE_NOT_AVAILABLE;
-    }
-    else if (ActionData->Action == DevQueryResultRemove)
+        Ret = ERROR_DEVICE_NOT_AVAILABLE;
+    case DevQueryResultAdd:
+    case DevQueryResultUpdate:
+        break;
+    default:
         return;
+    }
+    Ctx->LastError = Ret;
     SetEvent(Ctx->Event);
 }
 
