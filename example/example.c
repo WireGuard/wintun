@@ -37,16 +37,11 @@ InitializeWintun(void)
         LoadLibraryExW(L"wintun.dll", NULL, LOAD_LIBRARY_SEARCH_APPLICATION_DIR | LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!Wintun)
         return NULL;
-#define X(Name, Type) ((Name = (Type *)GetProcAddress(Wintun, #Name)) == NULL)
-    if (X(WintunCreateAdapter, WINTUN_CREATE_ADAPTER_FUNC) || X(WintunCloseAdapter, WINTUN_CLOSE_ADAPTER_FUNC) ||
-        X(WintunOpenAdapter, WINTUN_OPEN_ADAPTER_FUNC) || X(WintunGetAdapterLUID, WINTUN_GET_ADAPTER_LUID_FUNC) ||
-        X(WintunGetRunningDriverVersion, WINTUN_GET_RUNNING_DRIVER_VERSION_FUNC) ||
-        X(WintunDeleteDriver, WINTUN_DELETE_DRIVER_FUNC) || X(WintunSetLogger, WINTUN_SET_LOGGER_FUNC) ||
-        X(WintunStartSession, WINTUN_START_SESSION_FUNC) || X(WintunEndSession, WINTUN_END_SESSION_FUNC) ||
-        X(WintunGetReadWaitEvent, WINTUN_GET_READ_WAIT_EVENT_FUNC) ||
-        X(WintunReceivePacket, WINTUN_RECEIVE_PACKET_FUNC) ||
-        X(WintunReleaseReceivePacket, WINTUN_RELEASE_RECEIVE_PACKET_FUNC) ||
-        X(WintunAllocateSendPacket, WINTUN_ALLOCATE_SEND_PACKET_FUNC) || X(WintunSendPacket, WINTUN_SEND_PACKET_FUNC))
+#define X(Name) ((*(FARPROC *)&Name = GetProcAddress(Wintun, #Name)) == NULL)
+    if (X(WintunCreateAdapter) || X(WintunCloseAdapter) || X(WintunOpenAdapter) || X(WintunGetAdapterLUID) ||
+        X(WintunGetRunningDriverVersion) || X(WintunDeleteDriver) || X(WintunSetLogger) || X(WintunStartSession) ||
+        X(WintunEndSession) || X(WintunGetReadWaitEvent) || X(WintunReceivePacket) || X(WintunReleaseReceivePacket) ||
+        X(WintunAllocateSendPacket) || X(WintunSendPacket))
 #undef X
     {
         DWORD LastError = GetLastError();
