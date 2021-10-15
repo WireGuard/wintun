@@ -89,13 +89,12 @@ static void EnvInit(VOID)
 #endif
 
 #ifdef MAYBE_WOW64
-    typedef BOOL(WINAPI * IsWow64Process2_t)(
-        _In_ HANDLE hProcess, _Out_ USHORT * pProcessMachine, _Out_opt_ USHORT * pNativeMachine);
     HANDLE Kernel32;
-    IsWow64Process2_t IsWow64Process2;
+    BOOL(WINAPI * IsWow64Process2)
+    (_In_ HANDLE Process, _Out_ USHORT * ProcessMachine, _Out_opt_ USHORT * NativeMachine);
     USHORT ProcessMachine;
     if ((Kernel32 = GetModuleHandleW(L"kernel32.dll")) == NULL ||
-        (IsWow64Process2 = (IsWow64Process2_t)GetProcAddress(Kernel32, "IsWow64Process2")) == NULL ||
+        (*(FARPROC *)&IsWow64Process2 = GetProcAddress(Kernel32, "IsWow64Process2")) == NULL ||
         !IsWow64Process2(GetCurrentProcess(), &ProcessMachine, &NativeMachine))
     {
         BOOL IsWoW64;
