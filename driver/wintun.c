@@ -873,7 +873,7 @@ TunDispatchClose(DEVICE_OBJECT *DeviceObject, IRP *Irp)
 }
 
 _Dispatch_type_(IRP_MJ_PNP)
-static DRIVER_DISPATCH_PAGED DispatchPnp;
+static DRIVER_DISPATCH_PAGED TunDispatchPnp;
 _Use_decl_annotations_
 static NTSTATUS
 TunDispatchPnp(DEVICE_OBJECT *DeviceObject, IRP *Irp)
@@ -882,6 +882,7 @@ TunDispatchPnp(DEVICE_OBJECT *DeviceObject, IRP *Irp)
     if (Stack->MinorFunction != IRP_MN_QUERY_REMOVE_DEVICE && Stack->MinorFunction != IRP_MN_SURPRISE_REMOVAL)
         goto ndisDispatch;
 
+#pragma warning(suppress : 28175)
     TUN_CTX *Ctx = DeviceObject->Reserved;
     if (!Ctx)
         goto ndisDispatch;
