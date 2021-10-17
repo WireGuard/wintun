@@ -634,7 +634,7 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
                 /* We will not wait on send ring tail moved event. */
                 EVENT_MODIFY_STATE,
                 *ExEventObjectType,
-                UserMode,
+                Irp->RequestorMode,
                 &Ctx->Device.Send.TailMoved,
                 NULL)))
         goto cleanupResetOwner;
@@ -645,7 +645,7 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     try
     {
         Status = STATUS_INVALID_USER_BUFFER;
-        MmProbeAndLockPages(Ctx->Device.Send.Mdl, UserMode, IoWriteAccess);
+        MmProbeAndLockPages(Ctx->Device.Send.Mdl, Irp->RequestorMode, IoWriteAccess);
     }
     except(EXCEPTION_EXECUTE_HANDLER) { goto cleanupSendMdl; }
 
@@ -670,7 +670,7 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
                 /* We need to clear receive ring TailMoved event on transition to non-alertable state. */
                 SYNCHRONIZE | EVENT_MODIFY_STATE,
                 *ExEventObjectType,
-                UserMode,
+                Irp->RequestorMode,
                 &Ctx->Device.Receive.TailMoved,
                 NULL)))
         goto cleanupSendUnlockPages;
@@ -681,7 +681,7 @@ TunRegisterBuffers(_Inout_ TUN_CTX *Ctx, _Inout_ IRP *Irp)
     try
     {
         Status = STATUS_INVALID_USER_BUFFER;
-        MmProbeAndLockPages(Ctx->Device.Receive.Mdl, UserMode, IoWriteAccess);
+        MmProbeAndLockPages(Ctx->Device.Receive.Mdl, Irp->RequestorMode, IoWriteAccess);
     }
     except(EXCEPTION_EXECUTE_HANDLER) { goto cleanupReceiveMdl; }
 
