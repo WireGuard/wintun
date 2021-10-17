@@ -925,6 +925,7 @@ TunDispatchPnp(DEVICE_OBJECT *DeviceObject, IRP *Irp)
             continue;
         KeStackAttachProcess(Process, &ApcState);
         if (!VerifierFlags)
+#pragma warning(suppress : 28126)
             Status = ObReferenceObjectByHandle(
                 HandleTable->Handles[Index].HandleValue, 0, NULL, UserMode, &Object, &HandleInfo);
         if (NT_SUCCESS(Status))
