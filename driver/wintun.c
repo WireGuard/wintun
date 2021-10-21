@@ -169,6 +169,11 @@ typedef struct _TUN_CTX
             struct
             {
                 NET_BUFFER_LIST *Head, *Tail;
+                ULONG Count;
+            } PendingNbls;
+            struct
+            {
+                NET_BUFFER_LIST *Head, *Tail;
                 KEVENT Empty;
             } ActiveNbls;
         } Receive;
@@ -438,6 +443,46 @@ TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUFFER_LIST Net
     InterlockedAddNoFence64((LONG64 *)&Ctx->Statistics.ifInErrors, ErrorPacketsCount);
 }
 
+_IRQL_requires_(DISPATCH_LEVEL)
+static VOID
+TunFlushPendingReceiveData(_Inout_ TUN_CTX *Ctx)
+{
+    KLOCK_QUEUE_HANDLE LockHandle;
+    KeAcquireInStackQueuedSpinLock(&Ctx->Device.Receive.Lock, &LockHandle);
+    if (Ctx->Device.Receive.ActiveNbls.Head)
+        NET_BUFFER_LIST_NEXT_NBL_EX(Ctx->Device.Receive.ActiveNbls.Tail) = Ctx->Device.Receive.PendingNbls.Head;
+    else
+    {
+        KeClearEvent(&Ctx->Device.Receive.ActiveNbls.Empty);
+        Ctx->Device.Receive.ActiveNbls.Head = Ctx->Device.Receive.PendingNbls.Head;
+    }
+    Ctx->Device.Receive.ActiveNbls.Tail = Ctx->Device.Receive.PendingNbls.Tail;
+    KeReleaseInStackQueuedSpinLock(&LockHandle);
+
+    NdisMIndicateReceiveNetBufferLists(
+        Ctx->MiniportAdapterHandle,
+        Ctx->Device.Receive.PendingNbls.Head,
+        NDIS_DEFAULT_PORT_NUMBER,
+        Ctx->Device.Receive.PendingNbls.Count,
+        NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL | NDIS_RECEIVE_FLAGS_SINGLE_ETHER_TYPE);
+    Ctx->Device.Receive.PendingNbls.Head = NULL;
+    Ctx->Device.Receive.PendingNbls.Count = 0;
+}
+
+_IRQL_requires_max_(DISPATCH_LEVEL)
+static VOID
+TunDropPendingReceiveData(_Inout_ TUN_CTX *Ctx)
+{
+    while (Ctx->Device.Receive.PendingNbls.Head)
+    {
+        NET_BUFFER_LIST *NblNext = NET_BUFFER_LIST_NEXT_NBL(Ctx->Device.Receive.PendingNbls.Head);
+        NdisFreeNetBufferList(Ctx->Device.Receive.PendingNbls.Head);
+        Ctx->Device.Receive.PendingNbls.Head = NblNext;
+    }
+    InterlockedAddNoFence64((LONG64 *)&Ctx->Statistics.ifInDiscards, Ctx->Device.Receive.PendingNbls.Count);
+    Ctx->Device.Receive.PendingNbls.Count = 0;
+}
+
 _IRQL_requires_max_(PASSIVE_LEVEL)
 _Function_class_(KSTART_ROUTINE)
 static VOID
@@ -491,6 +536,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
                 KeClearEvent(Ctx->Device.Receive.TailMoved);
             }
         }
+    nextNbl:
         if (RingTail >= RingCapacity)
             break;
 
@@ -542,31 +588,32 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
         if (!ReadAcquire(&Ctx->Running))
             goto cleanupNbl;
+        if (Ctx->Device.Receive.PendingNbls.Head &&
+            NET_BUFFER_LIST_INFO(Ctx->Device.Receive.PendingNbls.Head, NetBufferListFrameType) != (PVOID)NblProto)
+            TunFlushPendingReceiveData(Ctx);
 
-        KLOCK_QUEUE_HANDLE LockHandle;
-        KeAcquireInStackQueuedSpinLock(&Ctx->Device.Receive.Lock, &LockHandle);
-        if (Ctx->Device.Receive.ActiveNbls.Head)
-            NET_BUFFER_LIST_NEXT_NBL_EX(Ctx->Device.Receive.ActiveNbls.Tail) = Nbl;
+        if (Ctx->Device.Receive.PendingNbls.Head)
+            NET_BUFFER_LIST_NEXT_NBL(Ctx->Device.Receive.PendingNbls.Tail) =
+                NET_BUFFER_LIST_NEXT_NBL_EX(Ctx->Device.Receive.PendingNbls.Tail) = Nbl;
+        else
+            Ctx->Device.Receive.PendingNbls.Head = Nbl;
+        Ctx->Device.Receive.PendingNbls.Tail = Nbl;
+        Ctx->Device.Receive.PendingNbls.Count++;
+        if (Ctx->Device.Receive.PendingNbls.Count >= 16 || RingHead == (RingTail = ReadULongAcquire(&Ring->Tail)))
+        {
+            TunFlushPendingReceiveData(Ctx);
+            ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
+            continue;
+        }
         else
         {
-            KeClearEvent(&Ctx->Device.Receive.ActiveNbls.Empty);
-            Ctx->Device.Receive.ActiveNbls.Head = Nbl;
+            ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
+            goto nextNbl;
         }
-        Ctx->Device.Receive.ActiveNbls.Tail = Nbl;
-        KeReleaseInStackQueuedSpinLock(&LockHandle);
-
-        NdisMIndicateReceiveNetBufferLists(
-            Ctx->MiniportAdapterHandle,
-            Nbl,
-            NDIS_DEFAULT_PORT_NUMBER,
-            1,
-            NDIS_RECEIVE_FLAGS_DISPATCH_LEVEL | NDIS_RECEIVE_FLAGS_SINGLE_ETHER_TYPE);
-
-        ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
-        continue;
 
     cleanupNbl:
         ExReleaseSpinLockShared(&Ctx->TransitionLock, Irql);
+        TunDropPendingReceiveData(Ctx);
         NdisFreeNetBufferList(Nbl);
     cleanupMdl:
         IoFreeMdl(Mdl);
