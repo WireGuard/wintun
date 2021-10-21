@@ -15,8 +15,8 @@
   <Import Project="wintun.props" />
   <Import Project="wintun.props.user" Condition="exists('wintun.props.user')" />
 
-  <Target Name="Driver" DependsOnTargets="Driver-x86;Driver-amd64;Driver-arm;Driver-arm64" />
-  <Target Name="Dll"    DependsOnTargets="Dll-x86;Dll-amd64;Dll-arm;Dll-arm64" />
+  <Target Name="Driver" DependsOnTargets="Driver-x86;Driver-amd64;Driver-arm64" />
+  <Target Name="Dll"    DependsOnTargets="Dll-x86;Dll-amd64;Dll-arm64" />
   <Target Name="Clean">
     <RemoveDir Directories="$(Configuration)\amd64\" />
     <RemoveDir Directories="$(Configuration)\arm\" />
@@ -88,7 +88,6 @@
     <ZipFilesSrc Include="README.md"                         /><ZipFilesDst Include="$(ZipIntDir)wintun\README.md"            />
     <ZipFilesSrc Include="api\wintun.h"                      /><ZipFilesDst Include="$(ZipIntDir)wintun\include\wintun.h"     />
     <ZipFilesSrc Include="$(Configuration)\amd64\wintun.dll" /><ZipFilesDst Include="$(ZipIntDir)wintun\bin\amd64\wintun.dll" />
-    <ZipFilesSrc Include="$(Configuration)\arm\wintun.dll"   /><ZipFilesDst Include="$(ZipIntDir)wintun\bin\arm\wintun.dll"   />
     <ZipFilesSrc Include="$(Configuration)\arm64\wintun.dll" /><ZipFilesDst Include="$(ZipIntDir)wintun\bin\arm64\wintun.dll" />
     <ZipFilesSrc Include="$(Configuration)\x86\wintun.dll"   /><ZipFilesDst Include="$(ZipIntDir)wintun\bin\x86\wintun.dll"   />
   </ItemGroup>
