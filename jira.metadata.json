@@ -1,0 +1,11 @@
+{
+	"repo_name": "win-wintun",
+	"github_org": "AnchorFree",
+	"jira_project": "AWIN",
+	"jira_domain": "https://intxprivacynow.atlassian.net/",
+	"jira_issue_type": "Story",
+	"team_company": "Aura",
+	"team_name": "Windows",
+	"team_email": "windows@aura.com",
+	"team_slack": "#aura-windows-app"
+}
