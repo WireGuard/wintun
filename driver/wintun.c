@@ -49,7 +49,7 @@
         ((((ULONG)(x)&0x000000ff) << 24) | (((ULONG)(x)&0x0000ff00) << 8) | (((ULONG)(x)&0x00ff0000) >> 8) | \
          (((ULONG)(x)&0xff000000) >> 24))
 #else
-#    error "Unable to determine endianess"
+#    error "Unable to determine endianness"
 #endif
 
 #define TUN_MEMORY_TAG HTONL('wtun')
@@ -107,7 +107,7 @@ typedef struct _TUN_REGISTER_RINGS_32
         /* Size of the ring */
         ULONG RingSize;
 
-        /* 32-bit addres of client allocated ring */
+        /* 32-bit address of client allocated ring */
         ULONG Ring;
 
         /* On send: An event created by the client the Wintun signals after it moves the Tail member of the send ring.
