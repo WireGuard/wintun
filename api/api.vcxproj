@@ -34,7 +34,7 @@
       <PreprocessorDefinitions Condition="'$(Platform)'=='ARM'">WANT_ARM64_WOW64;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
     <Link>
-      <DelayLoadDLLs>advapi32.dll;api-ms-win-devices-query-l1-1-0.dll;api-ms-win-devices-swdevice-l1-1-0.dll;cfgmgr32.dll;iphlpapi.dll;ole32.dll;nci.dll;setupapi.dll;shlwapi.dll;version.dll</DelayLoadDLLs>
+      <DelayLoadDLLs>advapi32.dll;api-ms-win-devices-swdevice-l1-1-0.dll;cfgmgr32.dll;iphlpapi.dll;ole32.dll;nci.dll;setupapi.dll;shlwapi.dll;version.dll</DelayLoadDLLs>
       <DelayLoadDLLs Condition="'$(Platform)'!='ARM64'">shell32.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
       <AdditionalDependencies>Cfgmgr32.lib;Iphlpapi.lib;onecore.lib;$(IntDir)nci.lib;ntdll.lib;Setupapi.lib;shlwapi.lib;swdevice.lib;version.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <ModuleDefinitionFile>exports.def</ModuleDefinitionFile>
