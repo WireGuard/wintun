@@ -5,7 +5,6 @@
 
 #include <Windows.h>
 #include <winternl.h>
-#include <cfgmgr32.h>
 #include <devguid.h>
 #include <iphlpapi.h>
 #include <objbase.h>
@@ -21,12 +20,16 @@
 #if NTDDI_VERSION == NTDDI_WIN7
 #    undef NTDDI_VERSION
 #    define NTDDI_VERSION NTDDI_WIN8
-#    include <devquery.h>
+#    undef WINVER
+#    define WINVER 0x0602
+#    include <cfgmgr32.h>
 #    include <swdevice.h>
 #    undef NTDDI_VERSION
 #    define NTDDI_VERSION NTDDI_WIN7
+#    undef WINVER
+#    define WINVER 0x0601
 #else
-#    include <devquery.h>
+#    include <cfgmgr32.h>
 #    include <swdevice.h>
 #endif
 
@@ -405,35 +408,25 @@ AdapterGetDeviceObjectFileName(LPCWSTR InstanceId)
     return Interfaces;
 }
 
-typedef struct _WAIT_FOR_INTERFACE_CTX
-{
-    HANDLE Event;
-    DWORD LastError;
-} WAIT_FOR_INTERFACE_CTX;
-
-static VOID WINAPI
+static DWORD CALLBACK
 WaitForInterfaceCallback(
-    _In_ HDEVQUERY DevQuery,
-    _Inout_ PVOID Context,
-    _In_ const DEV_QUERY_RESULT_ACTION_DATA *ActionData)
+    _In_ HCMNOTIFICATION hNotify,
+    _In_opt_ PVOID Context,
+    _In_ CM_NOTIFY_ACTION Action,
+    _In_reads_bytes_(EventDataSize) PCM_NOTIFY_EVENT_DATA EventData,
+    _In_ DWORD EventDataSize)
 {
-    WAIT_FOR_INTERFACE_CTX *Ctx = Context;
-    DWORD Ret = ERROR_SUCCESS;
-    switch (ActionData->Action)
-    {
-    case DevQueryResultStateChange:
-        if (ActionData->Data.State != DevQueryStateAborted)
-            return;
-        Ret = ERROR_DEVICE_NOT_AVAILABLE;
-    case DevQueryResultAdd:
-    case DevQueryResultUpdate:
-        break;
-    default:
-        return;
+    if (Action == CM_NOTIFY_ACTION_DEVICEINSTANCESTARTED && Context != NULL) {
+      SetEvent(((HANDLE)Context));
     }
-    Ctx->LastError = Ret;
-    SetEvent(Ctx->Event);
+    return ERROR_SUCCESS;
 }
+
+typedef CONFIGRET (WINAPI *PCM_REGISTER_NOTIFICATION)(PCM_NOTIFY_FILTER,PVOID,PCM_NOTIFY_CALLBACK,PHCMNOTIFICATION);
+typedef CONFIGRET (WINAPI *PCM_UNREGISTER_NOTIFICATION)(HCMNOTIFICATION);
+
+static PCM_REGISTER_NOTIFICATION PCM_Register_Notification;
+static PCM_UNREGISTER_NOTIFICATION PCM_Unregister_Notification;
 
 _Must_inspect_result_
 static _Return_type_success_(return != FALSE)
@@ -444,64 +437,84 @@ WaitForInterface(_In_ WCHAR *InstanceId)
         return TRUE;
 
     DWORD LastError = ERROR_SUCCESS;
-    static const DEVPROP_BOOLEAN DevPropTrue = DEVPROP_TRUE;
-    const DEVPROP_FILTER_EXPRESSION Filters[] = { { .Operator = DEVPROP_OPERATOR_EQUALS_IGNORE_CASE,
-                                                    .Property.CompKey.Key = DEVPKEY_Device_InstanceId,
-                                                    .Property.CompKey.Store = DEVPROP_STORE_SYSTEM,
-                                                    .Property.Type = DEVPROP_TYPE_STRING,
-                                                    .Property.Buffer = InstanceId,
-                                                    .Property.BufferSize =
-                                                        (ULONG)((wcslen(InstanceId) + 1) * sizeof(InstanceId[0])) },
-                                                  { .Operator = DEVPROP_OPERATOR_EQUALS,
-                                                    .Property.CompKey.Key = DEVPKEY_DeviceInterface_Enabled,
-                                                    .Property.CompKey.Store = DEVPROP_STORE_SYSTEM,
-                                                    .Property.Type = DEVPROP_TYPE_BOOLEAN,
-                                                    .Property.Buffer = (PVOID)&DevPropTrue,
-                                                    .Property.BufferSize = sizeof(DevPropTrue) },
-                                                  { .Operator = DEVPROP_OPERATOR_EQUALS,
-                                                    .Property.CompKey.Key = DEVPKEY_DeviceInterface_ClassGuid,
-                                                    .Property.CompKey.Store = DEVPROP_STORE_SYSTEM,
-                                                    .Property.Type = DEVPROP_TYPE_GUID,
-                                                    .Property.Buffer = (PVOID)&GUID_DEVINTERFACE_NET,
-                                                    .Property.BufferSize = sizeof(GUID_DEVINTERFACE_NET) } };
-    WAIT_FOR_INTERFACE_CTX Ctx = { .Event = CreateEventW(NULL, FALSE, FALSE, NULL) };
-    if (!Ctx.Event)
+
+    HMODULE CfgMgr32 = NULL;
+    if (!PCM_Register_Notification) {
+        CfgMgr32 = GetModuleHandleW(L"cfgmgr32.dll");
+        if (CfgMgr32 == NULL) {
+            goto cleanup;
+        }
+
+        PCM_Register_Notification = (PCM_REGISTER_NOTIFICATION) GetProcAddress(CfgMgr32, "CM_Register_Notification");
+        if (!PCM_Register_Notification) {
+            goto cleanup;
+        }
+    }
+
+    if (!PCM_Unregister_Notification) {
+        if (!CfgMgr32) {
+            CfgMgr32 = GetModuleHandleW(L"cfgmgr32.dll");
+            if (CfgMgr32 == NULL) {
+                goto cleanup;
+            }
+        }
+
+        PCM_Unregister_Notification = (PCM_UNREGISTER_NOTIFICATION) GetProcAddress(CfgMgr32, "CM_Unregister_Notification");
+        if (!PCM_Unregister_Notification) {
+            goto cleanup;
+        }
+    }
+
+    CM_NOTIFY_FILTER Filter = { .cbSize = sizeof(Filter),
+                                .FilterType = CM_NOTIFY_FILTER_TYPE_DEVICEINSTANCE };
+    if (wcsncpy_s(Filter.u.DeviceInstance.InstanceId, MAX_DEVICE_ID_LEN, InstanceId, _TRUNCATE))
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        goto cleanup;
+    }
+
+    HANDLE Event = CreateEventW(NULL, FALSE, FALSE, NULL);
+    if (!Event)
     {
         LastError = LOG_LAST_ERROR(L"Failed to create event");
         goto cleanup;
     }
-    HDEVQUERY Query;
-    HRESULT HRet = DevCreateObjectQuery(
-        DevObjectTypeDeviceInterface,
-        DevQueryFlagUpdateResults,
-        0,
-        NULL,
-        _countof(Filters),
-        Filters,
-        WaitForInterfaceCallback,
-        &Ctx,
-        &Query);
-    if (FAILED(HRet))
+
+    HCMNOTIFICATION NotificationHandle = NULL;
+    LastError = CM_MapCrToWin32Err(
+        PCM_Register_Notification(
+            &Filter,
+            Event,
+            WaitForInterfaceCallback,
+            &NotificationHandle),
+        ERROR_GEN_FAILURE);
+    if (LastError != ERROR_SUCCESS)
     {
-        LastError = LOG_ERROR(HRet, L"Failed to create device query");
+        SetLastError(LOG_ERROR(LastError, L"Failed to register for instance arrival notification"));
         goto cleanupEvent;
     }
-    LastError = WaitForSingleObject(Ctx.Event, 15000);
+
+    // CM_Register_Notification does not provide information about already
+    // arrived device interfaces. After registering, we must explicitly check
+    // for our InstanceId in case the interface has already arrived.
+    if (AdapterGetDeviceObjectFileName(InstanceId)) {
+        // Already arrived, no waiting necessary
+        goto cleanupNotification;
+    }
+
+    LastError = WaitForSingleObject(Event, 15000);
     if (LastError != WAIT_OBJECT_0)
     {
         if (LastError == WAIT_FAILED)
             LastError = LOG_LAST_ERROR(L"Failed to wait for device query");
         else
             LastError = LOG_ERROR(LastError, L"Timed out waiting for device query");
-        goto cleanupQuery;
     }
-    LastError = Ctx.LastError;
-    if (LastError != ERROR_SUCCESS)
-        LastError = LOG_ERROR(LastError, L"Failed to get enabled device");
-cleanupQuery:
-    DevCloseObjectQuery(Query);
+
+cleanupNotification:
+    PCM_Unregister_Notification(NotificationHandle);
 cleanupEvent:
-    CloseHandle(Ctx.Event);
+    CloseHandle(Event);
 cleanup:
     return RET_ERROR(TRUE, LastError);
 }
