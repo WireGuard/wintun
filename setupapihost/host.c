@@ -72,6 +72,8 @@ VOID __stdcall RemoveInstance(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int
     if (!SetupDiOpenDeviceInfoW(DevInfo, InstanceId, NULL, DIOD_INHERIT_CLASSDRVS, &DevInfoData))
     {
         LastError = GetLastError();
+        if (LastError == ERROR_PATH_NOT_FOUND)
+            LastError = ERROR_SUCCESS;
         goto cleanupDevInfo;
     }
     SP_REMOVEDEVICE_PARAMS RemoveDeviceParams = { .ClassInstallHeader = { .cbSize = sizeof(SP_CLASSINSTALL_HEADER),
