@@ -216,6 +216,8 @@ TunIndicateStatus(_In_ NDIS_HANDLE MiniportAdapterHandle, _In_ NDIS_MEDIA_CONNEC
     NdisMIndicateStatusEx(MiniportAdapterHandle, &Indication);
 }
 
+#define NET_BUFFER_LIST_OFFSET(Nbl) (NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[0])
+
 /* Send: We should not modify NET_BUFFER_LIST_NEXT_NBL(Nbl) to prevent fragmented NBLs to separate.
  * Receive: NDIS may change NET_BUFFER_LIST_NEXT_NBL(Nbl) at will between the NdisMIndicateReceiveNetBufferLists() and
  * MINIPORT_RETURN_NET_BUFFER_LISTS calls. Therefore, we use our own ->Next pointer for book-keeping. */
@@ -225,25 +227,25 @@ static VOID
 TunNblSetOffsetAndMarkActive(_Inout_ NET_BUFFER_LIST *Nbl, _In_ ULONG Offset)
 {
     ASSERT(TUN_IS_ALIGNED(Offset)); /* Alignment ensures bit 0 will be 0 (0=active, 1=completed). */
-    NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[0] = (VOID *)Offset;
+    NET_BUFFER_LIST_OFFSET(Nbl) = (VOID *)Offset;
 }
 
 static ULONG
 TunNblGetOffset(_In_ NET_BUFFER_LIST *Nbl)
 {
-    return (ULONG)((ULONG_PTR)(NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[0]) & ~((ULONG_PTR)TUN_ALIGNMENT - 1));
+    return (ULONG)((ULONG_PTR)NET_BUFFER_LIST_OFFSET(Nbl) & ~((ULONG_PTR)TUN_ALIGNMENT - 1));
 }
 
 static VOID
 TunNblMarkCompleted(_Inout_ NET_BUFFER_LIST *Nbl)
 {
-    *(ULONG_PTR *)&NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[0] |= 1;
+    *(ULONG_PTR *)&NET_BUFFER_LIST_OFFSET(Nbl) |= 1;
 }
 
 static BOOLEAN
 TunNblIsCompleted(_In_ NET_BUFFER_LIST *Nbl)
 {
-    return (ULONG_PTR)(NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[0]) & 1;
+    return (ULONG_PTR)NET_BUFFER_LIST_OFFSET(Nbl) & 1;
 }
 
 static MINIPORT_SEND_NET_BUFFER_LISTS TunSendNetBufferLists;
