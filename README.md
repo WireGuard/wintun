@@ -60,7 +60,7 @@ for (;;)
 }
 ```
 
-Some high performance use cases may want to spin on `WintunReceivePackets` for a number of cycles before falling back to waiting on the read-wait event.
+Some high performance use cases may want to spin on `WintunReceivePacket` for a number of cycles before falling back to waiting on the read-wait event.
 
 You are **highly encouraged** to read the [**example.c short example**](https://git.zx2c4.com/wintun/tree/example/example.c) to see how to put together a simple userspace network tunnel.
 
@@ -269,7 +269,7 @@ Gets Wintun session's read-wait event handle.
 
 **Returns**
 
-Pointer to receive event handle to wait for available data when reading. Should WintunReceivePackets return ERROR\_NO\_MORE\_ITEMS (after spinning on it for a while under heavy load), wait for this event to become signaled before retrying WintunReceivePackets. Do not call CloseHandle on this event - it is managed by the session.
+Pointer to receive event handle to wait for available data when reading. Should WintunReceivePacket return ERROR\_NO\_MORE\_ITEMS (after spinning on it for a while under heavy load), wait for this event to become signaled before retrying WintunReceivePacket. Do not call CloseHandle on this event - it is managed by the session.
 
 #### WintunReceivePacket()
 

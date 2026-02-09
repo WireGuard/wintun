@@ -191,8 +191,8 @@ typedef VOID(WINAPI WINTUN_END_SESSION_FUNC)(_In_ WINTUN_SESSION_HANDLE Session)
  * @param Session       Wintun session handle obtained with WintunStartSession
  *
  * @return Pointer to receive event handle to wait for available data when reading. Should
- *         WintunReceivePackets return ERROR_NO_MORE_ITEMS (after spinning on it for a while under heavy
- *         load), wait for this event to become signaled before retrying WintunReceivePackets. Do not call
+ *         WintunReceivePacket return ERROR_NO_MORE_ITEMS (after spinning on it for a while under heavy
+ *         load), wait for this event to become signaled before retrying WintunReceivePacket. Do not call
  *         CloseHandle on this event - it is managed by the session.
  */
 typedef HANDLE(WINAPI WINTUN_GET_READ_WAIT_EVENT_FUNC)(_In_ WINTUN_SESSION_HANDLE Session);
