@@ -224,10 +224,11 @@ TunIndicateStatus(_In_ NDIS_HANDLE MiniportAdapterHandle, _In_ NDIS_MEDIA_CONNEC
 #define NET_BUFFER_LIST_NEXT_NBL_EX(Nbl) (NET_BUFFER_LIST_MINIPORT_RESERVED(Nbl)[1])
 
 static VOID
-TunNblSetOffsetAndMarkActive(_Inout_ NET_BUFFER_LIST *Nbl, _In_ ULONG Offset)
+TunNblInitialize(_Inout_ NET_BUFFER_LIST *Nbl, _In_ ULONG Offset)
 {
     ASSERT(TUN_IS_ALIGNED(Offset)); /* Alignment ensures bit 0 will be 0 (0=active, 1=completed). */
     NET_BUFFER_LIST_OFFSET(Nbl) = (VOID *)Offset;
+    NET_BUFFER_LIST_NEXT_NBL_EX(Nbl) = NULL;
 }
 
 static ULONG
@@ -299,7 +300,7 @@ TunSendNetBufferLists(
         goto cleanupKeReleaseInStackQueuedSpinLock;
 
     Ctx->Device.Send.RingTail = TUN_RING_WRAP(RingTail + RequiredRingSpace, RingCapacity);
-    TunNblSetOffsetAndMarkActive(NetBufferLists, Ctx->Device.Send.RingTail);
+    TunNblInitialize(NetBufferLists, Ctx->Device.Send.RingTail);
     *(Ctx->Device.Send.ActiveNbls.Head ? &NET_BUFFER_LIST_NEXT_NBL_EX(Ctx->Device.Send.ActiveNbls.Tail)
                                        : &Ctx->Device.Send.ActiveNbls.Head) = NetBufferLists;
     Ctx->Device.Send.ActiveNbls.Tail = NetBufferLists;
@@ -539,7 +540,7 @@ TunProcessReceiveData(_Inout_ TUN_CTX *Ctx)
         NdisSetNblFlag(Nbl, NblFlags);
         NET_BUFFER_LIST_INFO(Nbl, NetBufferListFrameType) = (PVOID)NblProto;
         NET_BUFFER_LIST_STATUS(Nbl) = NDIS_STATUS_SUCCESS;
-        TunNblSetOffsetAndMarkActive(Nbl, RingHead);
+        TunNblInitialize(Nbl, RingHead);
 
         KIRQL Irql = ExAcquireSpinLockShared(&Ctx->TransitionLock);
         if (!ReadAcquire(&Ctx->Running))
