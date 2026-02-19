@@ -284,14 +284,13 @@ TunSendNetBufferLists(
     TUN_RING *Ring = Ctx->Device.Send.Ring;
     ULONG RingCapacity = Ctx->Device.Send.Capacity;
 
-    /* Allocate space for packets in the ring. */
-    ULONG RingHead = ReadULongAcquire(&Ring->Head);
-    if (Status = NDIS_STATUS_ADAPTER_NOT_READY, RingHead >= RingCapacity)
-        goto skipNbl;
-
     KLOCK_QUEUE_HANDLE LockHandle;
     KeAcquireInStackQueuedSpinLock(&Ctx->Device.Send.Lock, &LockHandle);
 
+    /* Allocate space for packets in the ring. */
+    ULONG RingHead = ReadULongAcquire(&Ring->Head);
+    if (Status = NDIS_STATUS_ADAPTER_NOT_READY, RingHead >= RingCapacity)
+        goto cleanupKeReleaseInStackQueuedSpinLock;
     ULONG RingTail = Ctx->Device.Send.RingTail;
     ASSERT(RingTail < RingCapacity);
 
@@ -419,8 +418,8 @@ TunReturnNetBufferLists(NDIS_HANDLE MiniportAdapterContext, PNET_BUFFER_LIST Net
             Ctx->Device.Receive.ActiveNbls.Head = NET_BUFFER_LIST_NEXT_NBL_EX(CompletedNbl);
             if (!Ctx->Device.Receive.ActiveNbls.Head)
                 KeSetEvent(&Ctx->Device.Receive.ActiveNbls.Empty, IO_NO_INCREMENT, FALSE);
-            KeReleaseInStackQueuedSpinLock(&LockHandle);
             WriteULongRelease(&Ring->Head, TunNblGetOffset(CompletedNbl));
+            KeReleaseInStackQueuedSpinLock(&LockHandle);
             const MDL *TargetMdl = Ctx->Device.Receive.Mdl;
             for (MDL *Mdl = NET_BUFFER_FIRST_MDL(NET_BUFFER_LIST_FIRST_NB(CompletedNbl)); Mdl; Mdl = Mdl->Next)
             {
