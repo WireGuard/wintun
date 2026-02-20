@@ -160,7 +160,7 @@ Creates a new Wintun adapter.
 **Parameters**
 
 - *Name*: The requested name of the adapter. Zero-terminated string of up to MAX\_ADAPTER\_NAME-1 characters.
-- *Name*: Name of the adapter tunnel type. Zero-terminated string of up to MAX\_ADAPTER\_NAME-1 characters.
+- *TunnelType*: Name of the adapter tunnel type. Zero-terminated string of up to MAX\_ADAPTER\_NAME-1 characters.
 - *RequestedGUID*: The GUID of the created network adapter, which then influences NLA generation deterministically. If it is set to NULL, the GUID is chosen by the system at random, and hence a new NLA entry is created for each new adapter. It is called "requested" GUID because the API it uses is completely undocumented, and so there could be minor interesting complications with its usage.
 
 **Returns**
@@ -201,9 +201,9 @@ Deletes the Wintun driver if there are no more adapters in use.
 
 If the function succeeds, the return value is nonzero. If the function fails, the return value is zero. To get extended error information, call GetLastError.
 
-#### WintunGetAdapterLuid()
+#### WintunGetAdapterLUID()
 
-`void WintunGetAdapterLuid (WINTUN_ADAPTER_HANDLE Adapter, NET_LUID * Luid)`
+`void WintunGetAdapterLUID (WINTUN_ADAPTER_HANDLE Adapter, NET_LUID * Luid)`
 
 Returns the LUID of the adapter.
 
@@ -214,7 +214,7 @@ Returns the LUID of the adapter.
 
 #### WintunGetRunningDriverVersion()
 
-`DWORD WintunGetRunningDriverVersion (void )`
+`DWORD WintunGetRunningDriverVersion (void)`
 
 Determines the version of the Wintun driver currently loaded.
 
